@@ -55,9 +55,9 @@ class TestJobExecutor(unittest.TestCase):
 			allocation = scheduler.allocateJob(job.resources)
 			self.assertIsNotNone(allocation)
 
-			executor.enqueue(allocation, job)
+			executor.execute(allocation, job)
 
-		await executor.finish()
+		await executor.waitForUnfinished()
 
 
 	def test_ExecutorSimple(self):
@@ -154,8 +154,8 @@ echo "taskset: `taskset -p $$`"
 		startTime = datetime.datetime.now()
 
 		asyncio.get_event_loop().run_until_complete(asyncio.gather(
-			self.__schedule(jobs, scheduler, executor),
-			executor.executorTask))
+			self.__schedule(jobs, scheduler, executor)
+			))
 		asyncio.get_event_loop().close()
 
 		duration = datetime.datetime.now() - startTime

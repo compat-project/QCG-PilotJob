@@ -143,7 +143,7 @@ class Manager:
 
 							# allocation has been created - execute job
 							self.__changeJobState(schedJob.job, JobState.EXECUTING)
-							self.__executor.enqueue(allocation, schedJob.job)
+							self.__executor.execute(allocation, schedJob.job)
 						else:
 							logging.info("missing resources for job %s" % (schedJob.job.name))
 							# missing resources

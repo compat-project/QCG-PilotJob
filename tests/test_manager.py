@@ -173,7 +173,6 @@ echo "taskset: `taskset -p $$`"
 
 			await asyncio.sleep(1)
 
-		await manager.finish()
 
 	def test_ManagerSimple(self):
 		self.__prepareEnvironment()
@@ -201,8 +200,7 @@ echo "taskset: `taskset -p $$`"
 		logging.info("waiting for finish")
 
 		asyncio.get_event_loop().run_until_complete(asyncio.gather(
-			self.__waitForJobs(manager, notFinished),
-			manager.getExecutor().executorTask
+			self.__waitForJobs(manager, notFinished)
 			))
 
 		logging.info("all tasks finished")

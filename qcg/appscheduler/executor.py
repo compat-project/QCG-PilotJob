@@ -162,89 +162,31 @@ class Executor:
 	Execute jobs inside allocations.
 	"""
 	def __init__(self, manager):
-		loop = asyncio.get_event_loop()
-		self.__queue = Queue(loop = loop)
 		self.__manager = manager
-		self.executorTask = asyncio.get_event_loop().create_task(self.__executor())
-
 		self.__notFinished = { }
 
 
 	"""
-	Add new job to execution queue.
+	Asynchronusly execute job inside allocation.
+	After successfull prepared environment, a new task will be created
+	for the job, this function call will return before job finish.
 
 	Args:
 		allocation (Allocation): allocation of resources for job
 		job (Job): job execution details
 	"""
-	def enqueue(self, allocation, job):
-		logging.info("enqueing job %s" % (job.name))
-		task = ExecutorJob(self, allocation, job)
-		self.__queue.put_nowait(task)
-		logging.info("job %s enqueued %s for executing" % (job.name, task.id))
+	def execute(self, allocation, job):
+		logging.info("executing job %s" % (job.name))
 
-#	def execute(self, allocation, job):
-#		logging.info("executing job %s" % (job.name))
-#
-#		execTask = ExecutorJob(self, allocation, job)
-#		self.__notFinished[execTask.id] = execTask
-#		execTask.run()
-
-	"""
-	Signal executor to finish.
-	Executor finish when all previous jobs will be executed.
-	"""
-	async def finish(self):
-		logging.info("enqueing job finish")
-		await self.__queue.put(ExecutorFinish())
-		logging.info("job finish enqueued")
+		execTask = ExecutorJob(self, allocation, job)
+		self.__notFinished[execTask.id] = execTask
+		execTask.run()
 
 
 	"""
-	Kill executor.
-	Some jobs may be in executing phase during this call.
+	Wait for all job finish execution.
 	"""
-	def kill(self):
-		if self.executorTask is not None:
-			self.executorTask.cancel()
-			self.executorTask = None
-		else:
-			raise InternalError("Executor already killed")
-
-
-	"""
-	Task function that reads job's from queue and execute them.
-	"""
-	async def __executor(self):
-		logging.info("Starting executor ...")
-		while True:
-			try:
-				logging.info("Executor is waiting for job's ...")
-
-				execTask = await self.__queue.get()
-
-				logging.info("got a task %s to execute" % (type(execTask).__name__))
-
-				if isinstance(execTask, ExecutorFinish):
-					# finish executor task
-					break
-				elif not isinstance(execTask, ExecutorJob):
-					logging.warning("Unknown task type in execution queue: %s" % (type(execTask).__name__))
-					continue
-
-				self.__execute(execTask)
-			except asyncio.CancelledError:
-				logging.info("Time to finish executor")
-			except Exception as ex:
-				logging.error("Unknown exception raised: %s" % (str(ex)))
-
-		logging.info("Executor waits for %d unfinished jobs" % (len(self.__notFinished)))
-		await self.__waitForUnfinished()
-
-		logging.info("Executor finish")
-
-
-	async def __waitForUnfinished(self):
+	async def waitForUnfinished(self):
 		while len(self.__notFinished) > 0:
 			logging.info("Still %d unfinished jobs" % (len(self.__notFinished)))
 
@@ -252,23 +194,16 @@ class Executor:
 				await asyncio.sleep(1)
 
 
+	"""
+	Signal job finished.
+	This function should be called by a task which created a process for job.
+
+	Args:
+		task (ExecutorJob): task data
+	"""
 	def taskFinished(self, task):
 		del self.__notFinished[task.id]
 
 		if self.__manager is not None:
 			self.__manager.jobFinished(task.job, task.allocation, task.exitCode, task.errorMessage)
-
-
-	"""
-	Create environment for the job and execute task.
-
-	Args:
-		job (ExecutorJob): job to execute
-	"""
-	def __execute(self, execTask):
-		logging.info("Executing task %s" % (execTask.job.name))
-
-		self.__notFinished[execTask.id] = execTask
-
-		execTask.run()
 
