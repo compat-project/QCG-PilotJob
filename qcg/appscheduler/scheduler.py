@@ -1,31 +1,25 @@
 from qcg.appscheduler.errors import *
 from qcg.appscheduler.joblist import JobResources
+from qcg.appscheduler.scheduleralgo import SchedulerAlgorithm
 
 
 class Scheduler:
 
 	"""
-	Create allocation with given number of cores.
+	Resource orchestration.
 
 	Args:
-		cores (int): requested number of cores
+		resources (Resources): available resources
 
-	Returns:
-		Allocation: created allocation 
-		None: not enough free resources
-
-	Raises:
-		NotSufficientResources: when there are not enough resources avaiable
+	Attributes:
+		__resources (Resources): status of available resources
 	"""
-	"""
-	def createAllocation(self, cores):
-		alloc = self.__resources.createAllocation(cores)
+	def __init__(self, resources):
+		assert resources != None
 
-		if alloc is not None:
-			self.__activeAllocations.add(alloc)
-
-		return alloc
-	"""
+		self.__resources = resources
+		self.__schedulerAlg = SchedulerAlgorithm(self.__resources)
+		self.__activeAllocations = set()
 
 
 	"""
@@ -33,7 +27,9 @@ class Scheduler:
 
 	Args:
 		min_cores (int): minimum requested number of cores
-		max_cores (int): maximum requested number of cores
+		max_cores (int): maximum requested number of cores, if None 'min_cores'
+						 will mean also 'max_cores'
+
 
 	Returns:
 		Allocation: created allocation 
@@ -42,8 +38,8 @@ class Scheduler:
 	Raises:
 		NotSufficientResources: when there are not enough resources avaiable
 	"""
-	def createAllocation(self, min_cores, max_cores = None):
-		alloc = self.__resources.createAllocation(min_cores, max_cores)
+	def allocateCores(self, min_cores, max_cores = None):
+		alloc = self.__schedulerAlg.allocateCores(min_cores, max_cores)
 
 		if alloc is not None:
 			self.__activeAllocations.add(alloc)
@@ -63,9 +59,10 @@ class Scheduler:
 
 	Raises:
 		NotSufficientResources: when there are not enough resources avaiable
+		InvalidResourceSpec: when resource requirements are not valid
 	"""
 	def allocateJob(self, resources):
-#		alloc = self.__resources.createAllocation(resources)
+		alloc = self.__schedulerAlg.allocateJob(resources)
 
 		if alloc is not None:
 			self.__activeAllocations.add(alloc)
@@ -89,21 +86,4 @@ class Scheduler:
 
 		self.__activeAllocations.remove(alloc)
 		self.__resources.releaseAllocation(alloc)
-
-
-	"""
-	Resource orchestration.
-
-	Args:
-		resources (Resources): available resources
-
-	Attributes:
-		__resources (Resources): status of available resources
-	"""
-	def __init__(self, resources):
-		assert resources != None
-
-		self.__resources = resources
-		self.__activeAllocations = set()
-
 

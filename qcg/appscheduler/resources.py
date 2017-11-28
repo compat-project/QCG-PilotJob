@@ -7,6 +7,8 @@ class Node:
 		self.__name = name
 		self.__totalCores = totalCores
 		self.__usedCores = used
+		self.resources = None
+
 
 	def __getName(self):
 		return self.__name
@@ -45,6 +47,9 @@ class Node:
 		allocated = min(cores, self.free)
 		self.__usedCores += allocated
 
+		if self.resources is not None:
+			self.resources.nodeCoresAllocated(allocated)
+
 		return allocated
 
 
@@ -64,6 +69,9 @@ class Node:
 
 		self.__usedCores -= cores
 
+		if self.resources is not None:
+			self.resources.nodeCoresReleased(cores)
+
 
 	name  = property(__getName, None, None, "name of the node")
 	total = property(__getTotalCores, __setTotalCores, None, "total number of cores")
@@ -76,6 +84,12 @@ class Resources:
 
 	def __init__(self, nodes = None):
 		self.__nodes = nodes
+		if self.__nodes is None:
+			self.__nodes = []
+
+		for node in self.__nodes:
+			node.resources = self
+
 		self.__totalCores = 0
 		self.__usedCores = 0
 
@@ -84,13 +98,13 @@ class Resources:
 
 	def __computeCores(self):
 		total, used = 0, 0
-		if self.__nodes:
-			for node in self.__nodes:
-				total += node.total
-				used += node.used
+		for node in self.__nodes:
+			total += node.total
+			used += node.used
 
 		self.__totalCores = total
 		self.__usedCores = used
+
 
 	def __getNodes(self):
 		return self.__nodes
@@ -106,102 +120,25 @@ class Resources:
 	
 
 	"""
-	Create allocation with given number of cores.
-	The cores will be allocated in a linear method.
+	Function called by the node when some cores has been allocated.
+	This function should track number of used cores in Resources statistics.
 
 	Args:
-		cores (int): requested number of cores
-
-	Returns:
-		Allocation: created allocation 
-		None: not enough free resources
-
-	Raises:
-		NotSufficientResources: when there are not enough resources avaiable
-		InvalidResourceSpec: when the cores < 0
+		cores (int): number of allocated cores
 	"""
-	"""
-	def createAllocation(self, cores):
-		if cores <= 0:
-			raise InvalidResourceSpec()
-
-		if self.__totalCores < cores:
-			raise NotSufficientResources()
-
-		if self.freeCores < cores:
-			return None
-
-		allocation = Allocation()
-		allocatedCores = 0
-		for node in self.__nodes:
-			nodeCores = node.allocate(cores - allocatedCores)
-
-			if nodeCores > 0:
-				allocation.addNode(NodeAllocation(node, nodeCores))
-
-				allocatedCores += nodeCores
-				self.__usedCores += nodeCores
-
-				if allocatedCores == cores:
-					break
-
-		# this should never happen
-		if allocatedCores != cores:
-			raise NotSufficientResources()
-
-		return allocation
-	"""
+	def nodeCoresAllocated(self, cores):
+		self.__usedCores += cores
 
 
 	"""
-	Create allocation with maximum number of cores from given range.
-	The cores will be allocated in a linear method.
+	Function called by the node when some cores has been released.
+	This function should track number of used cores in Resources statistics.
 
 	Args:
-		min_cores (int): minimum requested number of cores
-		max_cores (int): maximum requested number of cores
-
-	Returns:
-		Allocation: created allocation 
-		None: not enough free resources
-
-	Raises:
-		NotSufficientResources: when there are not enough resources avaiable
-		InvalidResourceSpec: when the min_cores < 0 or min_cores > max_cores
+		cores (int): number of released cores
 	"""
-	def createAllocation(self, min_cores, max_cores = None):
-		if max_cores == None:
-			max_cores = min_cores
-
-		if min_cores <= 0 or min_cores > max_cores:
-			raise InvalidResourceSpec()
-
-		if self.__totalCores < min_cores:
-			raise NotSufficientResources()
-
-		if self.freeCores < min_cores:
-			return None
-
-		allocation = Allocation()
-		allocatedCores = 0
-		for node in self.__nodes:
-			nodeCores = node.allocate(max_cores - allocatedCores)
-
-			if nodeCores > 0:
-				allocation.addNode(NodeAllocation(node, nodeCores))
-
-				allocatedCores += nodeCores
-				self.__usedCores += nodeCores
-
-				if allocatedCores == max_cores:
-					break
-
-		# this should never happen
-		if allocatedCores < min_cores or allocatedCores > max_cores:
-			self.releaseAllocation(allocation)
-			raise NotSufficientResources()
-
-		return allocation
+	def nodeCoresReleased(self, cores):
+		self.__usedCores -= cores
 
 
 	"""
@@ -217,29 +154,11 @@ class Resources:
 	def releaseAllocation(self, alloc):
 		for node in alloc.nodeAllocations:
 			node.node.release(node.cores)
-			self.__usedCores -= node.cores
-
-
-	"""
-	Allocate cores on a given node.
-
-	Args:
-		node (Node): on which node alloc cores
-		cores (int): number of nodes
-
-	Raises:
-		NotSufficientResources: where there are not enough resources available
-	"""
-	def allocCores(self, node, cores):
-		# !!! should we check if node belongs to the resources ???
-		if node.free < cores:
-			raise NotSufficientResources()
-
-		node.alloc(cores)
 
 
 	def __str__(self):
-		header = '%d (%d used) cores\n' % (self.__totalCores, self.__usedCores)
+		header = '%d (%d used) cores on %d nodes\n' % (self.__totalCores, self.__usedCores, \
+				len(self.__nodes))
 		return header + '\n'.join([str(node) for node in self.__nodes])
 #		if self.__nodes:
 #			for node in self.__nodes:

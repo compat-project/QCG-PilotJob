@@ -24,7 +24,7 @@ class TestScheduler(unittest.TestCase):
 		self.__ncores = sum(cores_num)
 
 		if len(node_names) != len(cores_num):
-			raise Exception("failed to parse slurm env: number of nodes (%d) mismatch number of cores (%d)" % (len(nodes), len(cores)))
+			raise Exception("failed to parse local env: number of nodes (%d) mismatch number of cores (%d)" % (len(nodes), len(cores)))
 		
 		nodes = []
 		for i in range(0, len(node_names)):
@@ -38,7 +38,7 @@ class TestScheduler(unittest.TestCase):
 		cores = 2
 
 		sched=Scheduler(res)
-		allocation = sched.createAllocation(cores)
+		allocation = sched.allocateCores(cores)
 
 		self.assertEqual(allocation.cores, cores)
 		self.assertEqual(res.usedCores, cores)
@@ -54,7 +54,7 @@ class TestScheduler(unittest.TestCase):
 		sched=Scheduler(res)
 
 		for idx in range(len(cores)):
-			allocations.append(sched.createAllocation(cores[idx]))
+			allocations.append(sched.allocateCores(cores[idx]))
 
 			allocated += cores[idx]
 
@@ -87,7 +87,7 @@ class TestScheduler(unittest.TestCase):
 		for idx in range(len(cores)):
 			core_spec = cores[idx]
 
-			allocations.append(sched.createAllocation(core_spec['min'], core_spec['max']))
+			allocations.append(sched.allocateCores(core_spec['min'], core_spec['max']))
 
 			allocated += core_spec['max']
 
@@ -117,7 +117,7 @@ class TestScheduler(unittest.TestCase):
 		sched=Scheduler(res)
 
 		for idx in range(len(cores)):
-			allocations.append(sched.createAllocation(cores[idx]))
+			allocations.append(sched.allocateCores(cores[idx]))
 
 			allocated += cores[idx]
 
@@ -125,10 +125,10 @@ class TestScheduler(unittest.TestCase):
 			self.assertEqual(res.usedCores, allocated)
 			self.assertEqual(res.freeCores, self.__ncores - allocated)
 
-		self.assertIsNone(sched.createAllocation(1))
+		self.assertIsNone(sched.allocateCores(1))
 
 		try:
-			sched.createAllocation(self.__ncores + 1)
+			sched.allocateCores(self.__ncores + 1)
 			self.fail("Allocation created with wrong resource requirements")
 		except NotSufficientResources:
 			pass
@@ -136,7 +136,7 @@ class TestScheduler(unittest.TestCase):
 			self.fail("Wrong exception")
 
 		try:
-			sched.createAllocation(-2)
+			sched.allocateCores(-2)
 			self.fail("Allocation created with wrong resource requirements")
 		except InvalidResourceSpec:
 			pass

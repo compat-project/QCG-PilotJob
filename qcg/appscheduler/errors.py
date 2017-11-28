@@ -5,6 +5,9 @@ class AppSchedulerError(Exception):
 class SlurmEnvError(AppSchedulerError):
 	pass
 
+class InvalidArgument(AppSchedulerError):
+	pass
+
 class InvalidAllocation(AppSchedulerError):
 	pass
 
@@ -23,4 +26,5 @@ class IllegalResourceRequirements(AppSchedulerError):
 class IllegalJobDescription(AppSchedulerError):
 	pass
 
-
+class InternalError(AppSchedulerError):
+	pass

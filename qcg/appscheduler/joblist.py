@@ -13,14 +13,16 @@ class JobState(Enum):
 	SUCCEED = auto()
 	FAILED = auto()
 	CANCELED = auto()
+	OMITTED = auto()
+
 
 	def isFinished(self):
-		return self in [SUCCEED, FAILED, CANCELED]
+		return self in [JobState.SUCCEED, JobState.FAILED, JobState.CANCELED]
 	
 	
 class JobExecution:
 	def __init__(self, exec, args = None, env = None, wd = None, \
-			stdout = None, stderr = None):
+			stdin = None, stdout = None, stderr = None):
 		if exec is None:
 			raise IllegalJobDescription("Job execution not defined")
 
@@ -29,6 +31,7 @@ class JobExecution:
 		self.args = []
 		self.env = {}
 
+		self.stdin = stdin
 		self.stdout = stdout
 		self.stderr = stderr
 
@@ -264,7 +267,7 @@ class Job:
 
 		if dependencies is not None and not isinstance(dependencies, JobDependencies):
 			raise IllegalJobDescription("Job dependencies wrong type")
-		self.__dependencies = dependencies
+		self.dependencies = dependencies
 
 		self.__history = []
 
@@ -275,6 +278,14 @@ class Job:
 	def name(self):
 		return self.__name
 	
+	@property
+	def execution(self):
+		return self.__execution
+
+	@property
+	def resources(self):
+		return self.__resources
+
 	@property
 	def state(self):
 		return self.__state
@@ -291,7 +302,7 @@ class Job:
 
 
 	def hasDependencies(self):
-		return self.__dependencies is not None and len(self.__dependencies.after) > 0
+		return self.dependencies is not None and len(self.dependencies.after) > 0
 
 
 class JobList:
@@ -300,7 +311,7 @@ class JobList:
 	
 
 	def add(self, job):
-		assert isinstance(job, Job), "Wrong job type"
+		assert isinstance(job, Job), "Wrong job type '%s'" % (type(job).__name__)
 
 		if self.exist(job.name):
 			raise JobAlreadyExist(job.name)
