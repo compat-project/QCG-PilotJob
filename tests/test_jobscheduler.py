@@ -7,12 +7,13 @@ from qcg.appscheduler.resources import Node, Resources
 from qcg.appscheduler.scheduler import Scheduler
 from qcg.appscheduler.allocation import NodeAllocation, Allocation
 from qcg.appscheduler.joblist import JobResources, ResourceSize
+from appschedulertest import AppSchedulerTest
 
 
-class TestScheduler(unittest.TestCase):
+class TestScheduler(AppSchedulerTest):
 
 	def setUp(self):
-		pass
+		self.setupLogging()
 
 	def tearDown(self):
 		pass

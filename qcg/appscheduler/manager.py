@@ -103,10 +103,9 @@ class Manager:
 	def __init__(self, resources):
 		assert resources != None
 
-		self.__resources = resources
-		self.__scheduler = Scheduler(self.__resources)
+		self.resources = resources
+		self.__scheduler = Scheduler(self.resources)
 		self.__executor = Executor(self)
-		self.__joblist = JobList()
 
 		self.__scheduleQueue = []
 
@@ -273,15 +272,15 @@ class Manager:
 	def enqueue(self, jobs):
 		if jobs is not None:
 			for job in jobs:
-				self.__joblist.add(job)
-
 				self.__scheduleQueue.append(SchedulingJob(self, job))
 
 			self.__scheduleLoop()
 
 
-	async def finish(self):
-		await self.__executor.finish()
+	async def waitForFinish(self):
+		while len(self.__scheduleQueue) > 0:
+			await asyncio.sleep(1)
+		await self.__executor.waitForUnfinished()
 
 
 	def getExecutor(self):

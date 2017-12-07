@@ -3,12 +3,13 @@ import unittest
 
 import context
 from qcg.appscheduler.resources import Node, Resources
+from appschedulertest import AppSchedulerTest
 
 
-class TestResources(unittest.TestCase):
+class TestResources(AppSchedulerTest):
 
 	def setUp(self):
-		pass
+		self.setupLogging()
 
 	def tearDown(self):
 		pass

@@ -13,6 +13,7 @@ from qcg.appscheduler.errors import NotSufficientResources, InvalidResourceSpec
 from qcg.appscheduler.resources import Node, Resources
 from qcg.appscheduler.joblist import JobExecution, ResourceSize, JobResources, JobFiles, JobDependencies, Job
 from qcg.appscheduler.manager import Manager
+from appschedulertest import AppSchedulerTest
 
 
 class JobCounter:
@@ -20,21 +21,16 @@ class JobCounter:
 		self.notFinished = cnt
 
 
-class TestManager(unittest.TestCase):
+class TestManager(AppSchedulerTest):
 
 	def setUp(self):
 		asyncio.set_event_loop(asyncio.new_event_loop())
 
-		logFile = 'test.log'
-
-		if os.path.exists(logFile):
-			os.remove(logFile)
-
-		logging.basicConfig(filename=logFile, level=logging.DEBUG)
-
 		self.testSandbox = 'test-sandbox'
 		self.scriptFile = 'script.sh'
 		self.hostnameStdinFile = 'hostname-in'
+
+		self.setupLogging()
 
 
 	def tearDown(self):
@@ -107,7 +103,7 @@ echo "taskset: `taskset -p $$`"
 			Job('msleep1',
 				JobExecution(
 					'/usr/bin/sleep',
-					args = [ '5s' ],
+					args = [ '2s' ],
 					wd = abspath(join(self.testSandbox, 'sleep1.sandbox')),
 					stdout = 'sleep1.stdout',
 					stderr = 'sleep1.stderr',
@@ -118,7 +114,7 @@ echo "taskset: `taskset -p $$`"
 			Job('msleep2',
 				JobExecution(
 					'/usr/bin/sleep',
-					args = [ '5s' ],
+					args = [ '2s' ],
 					wd = abspath(join(self.testSandbox, 'sleep2.sandbox')),
 					stdout = 'sleep2.stdout',
 					stderr = 'sleep2.stderr',
@@ -140,7 +136,7 @@ echo "taskset: `taskset -p $$`"
 			Job('msleep3',
 				JobExecution(
 					'/usr/bin/sleep',
-					args = [ '5s' ],
+					args = [ '2s' ],
 					wd = abspath(join(self.testSandbox, 'sleep3.sandbox')),
 					stdout = 'sleep3.stdout',
 					stderr = 'sleep3.stderr',
@@ -172,6 +168,8 @@ echo "taskset: `taskset -p $$`"
 			logging.info("waiting for finishing %d jobs ..." % (counter.notFinished))
 
 			await asyncio.sleep(1)
+
+		await manager.waitForFinish()
 
 
 	def test_ManagerSimple(self):
@@ -209,7 +207,7 @@ echo "taskset: `taskset -p $$`"
 
 		self.__stopTiming()
 
-		self.assertTrue(self.durationSecs > 10 and self.durationSecs < 15)
+		self.assertTrue(self.durationSecs > 4 and self.durationSecs < 6)
 
 		for job in self.jobs:
 			self.assertTrue(os.path.exists(job.execution.wd))

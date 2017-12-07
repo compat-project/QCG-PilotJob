@@ -6,12 +6,13 @@ from qcg.appscheduler.errors import NotSufficientResources, InvalidResourceSpec
 from qcg.appscheduler.resources import Node, Resources
 from qcg.appscheduler.scheduler import Scheduler
 from qcg.appscheduler.allocation import NodeAllocation, Allocation
+from appschedulertest import AppSchedulerTest
 
 
-class TestScheduler(unittest.TestCase):
+class TestScheduler(AppSchedulerTest):
 
 	def setUp(self):
-		pass
+		self.setupLogging()
 
 	def tearDown(self):
 		pass

@@ -165,8 +165,13 @@ class Resources:
 #				result.join("\n%s" % node)
 #		return result
 
+	
+	def nNodes(self):
+		return len(self.__nodes)
+
 
 	nodes = property(__getNodes, None, None, "list of a nodes")
+	totalNodes = property(nNodes, None, None, "total number of nodes")
 	totalCores = property(__getTotalCores, None, None, "total number of cores")
 	usedCores = property(__getUsedCores, None, None, "used number of cores")
 	freeCores = property(__getFreeCores, None, None, "free number of cores")

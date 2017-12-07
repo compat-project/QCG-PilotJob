@@ -15,20 +15,14 @@ from qcg.appscheduler.scheduler import Scheduler
 from qcg.appscheduler.allocation import NodeAllocation, Allocation
 from qcg.appscheduler.joblist import JobExecution, ResourceSize, JobResources, JobFiles, JobDependencies, Job
 from qcg.appscheduler.executor import Executor
+from appschedulertest import AppSchedulerTest
 
 
-class TestJobExecutor(unittest.TestCase):
+class TestJobExecutor(AppSchedulerTest):
 
 	def setUp(self):
 		asyncio.set_event_loop(asyncio.new_event_loop())
-
-		logFile = 'test.log'
-
-		if os.path.exists(logFile):
-			os.remove(logFile)
-
-		logging.basicConfig(filename=logFile, level=logging.DEBUG)
-		pass
+		self.setupLogging()
 
 	def tearDown(self):
 		pass
@@ -127,7 +121,7 @@ echo "taskset: `taskset -p $$`"
 			Job('sleep',
 				JobExecution(
 					'/usr/bin/sleep',
-					args = [ '5s' ],
+					args = [ '2s' ],
 					wd = abspath(join(testSandbox, 'sleep.sandbox')),
 					stdout = 'sleep.stdout',
 					stderr = 'sleep.stderr',
@@ -159,7 +153,7 @@ echo "taskset: `taskset -p $$`"
 		asyncio.get_event_loop().close()
 
 		duration = datetime.datetime.now() - startTime
-		self.assertTrue(duration.total_seconds() > 5 and duration.total_seconds() < 10)
+		self.assertTrue(duration.total_seconds() > 2 and duration.total_seconds() < 6)
 
 		for job in jobs:
 			self.assertTrue(os.path.exists(job.execution.wd))

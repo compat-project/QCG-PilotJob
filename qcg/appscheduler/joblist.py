@@ -48,8 +48,25 @@ class JobExecution:
 		self.wd = wd
 
 
+	def toDict(self):
+		result = { 'exec': self.exec, 'args': self.args, 'env': self.env }
+		if self.wd is not None:
+			result['wd'] = self.wd
+
+		if self.stdin is not None:
+			result['stdin'] = self.stdin
+
+		if self.stdout is not None:
+			result['stdout'] = self.stdout
+
+		if self.stderr is not None:
+			result['stderr'] = self.stderr
+
+		return result
+
+
 	def toJSON(self):
-		return json.dumps(self.__dict__, indent=2)
+		return json.dumps(self.toDict(), indent=2)
 
 
 class ResourceSize:
@@ -91,7 +108,18 @@ class ResourceSize:
 		return self.__exact is not None
 
 	def toDict(self):
-		return { 'exact': self.__exact, 'min': self.__min, 'max': self.__max }
+		result = {}
+
+		if self.__exact is not None:
+			result['exact'] = self.__exact
+
+		if self.__min is not None:
+			result['min'] = self.__min
+
+		if self.__max is not None:
+			result['max'] = self.__max
+
+		return result
 
 	def toJSON(self):
 		return json.dumps(self.toDict())
@@ -218,27 +246,27 @@ class JobFiles:
 
 class JobDependencies:
 	def __validateJobList(self, jobList, errorMessage):
-		if not isinstance(jobList, list):
+		if not isinstance(jobList, dict):
 			raise IllegalJobDescription(errorMessage)
 
-		for jobName in jobList:
+		for jobName in jobList.get('after'):
 			if not isinstance(jobName, str):
 				raise IllegalJobDescription(errorMessage)
 
 
-	def __init__(self, after = None):
+	def __init__(self, jobList = None):
 		self.after = []
 
-		if after is not None:
-			if isinstance(after, str):
-				after = [ after ]
+		if jobList is not None:
+			if isinstance(jobList, str):
+				self.after = [ jobList ]
 			else:
-				self.__validateJobList(after, "Dependency task's list must be an array of job names")
+				self.__validateJobList(jobList, "Dependency task's list must be an array of job names")
+				self.after = jobList['after']
 
-			self.after = after
 
 	def hasDependencies(self):
-		return self.after is not None and len(self.after) > 0
+		return len(self.after) > 0
 
 	def toDict(self):
 		return self.__dict__
@@ -253,21 +281,33 @@ class Job:
 			raise IllegalJobDescription("Job name not defined")
 		self.__name = name
 
-		if execution is None or not isinstance(execution, JobExecution):
+		if isinstance(execution, JobExecution):
+			self.__execution = execution
+		elif isinstance(execution, dict):
+			self.__execution = JobExecution(**execution)
+		else:
 			raise IllegalJobDescription("Job execution not defined or wrong type")
-		self.__execution = execution
 
-		if resources is None or not isinstance(resources, JobResources):
+		if isinstance(resources, JobResources):
+			self.__resources = resources
+		elif isinstance(resources, dict):
+			self.__resources = JobResources(**resources)
+		else:
 			raise IllegalJobDescription("Job resources not defined or wrong type")
-		self.__resources = resources
 
-		if files is not None and not isinstance(files, JobFiles):
+		if isinstance(files, JobFiles) or files is None:
+			self.__files = files
+		elif isinstance(files, dict):
+			self.__files = JobFiles(**files)
+		else:
 			raise IllegalJobDescription("Job files wrong type")
-		self.__files = files
 
-		if dependencies is not None and not isinstance(dependencies, JobDependencies):
+		if isinstance(dependencies, JobDependencies) or dependencies is None:
+			self.dependencies = dependencies
+		elif isinstance(dependencies, dict):
+			self.dependencies = JobDependencies(dependencies)
+		else:
 			raise IllegalJobDescription("Job dependencies wrong type")
-		self.dependencies = dependencies
 
 		self.__history = []
 
@@ -286,6 +326,13 @@ class Job:
 	def resources(self):
 		return self.__resources
 
+	def hasFiles(self):
+		return self.__files is not None
+
+	@property
+	def files(self):
+		return self.__files
+
 	@property
 	def state(self):
 		return self.__state
@@ -302,7 +349,26 @@ class Job:
 
 
 	def hasDependencies(self):
-		return self.dependencies is not None and len(self.dependencies.after) > 0
+		return self.dependencies is not None and self.dependencies.hasDependencies()
+
+
+	def toDict(self):
+		result = {
+				'name': self.__name,
+				'execution': self.__execution.toDict(),
+				'resources': self.__resources.toDict() }
+
+		if self.__files is not None:
+			result['files'] = self.__files.toDict()
+
+		if self.dependencies is not None:
+			result['dependencies'] = self.dependencies.toDict()
+
+		return result
+
+
+	def toJSON(self):
+		return json.dumps(self.toDict(), indent = 2)
 
 
 class JobList:
@@ -318,10 +384,11 @@ class JobList:
 
 		self.__jmap[job.name] = job
 
-
 	def exist(self, jobName):
 		return jobName in self.__jmap
 
 	def get(self, jobName):
-		return self.__jmap[jobName]
+		return self.__jmap.get(jobName, None)
 
+	def jobs(self):
+		return self.__jmap.keys()

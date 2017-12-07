@@ -15,7 +15,7 @@ class TestJobDependencies(unittest.TestCase):
 
 
 	def test_JobDependenciesInit(self):
-		jd = JobDependencies([ 'job1', 'job2' ])
+		jd = JobDependencies({ 'after': [ 'job1', 'job2' ] })
 
 		self.assertEqual(len(jd.after), 2)
 
@@ -58,14 +58,14 @@ class TestJobDependencies(unittest.TestCase):
 		  ]
 		}"""
 
-		jd = JobDependencies(**json.loads(jd_json))
+		jd = JobDependencies(json.loads(jd_json))
 
 		self.assertEqual(len(jd.after), 2)
 
 	def test_JobDependenciesImportExportEquality(self):
-		jd = JobDependencies(after = [ 'job1', 'job2' ])
+		jd = JobDependencies({ 'after': [ 'job1', 'job2' ] })
 		jd_json = jd.toJSON()
-		jd_copy = JobDependencies(**json.loads(jd_json))
+		jd_copy = JobDependencies(json.loads(jd_json))
 		jd_json2 = jd_copy.toJSON()
 
 		self.assertEqual(jd_json, jd_json2)

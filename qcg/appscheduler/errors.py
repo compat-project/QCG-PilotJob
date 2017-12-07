@@ -28,3 +28,9 @@ class IllegalJobDescription(AppSchedulerError):
 
 class InternalError(AppSchedulerError):
 	pass
+
+class JobFileNotExist(AppSchedulerError):
+	pass
+
+class InvalidRequest(AppSchedulerError):
+	pass
