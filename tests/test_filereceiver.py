@@ -19,7 +19,7 @@ from qcg.appscheduler.receiver import Receiver
 from appschedulertest import AppSchedulerTest
 
 
-class TestReceiver(AppSchedulerTest):
+class TestFileReceiver(AppSchedulerTest):
 
 	def setUp(self):
 		asyncio.set_event_loop(asyncio.new_event_loop())
@@ -156,7 +156,7 @@ class TestReceiver(AppSchedulerTest):
 		return Resources(nodes)
 	
 
-	def ble_test_FileInterfacesInit(self):
+	def test_FileInterfacesInit(self):
 		res = self.createLocalResources()
 
 		reqsFilePath = self.__createSampleRequests()

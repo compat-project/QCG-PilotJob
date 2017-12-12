@@ -1,4 +1,5 @@
 import asyncio
+from asyncio import CancelledError
 import json
 import logging
 from enum import Enum, auto
@@ -200,8 +201,10 @@ class Receiver:
 	Stop all listening on interfaces.
 	'''
 	def stop(self):
+		logging.info("canceling %d tasks" % len(self.__tasks))
 		for task in self.__tasks:
 			if task is not None:
+				logging.info("canceling task")
 				task.cancel()
 
 		self.__tasks = []
@@ -257,7 +260,7 @@ class Receiver:
 
 		return Response.Ok(data = {
 			'jobName': request.jobName,
-			'status': str(job.state)
+			'status': str(job.strState())
 			})
 
 

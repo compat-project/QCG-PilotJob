@@ -337,6 +337,9 @@ class Job:
 	def state(self):
 		return self.__state
 
+	def strState(self):
+		return self.__state.name
+
 	@property
 	def history(self):
 		return self.__history
