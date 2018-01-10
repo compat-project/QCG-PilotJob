@@ -1,0 +1,20 @@
+{
+	"request": "submit",
+	"jobs": [ {
+		"name": "sleep-iter_${it}",
+		"iterate": [ 1, 8 ],
+		"execution": {
+		  "exec": "/bin/sleep",
+		  "args": [ "1m" ],
+		  "wd": "sleep-iter.${it}",
+		  "stdout": "sleep-iter.stdout",
+		  "stderr": "sleep-iter.stderr"
+		},
+		"resources": {
+		  "numCores": {
+				"exact": 3
+		  }
+		}
+	} ]
+}
+
