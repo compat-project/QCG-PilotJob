@@ -119,6 +119,15 @@ class Allocation:
 		header = "%d cores @ %d nodes\n" % (self.__cores, len(self.__nodes))
 		return header + '\n'.join([str(node) for node in self.__nodes])
 
+	"""
+	Return a single line description of allocation
+
+	Returns:
+		str: a single line description of allocation
+	"""
+	def description(self):
+		return ','.join([ "%s:%d" % (node.node.name, node.cores) for node in self.__nodes ])
+
 
 	cores = property(__getCores, None, None, "number of cores")
 	nodeAllocations = property(__getNodeAllocations, None, None, "nodes")

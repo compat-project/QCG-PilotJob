@@ -1,5 +1,7 @@
 import os
 import subprocess
+import logging
+
 from qcg.appscheduler.resources import Node, Resources
 from qcg.appscheduler.errors import *
 
@@ -47,8 +49,9 @@ def parse_slurm_resources():
 	
 	nodes = []
 	for i in range(0, len(node_names)):
-		#print "%s x %d" % (nodes[i], cores[i])
-		nodes.append(Node(node_names[i], cores_num[i], 0))
+		nname = bytes.decode(node_names[i])
+		logging.debug("%s x %d" % (nname, cores_num[i]))
+		nodes.append(Node(nname, cores_num[i], 0))
 
-#	print "generated %d nodes" % len(nodes)
+	logging.debug("generated %d nodes" % len(nodes))
 	return Resources(nodes)

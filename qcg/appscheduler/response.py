@@ -1,4 +1,4 @@
-from enum import IntEnum, auto
+from enum import IntEnum
 import json
 import logging
 

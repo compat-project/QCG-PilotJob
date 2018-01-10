@@ -52,7 +52,7 @@ class ZMQInterface:
 
 		logging.info("ZMQ interface received request ...")
 
-		return json.loads(req)
+		return json.loads(bytes.decode(req))
 
 
 	async def reply(self, replyMsg):

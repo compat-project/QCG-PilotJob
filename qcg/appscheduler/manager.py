@@ -1,6 +1,7 @@
 from qcg.appscheduler.joblist import Job, JobResources, JobList, JobState
 from qcg.appscheduler.scheduler import Scheduler
 from qcg.appscheduler.executor import Executor
+from qcg.appscheduler.errors import NotSufficientResources, InvalidResourceSpec, IllegalJobDescription
 
 import asyncio
 import uuid
@@ -25,13 +26,13 @@ class SchedulingJob:
 		self.__afterJobs = set()
 
 		if job.hasDependencies():
-			for jobId in job.dependencies:
-				if not self.__manager.jobExists(jobId):
+			for jobId in job.dependencies.after:
+				if not self.__manager.jobList.exist(jobId):
 					raise IllegalJobDescription("Dependency job %s not registered" % jobId)
 
 				self.__afterJobs.add(jobId)
 
-			checkDependencies()
+			self.checkDependencies()
 
 
 	"""
@@ -39,11 +40,13 @@ class SchedulingJob:
 	Check all dependent jobs and update job's ready (and possible feasible) status.
 	"""
 	def checkDependencies(self):
+		logging.info("updating dependencies of job %s ..." % self.job.name)
+
 		if not self.isReady:
 			finished = set()
 
 			for jobId in self.__afterJobs:
-				depJob = self.__manager.getJob(jobId)
+				depJob = self.__manager.jobList.get(jobId)
 
 				if depJob is None:
 					logging.warning("Dependency job %s not registered" % jobId)
@@ -58,6 +61,8 @@ class SchedulingJob:
 						finished.add(jobId)
 
 			self.__afterJobs -= finished
+
+			logging.info("#%d dependency (%s feasible) jobs after update of job %s" % (len(self.__afterJobs), str(self.__isFeasible), self.job.name))
 
 
 	"""
@@ -106,6 +111,7 @@ class Manager:
 		self.resources = resources
 		self.__scheduler = Scheduler(self.resources)
 		self.__executor = Executor(self)
+		self.jobList = JobList()
 
 		self.__scheduleQueue = []
 
@@ -150,6 +156,8 @@ class Manager:
 					except (NotSufficientResources, InvalidResourceSpec) as e:
 						# jobs will never schedule
 						logging.warning("Job %s scheduling failed - %s" % (schedJob.job.name, str(e)))
+				else:
+					newScheduleQueue.append(schedJob)
 
 		self.__scheduleQueue = newScheduleQueue
 
@@ -162,8 +170,12 @@ class Manager:
 		job (Job): job that changed status
 		status (JobState): target job state
 	"""
-	def __changeJobState(self, job, state):
+	def __changeJobState(self, job, state, errorMsg = None):
 		job.state = state
+
+		if errorMsg is not None:
+			job.appendMessage(errorMsg)
+
 		self.__fireJobStateNotifies(job.name, state)
 
 
@@ -183,7 +195,7 @@ class Manager:
 		if exitCode != 0:
 			state = JobState.FAILED
 
-		self.__changeJobState(job, state)
+		self.__changeJobState(job, state, errorMsg)
 		self.__scheduler.releaseAllocation(allocation)
 		self.__scheduleLoop()
 
@@ -272,6 +284,7 @@ class Manager:
 	def enqueue(self, jobs):
 		if jobs is not None:
 			for job in jobs:
+				self.jobList.add(job)
 				self.__scheduleQueue.append(SchedulingJob(self, job))
 
 			self.__scheduleLoop()

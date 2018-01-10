@@ -2,6 +2,7 @@ import json
 import logging
 import datetime
 import math
+import uuid
 from string import Template
 
 from qcg.appscheduler.joblist import Job
@@ -35,10 +36,38 @@ class Request:
 		return __REQS__[data['request']](data, env)
 
 
+class ControlReq(Request):
+
+	REQ_NAME = 'control'
+
+	REQ_CONTROL_CMD_FINISHAFTERALLTASKSDONE = 'finishAfterAllTasksDone'
+	REQ_CONTROL_CMDS = [
+		REQ_CONTROL_CMD_FINISHAFTERALLTASKSDONE 	
+			]
+
+	def __init__(self, reqData, env = None):
+		assert reqData is not None
+
+		if 'command' not in reqData or not isinstance(reqData['command'], str):
+			raise InvalidRequest('Wrong control request - missing command')
+
+		if reqData['command'] not in self.REQ_CONTROL_CMDS:
+			raise InvalidRequest('Wrong control request - unknown command "%s"' % (reqData['command']))
+
+		self.command = reqData['command']
+
+
+	def toDict(self):
+		return { 'request': self.REQ_NAME, 'command': self.command }
+
+	def toJSON(self):
+		return json.dumps(self.toDict())
+
 
 class SubmitReq(Request):
 
 	REQ_NAME = 'submit'
+	REQ_CNT = 1
 
 	def __init__(self, reqData, env = None):
 		self.jobs = []
@@ -50,11 +79,15 @@ class SubmitReq(Request):
 
 		newJobs = []
 		vars = {
+			'rcnt': str(SubmitReq.REQ_CNT),
+			'uniq': str(uuid.uuid4()),
 			'sname': 'local',
 			'date': str(datetime.datetime.today()),
 			'time': str(datetime.time()),
 			'dateTime': str(datetime.datetime.now())
 				}
+
+		SubmitReq.REQ_CNT += 1
 
 		logging.debug("request data contains %d jobs" % (len(reqData['jobs'])))
 
@@ -75,6 +108,7 @@ class SubmitReq(Request):
 				if start > end:
 					raise InvalidRequest('Wrong format of iterative directive: start index larger then stop one')
 
+				vars['uniq'] = str(uuid.uuid4())
 				vars['its'] = end - start
 				vars['it_start'] = start
 				vars['it_stop'] = end
@@ -132,7 +166,14 @@ class SubmitReq(Request):
 					vars['it'] = idx
 
 				try:
-					newJobs.append(Job(**self.__replaceVariables(reqJob, vars)))
+					reqJob_vars = self.__replaceVariables(reqJob, vars)
+
+					varsStep2 = {
+							'jname': reqJob['name']
+							}
+
+					reqJob_vars = self.__replaceVariables(reqJob_vars, varsStep2)
+					newJobs.append(Job(**reqJob_vars))
 				except Exception as e:
 					logging.exception('Wrong submit request')
 					raise InvalidRequest('Wrong submit request - problem with variables') from e
@@ -142,7 +183,10 @@ class SubmitReq(Request):
 
 
 	def __replaceVariables(self, data, vars):
-		return json.loads(Template(json.dumps(data)).safe_substitute(vars))
+		if vars is not None and len(vars) > 1:
+			return json.loads(Template(json.dumps(data)).safe_substitute(vars))
+		else:
+			return data
 
 
 	def toDict(self):
@@ -195,6 +239,25 @@ class CancelJobReq(Request):
 		return json.dumps(self.toDict())
 
 
+class RemoveJobReq(Request):
+
+	REQ_NAME = 'removeJob'
+
+	def __init__(self, reqData, env = None):
+		assert reqData is not None
+
+		if 'jobName' not in reqData or not isinstance(reqData['jobName'], str) or not reqData['jobName']:
+			raise InvalidRequest('Wrong remove job request - missing job name')
+
+		self.jobName = reqData['jobName']
+
+	def toDict(self):
+		return { 'request': self.REQ_NAME, 'jobName': self.jobName }
+
+	def toJSON(self):
+		return json.dumps(self.toDict())
+
+
 class ListJobsReq(Request):
 
 	REQ_NAME = 'listJobs'
@@ -223,12 +286,29 @@ class ResourcesInfoReq(Request):
 		return json.dumps(self.toDict())
 
 
+class FinishReq(Request):
+
+	REQ_NAME = 'finish'
+
+	def __init__(self, reqData, env = None):
+		pass
+
+	def toDict(self):
+		return { 'request': self.REQ_NAME }
+
+	def toJSON(self):
+		return json.dumps(self.toDict())
+
+
 __REQS__ = {
+		ControlReq.REQ_NAME:		ControlReq,
 		SubmitReq.REQ_NAME:			SubmitReq,
 		JobStatusReq.REQ_NAME:		JobStatusReq,
 		CancelJobReq.REQ_NAME:		CancelJobReq,
+		RemoveJobReq.REQ_NAME:		RemoveJobReq,
 		ListJobsReq.REQ_NAME:		ListJobsReq,
-		ResourcesInfoReq.REQ_NAME:	ResourcesInfoReq
+		ResourcesInfoReq.REQ_NAME:	ResourcesInfoReq,
+		FinishReq.REQ_NAME:			FinishReq
 }
 
 

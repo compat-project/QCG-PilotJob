@@ -2,20 +2,21 @@ import asyncio
 from asyncio import CancelledError
 import json
 import logging
-from enum import Enum, auto
+from enum import Enum
 
 from qcg.appscheduler.manager import Manager
 from qcg.appscheduler.request import Request, SubmitReq, JobStatusReq, CancelJobReq
-from qcg.appscheduler.request import ListJobsReq, ResourcesInfoReq
+from qcg.appscheduler.request import ListJobsReq, ResourcesInfoReq, FinishReq
+from qcg.appscheduler.request import RemoveJobReq, ControlReq
 from qcg.appscheduler.joblist import Job, JobResources, JobList, JobState
 from qcg.appscheduler.response import Response
 from qcg.appscheduler.errors import InvalidRequest
 
 
 class ResponseStatus(Enum):
-	UNKNOWN = auto()
-	ERROR = auto()
-	SUCCESS = auto()
+	UNKNOWN = 1
+	ERROR = 2
+	SUCCESS = 3
 
 
 
@@ -59,18 +60,23 @@ class Receiver:
 
 		self.__manager = manager
 		self.__ifaces = ifaces
-		self.__jobList = JobList()
 		self.__tasks = []
 		self.__reqEnv = {
 				'resources': manager.resources
 				}
 		self.__handlers = {
+				ControlReq:			self.__handleControlReq,
 				SubmitReq:			self.__handleSubmitReq,
 				JobStatusReq:		self.__handleJobStatusReq,
 				CancelJobReq:		self.__handleCancelJobReq,
+				RemoveJobReq:		self.__handleRemoveJobReq,
 				ListJobsReq:		self.__handleListJobsReq,
-				ResourcesInfoReq:	self.__handleResourcesInfoReq
+				ResourcesInfoReq:	self.__handleResourcesInfoReq,
+				FinishReq:			self.__handleFinishReq
 				}
+
+		self.__finishTask = None
+		self.isFinished = False
 
 	
 	'''
@@ -211,6 +217,29 @@ class Receiver:
 
 
 	'''
+	Handlder for control commands.
+	Control commands are used to configure system during run-time.
+
+	Args:
+		iface (Interface): interface which received request
+		request (ControlReq): control request data
+
+	Returns:
+		Response: the response data
+	'''
+	async def __handleControlReq(self, iface, request):
+		logging.info("Handling control request from %s iface" % (iface.__class__.__name__))
+
+		if request.command == ControlReq.REQ_CONTROL_CMD_FINISHAFTERALLTASKSDONE:
+			if self.__finishTask is not None:
+				return Response.Error('Finish request already requested')
+				
+			self.__finishTask = asyncio.ensure_future(self.__waitForAllJobs())
+
+		return Response.Ok('%s command accepted' % (request.command))
+
+
+	'''
 	Handlder for job submission.
 	Before job will be submited the in-depth validation will be proviede, e.g.: job name
 	uniqness.
@@ -227,12 +256,8 @@ class Receiver:
 
 		for job in request.jobs:
 			# verify job name uniqness
-			if self.__jobList.exist(job.name):
+			if self.__manager.jobList.exist(job.name):
 				return Response.Error('Job %s already exist' % (job.name))
-
-		for job in request.jobs:
-			# add job to the job list
-			self.__jobList.add(job)
 
 		# enqueue job in the manager
 		self.__manager.enqueue(request.jobs)
@@ -253,21 +278,37 @@ class Receiver:
 	async def __handleJobStatusReq(self, iface, request):
 		logging.info("Handling job status request from %s iface" % (iface.__class__.__name__))
 
-		job = self.__jobList.get(request.jobName)
+		job = self.__manager.jobList.get(request.jobName)
 
 		if job is None:
 			return Response.Error('Job %s doesn\'t exist' % (request.jobName))
 
-		return Response.Ok(data = {
+		data = {
 			'jobName': request.jobName,
 			'status': str(job.strState())
-			})
+			}
+
+		if job.messages is not None:
+			data['messages'] = job.messages
+
+		if job.runtime is not None and len(job.runtime) > 0:
+			data['runtime'] = job.runtime
+
+		if job.history is not None and len(job.history) > 0:
+			history_str = ''
+
+			for entry in job.history:
+				history_str = '\n'.join([ history_str, "%s: %s" % (str(entry[1]), entry[0].name) ] )
+
+			data['history'] = history_str
+
+		return Response.Ok(data = data)
 
 
 	async def __handleCancelJobReq(self, iface, request):
 		logging.info("Handling cancel job from %s iface" % (iface.__class__.__name__))
 
-		job = self.__jobList.get(request.jobName)
+		job = self.__manager.jobList.get(request.jobName)
 
 		if job is None:
 			return Response.Error('Job %s doesn\'t exist' % (request.jobName))
@@ -275,10 +316,30 @@ class Receiver:
 		return Response.Error('Cancel job is not supported')
 
 
+	async def __handleRemoveJobReq(self, iface, request):
+		logging.info("Handling remove job from %s iface" % (iface.__class__.__name__))
+
+		job = self.__manager.jobList.get(request.jobName)
+
+		if job is None:
+			return Response.Error('Job %s doesn\'t exist' % (request.jobName))
+
+		if not job.state.isFinished():
+			return Response.Error('Job %s not finished - can not be removed' % (request.jobName))
+
+		self.__manager.jobList.remove(request.jobName)
+
+		data = { 
+				'messages': 'Job %s removed' % request.jobName
+		}
+
+		return Response.Ok(data = data)
+
+
 	async def __handleListJobsReq(self, iface, request):
 		logging.info("Handling list jobs info from %s iface" % (iface.__class__.__name__))
 
-		jobNames = self.__jobList.jobs()
+		jobNames = self.__manager.jobList.jobs()
 
 		logging.info("got %s jobs from list" % (str(len(jobNames))))
 		return Response.Ok(data = {
@@ -297,4 +358,53 @@ class Receiver:
 				'usedCores': resources.usedCores,
 				'freeCores': resources.freeCores
 			})
+
+
+	async def __handleFinishReq(self, iface, request):
+		logging.info("Handling finish service from %s iface" % (iface.__class__.__name__))
+		delay = 2
+
+		resources = self.__manager.resources
+
+		if self.__finishTask is not None:
+			return Response.Error('Finish request already requested')
+			
+		self.__finishTask = asyncio.ensure_future(self.__delayedFinish(delay))
+
+		return Response.Ok(data = {
+				'when': '%ds' % delay,
+			})
+
+
+	async def __waitForAllJobs(self):
+		logging.info("waiting for all jobs to finish")
+
+		notFinished = 1
+
+		while notFinished > 0:
+			notFinished = 0
+
+			await asyncio.sleep(1)
+
+			allJobs = self.__manager.jobList.jobs()
+
+			for jName in allJobs:
+				job = self.__manager.jobList.get(jName)
+
+				if not job.state.isFinished():
+					logging.info("%s not finished yet" % (jName))
+					notFinished += 1;
+
+			logging.info("%d/%d jobs not finished" % (notFinished, len(allJobs)))
+
+		logging.info("all jobs finished")
+
+		self.isFinished = True
+
+		
+	async def __delayedFinish(self, delay):
+		logging.info("finishing in %s seconds" % delay)
+
+		await asyncio.sleep(delay)
+		self.isFinished = True
 

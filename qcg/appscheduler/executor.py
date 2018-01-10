@@ -6,7 +6,9 @@ from asyncio.queues import Queue
 import asyncio
 import logging
 import os
+from os.path import abspath
 import uuid
+from datetime import datetime, timedelta
 
 
 class ExecutorFinish:
@@ -37,9 +39,14 @@ class ExecutorJob:
 		if self.job.execution.env is not None:
 			self.__env.update(self.job.execution.env)
 
+		self.__env.update({
+					'QCG_STEP_ID': str(self.id)
+			})
+
 		nnodes = len(self.allocation.nodeAllocations)
 		ncores = sum([ node.cores for node in self.allocation.nodeAllocations ])
 		nlist = ','.join([ node.node.name for node in self.allocation.nodeAllocations ])
+		tasks_per_node = ','.join([ str(node.cores) for node in self.allocation.nodeAllocations ])
 		self.__env.update({
 					'SLURM_NNODES': str(nnodes),
 					'SLURM_NODELIST': nlist,
@@ -50,23 +57,39 @@ class ExecutorJob:
 					'SLURM_STEP_NODELIST': nlist,
 					'SLURM_STEP_NUM_NODES': str(nnodes), 
 					'SLURM_STEP_NUM_TASKS': str(ncores),
+					'SLURM_NTASKS_PER_NODE': tasks_per_node,
+					'SLURM_STEP_TASKS_PER_NODE': tasks_per_node,
+					'SLURM_TASKS_PER_NODE': tasks_per_node
 				})
 
-		jobRes = self.job.resources
-		if nnodes == 1:
-#			or (self.job.hasCores() and 
-#				(self.job.numCores.isExact() or self.job.numCores.min == self.job.numCores.max)):
-			# tasks per node
-			tasks_per_node = self.allocation.nodeAllocations[0].cores
-			self.__env.update({
-					'SLURM_NTASKS_PER_NODE': str(tasks_per_node),
-					'SLURM_STEP_TASKS_PER_NODE': str(tasks_per_node),
-					'SLURM_TASKS_PER_NODE': str(tasks_per_node)
+		# create host file
+		self.hostfile=abspath(os.path.join(self.job.execution.wd, ".%s.hostfile" % self.job.name))
+		with open(self.hostfile, 'w') as f:
+			for node in self.allocation.nodeAllocations:
+				for i in range(0, node.cores):
+					f.write("%s\n" % node.node.name)
+
+		self.__env.update({
+					'SLURM_HOSTFILE': self.hostfile
 				})
 
-#		logging.info("job's environment:")
-#		for k, v in self.__env.items():
-#			logging.info("\t%s -> %s" % (k, v))
+		# create run configuration
+		self.runConfFile=abspath(os.path.join(self.job.execution.wd, ".%s.runconfig" % self.job.name))
+		with open(self.runConfFile, 'w') as f:
+			f.write("0\t%s %s\n" % (
+					self.job.execution.exec,
+					' '.join('{0}'.format(arg) for arg in self.job.execution.args)))
+			if ncores > 1:
+				if ncores > 2:
+					f.write("1-%d /bin/true\n" % (ncores - 1))
+				else:
+					f.write("1 /bin/true\n")
+				
+		# run via srun
+		self.modifiedExec = "srun"
+#		self.modifiedArgs = [ "-n", str(ncores), "--export=NONE", "-m", "arbitrary", "--multi-prog", self.runConfFile ]
+#		self.modifiedArgs = [ "-n", str(ncores), "-m", "arbitrary", "--mem-per-cpu=0", "--slurmd-debug=verbose", "--multi-prog", self.runConfFile ]
+		self.modifiedArgs = [ "-n", str(ncores), "-m", "arbitrary", "--mem-per-cpu=0", "--multi-prog", self.runConfFile ]
 
 
 	def __prepareSandbox(self):
@@ -85,6 +108,7 @@ class ExecutorJob:
 		stderrP = asyncio.subprocess.DEVNULL
 		stdinP = asyncio.subprocess.DEVNULL
 		cwd = '.'
+		startedDt = datetime.now()
 
 		exitCode = -1
 
@@ -104,8 +128,11 @@ class ExecutorJob:
 			logging.info("creating process for job %s" % (self.job.name))
 			logging.info("with args %s" % (str([ je.exec, *je.args])))
 
+			self.job.appendRuntime( { 'wd': cwd } )
+
 			process = await asyncio.create_subprocess_exec(
-					je.exec, *je.args,
+#					je.exec, *je.args,
+					self.modifiedExec, *self.modifiedArgs,
 					stdin = stdinP,
 					stdout = stdoutP,
 					stderr = stderrP,
@@ -116,11 +143,20 @@ class ExecutorJob:
 			logging.info("job %s launched" % (self.job.name))
 
 			await process.wait()
+
+			await asyncio.sleep(1)
+
 			exitCode = process.returncode
 		except Exception as e:
 			logging.exception("Process for job %s terminated" % (self.job.name))
 			self.errorMessage = str(e)
 			exitCode = -1
+
+		try:
+			runTime = datetime.now() - startedDt
+			self.job.appendRuntime( { 'rtime': str(runTime) } )
+		except Exception as e:
+			logging.exception("Failed to set runtime for job %s" % (self.job.name))
 
 		self.__postprocess(exitCode)
 
@@ -145,8 +181,8 @@ class ExecutorJob:
 		try:
 			logging.info("launching job %s" % (self.job.name))
 
-			self.__prepareEnv()
 			self.__prepareSandbox()
+			self.__prepareEnv()
 
 			self.__processTask = asyncio.get_event_loop().create_task(self.__launch())
 		except Exception as ex:
@@ -178,6 +214,7 @@ class Executor:
 	def execute(self, allocation, job):
 		logging.info("executing job %s" % (job.name))
 
+		job.appendRuntime({ 'allocation': allocation.description() })
 		execTask = ExecutorJob(self, allocation, job)
 		self.__notFinished[execTask.id] = execTask
 		execTask.run()

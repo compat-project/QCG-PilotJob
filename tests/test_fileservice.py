@@ -6,8 +6,6 @@ import os
 from os.path import exists, join, abspath
 from string import Template
 import shutil
-import zmq
-from zmq.asyncio import Context
 
 import context
 from qcg.appscheduler.resources import Node, Resources
@@ -16,25 +14,27 @@ from qcg.appscheduler.joblist import JobState, Job, JobExecution, ResourceSize, 
 from qcg.appscheduler.request import Request, SubmitReq, JobStatusReq, CancelJobReq, ListJobsReq, ResourcesInfoReq
 from qcg.appscheduler.errors import InvalidRequest
 from qcg.appscheduler.manager import Manager
-from qcg.appscheduler.zmqinterface import ZMQInterface
+from qcg.appscheduler.fileinterface import FileInterface
 from qcg.appscheduler.receiver import Receiver
 
 from appschedulertest import AppSchedulerTest
 
 
-class TestZMQService(AppSchedulerTest):
+class TestFileService(AppSchedulerTest):
 
 	def setUp(self):
-		asyncio.set_event_loop(asyncio.new_event_loop())
-
 		self.setupLogging()
+		self.jobReportFile = "jobs.report"
+
+		if exists(self.jobReportFile):
+			os.remove(self.jobReportFile)
 
 
 	def tearDown(self):
 		pass
 
 
-	async def __stopInterfaces(self, zmqConf, receiver):
+	async def __stopInterfaces(self, fileConf, receiver):
 		while not receiver.isFinished:
 			await asyncio.sleep(1)
 
@@ -63,27 +63,39 @@ class TestZMQService(AppSchedulerTest):
 		return parse_slurm_resources()
 
 
-	def test_ZMQInterfacesInit(self):
+	def __jobNotify(self, jobId, state, manager):
+		if self.jobReportFile is not None:
+			if state.isFinished():
+				with open(self.jobReportFile, 'a') as f:
+					job = manager.jobList.get(jobId)
+					f.write("%s (%s)\n\t%s\n\t%s\n" % (jobId, state.name,
+							"\n\t".join([ "%s: %s" % (str(en[1]), en[0].name) for en in job.history ]),
+							"\n\t".join([ "%s: %s" % (k, v) for k, v in job.runtime.items() ])))
+
+
+	def test_FileInterfacesService(self):
 #		res = self.createLocalResources()
 		res = self.createSlurmResources()
 
 		manager = Manager(res)
+		notifId = manager.registerNotifier(self.__jobNotify, manager)
 
-		zmqConf = {
-			ZMQInterface.CONF_IP_ADDRESS: "*",
-#			ZMQInterface.CONF_IP_ADDRESS: "172.16.16.3",
-			ZMQInterface.CONF_PORT: "5555"
+		fileConf = {
+			FileInterface.CONF_FILE_PATH: "reqs.json"
 		} 
 
-		ifaces = [ ZMQInterface() ]
-		ifaces[0].setup( zmqConf )
+		if 'QCG_PM_REQS_FILE' in os.environ:
+			fileConf[FileInterface.CONF_FILE_PATH] = os.environ['QCG_PM_REQS_FILE']
+
+		ifaces = [ FileInterface() ]
+		ifaces[0].setup( fileConf )
 
 		receiver = Receiver(manager, ifaces)
 
 		receiver.run()
 
 		asyncio.get_event_loop().run_until_complete(asyncio.gather(
-			self.__stopInterfaces(zmqConf, receiver)
+			self.__stopInterfaces(fileConf, receiver)
 			))
 
 		asyncio.get_event_loop().close()

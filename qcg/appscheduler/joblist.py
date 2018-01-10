@@ -1,4 +1,4 @@
-from enum import Enum, auto
+from enum import Enum
 from datetime import datetime, timedelta
 import json
 import re
@@ -8,16 +8,17 @@ from qcg.appscheduler.errors import JobAlreadyExist, IllegalResourceRequirements
 
 
 class JobState(Enum):
-	QUEUED = auto()
-	EXECUTING = auto()
-	SUCCEED = auto()
-	FAILED = auto()
-	CANCELED = auto()
-	OMITTED = auto()
+	QUEUED = 1
+	EXECUTING = 2
+	SUCCEED = 3
+	FAILED = 4
+	CANCELED = 5
+	OMITTED = 6
 
 
 	def isFinished(self):
-		return self in [JobState.SUCCEED, JobState.FAILED, JobState.CANCELED]
+		return self in [JobState.SUCCEED, JobState.FAILED, JobState.CANCELED,
+				JobState.OMITTED]
 	
 	
 class JobExecution:
@@ -311,8 +312,13 @@ class Job:
 
 		self.__history = []
 
+		self.runtime = { }
+
 		# history must be initialized before
 		self.state = JobState.QUEUED
+
+		self.messages = None
+
 
 	@property
 	def name(self):
@@ -354,6 +360,14 @@ class Job:
 	def hasDependencies(self):
 		return self.dependencies is not None and self.dependencies.hasDependencies()
 
+	def appendMessage(self, msg):
+		if self.messages is None:
+			self.messages = msg
+		else:
+			self.messages = '\n'.join([ self.messages, msg ])
+
+	def appendRuntime(self, data):
+		self.runtime.update(data)
 
 	def toDict(self):
 		result = {
@@ -395,3 +409,6 @@ class JobList:
 
 	def jobs(self):
 		return self.__jmap.keys()
+
+	def remove(self, jobName):
+		del self.__jmap[jobName]
