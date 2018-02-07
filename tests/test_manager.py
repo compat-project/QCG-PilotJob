@@ -34,7 +34,7 @@ class TestManager(AppSchedulerTest):
 
 
 	def tearDown(self):
-		pass
+		self.closeLogging()
 
 
 	def createLocalResources(self):
@@ -65,7 +65,7 @@ class TestManager(AppSchedulerTest):
 
 		with open(self.scriptFile, 'w') as f:
 			f.write('''
-#!/bin/bash
+#!/bin/env bash
 
 echo "*** environment ***"
 env
@@ -102,7 +102,7 @@ echo "taskset: `taskset -p $$`"
 					)),
 			Job('msleep1',
 				JobExecution(
-					'/usr/bin/sleep',
+					'sleep',
 					args = [ '2s' ],
 					wd = abspath(join(self.testSandbox, 'sleep1.sandbox')),
 					stdout = 'sleep1.stdout',
@@ -113,7 +113,7 @@ echo "taskset: `taskset -p $$`"
 					)),
 			Job('msleep2',
 				JobExecution(
-					'/usr/bin/sleep',
+					'sleep',
 					args = [ '2s' ],
 					wd = abspath(join(self.testSandbox, 'sleep2.sandbox')),
 					stdout = 'sleep2.stdout',
@@ -124,7 +124,7 @@ echo "taskset: `taskset -p $$`"
 					)),
 			Job('mscript',
 				JobExecution(
-					'/usr/bin/bash',
+					'bash',
 					args = [ self.scriptFile ],
 					wd = abspath(join(self.testSandbox, 'script.sandbox')),
 					stdout = 'script.stdout',
@@ -135,7 +135,7 @@ echo "taskset: `taskset -p $$`"
 					)),
 			Job('msleep3',
 				JobExecution(
-					'/usr/bin/sleep',
+					'sleep',
 					args = [ '2s' ],
 					wd = abspath(join(self.testSandbox, 'sleep3.sandbox')),
 					stdout = 'sleep3.stdout',
@@ -201,13 +201,13 @@ echo "taskset: `taskset -p $$`"
 			self.__waitForJobs(manager, notFinished)
 			))
 
-		logging.info("all tasks finished")
-
 		asyncio.get_event_loop().close()
 
 		self.__stopTiming()
 
-		self.assertTrue(self.durationSecs > 4 and self.durationSecs < 6)
+		logging.info("all tasks finished in %d secs" % (self.durationSecs))
+
+		self.assertTrue(self.durationSecs > 4 and self.durationSecs < 8)
 
 		for job in self.jobs:
 			self.assertTrue(os.path.exists(job.execution.wd))

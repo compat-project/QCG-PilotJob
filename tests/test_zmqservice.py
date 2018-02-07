@@ -31,7 +31,7 @@ class TestZMQService(AppSchedulerTest):
 
 
 	def tearDown(self):
-		pass
+		self.closeLogging()
 
 
 	async def __stopInterfaces(self, zmqConf, receiver):
@@ -63,7 +63,7 @@ class TestZMQService(AppSchedulerTest):
 		return parse_slurm_resources()
 
 
-	def test_ZMQInterfacesInit(self):
+	def Notest_ZMQInterfacesInit(self):
 #		res = self.createLocalResources()
 		res = self.createSlurmResources()
 

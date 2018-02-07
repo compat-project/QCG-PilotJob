@@ -31,7 +31,7 @@ class TestFileService(AppSchedulerTest):
 
 
 	def tearDown(self):
-		pass
+		self.closeLogging()
 
 
 	async def __stopInterfaces(self, fileConf, receiver):
@@ -73,9 +73,9 @@ class TestFileService(AppSchedulerTest):
 							"\n\t".join([ "%s: %s" % (k, v) for k, v in job.runtime.items() ])))
 
 
-	def test_FileInterfacesService(self):
-#		res = self.createLocalResources()
-		res = self.createSlurmResources()
+	def Notest_FileInterfacesService(self):
+		res = self.createLocalResources()
+#		res = self.createSlurmResources()
 
 		manager = Manager(res)
 		notifId = manager.registerNotifier(self.__jobNotify, manager)

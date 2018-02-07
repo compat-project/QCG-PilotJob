@@ -17,8 +17,7 @@ class TestRequest(AppSchedulerTest):
 		self.setupLogging()
 
 	def tearDown(self):
-		pass
-
+		self.closeLogging()
 
 	def createLocalResources(self):
 		node_names=['local1', 'local2', 'local3']
@@ -66,16 +65,16 @@ class TestRequest(AppSchedulerTest):
 		sreq = SubmitReq(sreq_dict)
 		self.assertIsNotNone(sreq)
 
-		sreq_json_copy = sreq.toJSON()
-		self.compareIgnoringWhiteSpaces(sreq_json, sreq_json_copy)
+		sreq_copy_dict = sreq.toDict()
+		self.assertEqual(sreq_dict, sreq_copy_dict)
 
 		sreq_copy = Request.Parse(sreq_dict)
 
 		self.assertIsNotNone(sreq_copy)
 		self.assertTrue(isinstance(sreq_copy, SubmitReq))
 
-		sreq_json_copy2 = sreq_copy.toJSON()
-		self.compareIgnoringWhiteSpaces(sreq_json, sreq_json_copy2)
+		sreq_copy2_dict = sreq_copy.toDict()
+		self.assertEqual(sreq_dict, sreq_copy2_dict)
 
 		try:
 			sreq2 = SubmitReq({ 'request': 'submit2', 'jobs': None })
@@ -245,15 +244,15 @@ class TestRequest(AppSchedulerTest):
 		jsreq = JobStatusReq(jsreq_dict)
 		self.assertIsNotNone(jsreq)
 
-		jsreq_json_copy = jsreq.toJSON()
-		self.compareIgnoringWhiteSpaces(jsreq_json, jsreq_json_copy)
+		jsreq_copy_dict = jsreq.toDict()
+		self.assertEqual(jsreq_dict, jsreq_copy_dict)
 
 		jsreq_copy = Request.Parse(jsreq_dict)
 		self.assertIsNotNone(jsreq_copy)
 		self.assertTrue(isinstance(jsreq_copy, JobStatusReq))
 
-		jsreq_json_copy2 = jsreq_copy.toJSON()
-		self.compareIgnoringWhiteSpaces(jsreq_json, jsreq_json_copy2)
+		jsreq_copy2_dict = jsreq_copy.toDict()
+		self.assertEqual(jsreq_dict, jsreq_copy2_dict)
 
 		try:
 			sreq2 = JobStatusReq({ 'request': 'jobStatus', 'jobName': None })
@@ -293,15 +292,15 @@ class TestRequest(AppSchedulerTest):
 		creq = CancelJobReq(creq_dict)
 		self.assertIsNotNone(creq)
 
-		creq_json_copy = creq.toJSON()
-		self.compareIgnoringWhiteSpaces(creq_json, creq_json_copy)
+		creq_copy_dict = creq.toDict()
+		self.assertEqual(creq_dict, creq_copy_dict)
 
 		creq_copy = Request.Parse(creq_dict)
 		self.assertIsNotNone(creq_copy)
 		self.assertTrue(isinstance(creq_copy, CancelJobReq))
 
-		creq_json_copy2 = creq_copy.toJSON()
-		self.compareIgnoringWhiteSpaces(creq_json, creq_json_copy2)
+		creq_copy2_dict = creq_copy.toDict()
+		self.assertEqual(creq_dict, creq_copy2_dict)
 
 		try:
 			creq2 = CancelJobReq({ 'request': 'cancelJob', 'jobName': None })
@@ -340,15 +339,15 @@ class TestRequest(AppSchedulerTest):
 		creq = ListJobsReq(ljreq_dict)
 		self.assertIsNotNone(creq)
 
-		ljreq_json_copy = creq.toJSON()
-		self.compareIgnoringWhiteSpaces(ljreq_json, ljreq_json_copy)
+		ljreq_copy_dict = creq.toDict()
+		self.assertEqual(ljreq_dict, ljreq_copy_dict)
 
 		ljreq_copy = Request.Parse(ljreq_dict)
 		self.assertIsNotNone(ljreq_copy)
 		self.assertTrue(isinstance(ljreq_copy, ListJobsReq))
 
-		ljreq_json_copy2 = ljreq_copy.toJSON()
-		self.compareIgnoringWhiteSpaces(ljreq_json, ljreq_json_copy2)
+		ljreq_copy2_dict = ljreq_copy.toDict()
+		self.assertEqual(ljreq_dict, ljreq_copy2_dict)
 
 		ljreq2 = ListJobsReq({ 'request': 'listJobs', 'jobName': 'job1', 'duperele': None })
 
@@ -363,15 +362,15 @@ class TestRequest(AppSchedulerTest):
 		creq = ResourcesInfoReq(rireq_dict)
 		self.assertIsNotNone(creq)
 
-		rireq_json_copy = creq.toJSON()
-		self.compareIgnoringWhiteSpaces(rireq_json, rireq_json_copy)
+		rireq_copy_dict = creq.toDict()
+		self.assertEqual(rireq_dict, rireq_copy_dict)
 
 		rireq_copy = Request.Parse(rireq_dict)
 		self.assertIsNotNone(rireq_copy)
 		self.assertTrue(isinstance(rireq_copy, ResourcesInfoReq))
 
-		rireq_json_copy2 = rireq_copy.toJSON()
-		self.compareIgnoringWhiteSpaces(rireq_json, rireq_json_copy2)
+		rireq_copy2_dict = rireq_copy.toDict()
+		self.assertEqual(rireq_dict, rireq_copy2_dict)
 
 		rireq2 = ResourcesInfoReq({ 'request': 'resourcesInfo', 'jobName': 'job1', 'duperele': None })
 

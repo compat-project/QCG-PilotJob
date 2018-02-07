@@ -15,7 +15,7 @@ class TestResponse(AppSchedulerTest):
 
 
 	def tearDown(self):
-		pass
+		self.closeLogging()
 
 
 	def test_ResponseOk(self):

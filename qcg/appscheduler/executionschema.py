@@ -1,3 +1,5 @@
+import os
+
 from qcg.appscheduler.allocation import Allocation, NodeAllocation
 from qcg.appscheduler.joblist import JobState, Job, JobExecution
 from qcg.appscheduler.errors import *

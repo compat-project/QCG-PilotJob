@@ -4,15 +4,16 @@ import json
 import context
 from datetime import timedelta
 from qcg.appscheduler.joblist import JobExecution, ResourceSize, JobResources, JobFiles, JobDependencies
+from appschedulertest import AppSchedulerTest
 
 
-class TestJobResources(unittest.TestCase):
+class TestJobResources(AppSchedulerTest):
 
 	def setUp(self):
-		pass
+		self.setupLogging()
 
 	def tearDown(self):
-		pass
+		self.closeLogging()
 
 
 	def test_JobResourcesInitCores(self):

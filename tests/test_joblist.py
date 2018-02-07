@@ -5,15 +5,16 @@ import context
 from qcg.appscheduler.joblist import JobList, Job, JobExecution, ResourceSize, JobResources
 from qcg.appscheduler.joblist import JobFiles, JobDependencies, JobState
 from qcg.appscheduler.joblist import IllegalJobDescription, JobAlreadyExist
+from appschedulertest import AppSchedulerTest
 
 
-class TestJobList(unittest.TestCase):
+class TestJobList(AppSchedulerTest):
 
 	def setUp(self):
-		pass
+		self.setupLogging()
 
 	def tearDown(self):
-		pass
+		self.closeLogging()
 
 
 	def test_JobListInit(self):

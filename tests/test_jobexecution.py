@@ -12,7 +12,7 @@ class TestJobExecution(AppSchedulerTest):
 		self.setupLogging()
 
 	def tearDown(self):
-		pass
+		self.closeLogging()
 
 
 	def test_JobExecutionExportToJSONLength(self):

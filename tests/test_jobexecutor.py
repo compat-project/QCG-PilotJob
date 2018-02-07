@@ -11,10 +11,9 @@ from os.path import join, exists, abspath
 
 from qcg.appscheduler.errors import NotSufficientResources, InvalidResourceSpec
 from qcg.appscheduler.resources import Node, Resources
-from qcg.appscheduler.scheduler import Scheduler
 from qcg.appscheduler.allocation import NodeAllocation, Allocation
 from qcg.appscheduler.joblist import JobExecution, ResourceSize, JobResources, JobFiles, JobDependencies, Job
-from qcg.appscheduler.executor import Executor
+from qcg.appscheduler.manager import Manager
 from appschedulertest import AppSchedulerTest
 
 
@@ -25,7 +24,8 @@ class TestJobExecutor(AppSchedulerTest):
 		self.setupLogging()
 
 	def tearDown(self):
-		pass
+		self.closeLogging()
+
 
 	def createLocalResources(self):
 		node_names=['local1', 'local2', 'local3']
@@ -44,19 +44,15 @@ class TestJobExecutor(AppSchedulerTest):
 		return Resources(nodes)
 	
 
-	async def __schedule(self, jobs, scheduler, executor):
-		for job in jobs:
-			allocation = scheduler.allocateJob(job.resources)
-			self.assertIsNotNone(allocation)
+	async def __schedule(self, jobs, manager):
+		manager.enqueue(jobs)
 
-			executor.execute(allocation, job)
-
-		await executor.waitForUnfinished()
+		await manager.waitForFinish()
 
 
 	def test_ExecutorSimple(self):
 		res = self.createLocalResources()
-		scheduler = Scheduler(res)
+		manager = Manager(res)
 
 		testSandbox = 'test-sandbox'
 		if exists(testSandbox):
@@ -143,12 +139,10 @@ echo "taskset: `taskset -p $$`"
 
 				]
 
-		executor = Executor(None)
-
 		startTime = datetime.datetime.now()
 
 		asyncio.get_event_loop().run_until_complete(asyncio.gather(
-			self.__schedule(jobs, scheduler, executor)
+			self.__schedule(jobs, manager)
 			))
 		asyncio.get_event_loop().close()
 

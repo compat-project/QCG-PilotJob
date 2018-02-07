@@ -169,8 +169,10 @@ class SubmitReq(Request):
 					reqJob_vars = self.__replaceVariables(reqJob, vars)
 
 					varsStep2 = {
-							'jname': reqJob['name']
-							}
+							'jname': reqJob_vars['name']
+					}
+
+					logging.debug("replacing jname variable with %s" % (reqJob['name']))
 
 					reqJob_vars = self.__replaceVariables(reqJob_vars, varsStep2)
 					newJobs.append(Job(**reqJob_vars))
@@ -183,7 +185,7 @@ class SubmitReq(Request):
 
 
 	def __replaceVariables(self, data, vars):
-		if vars is not None and len(vars) > 1:
+		if vars is not None and len(vars) > 0:
 			return json.loads(Template(json.dumps(data)).safe_substitute(vars))
 		else:
 			return data

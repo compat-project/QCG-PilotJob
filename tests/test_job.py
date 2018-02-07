@@ -1,6 +1,7 @@
 import unittest
 import json
 import string
+import logging
 
 import context
 from qcg.appscheduler.joblist import JobState, Job, JobExecution, ResourceSize, JobResources
@@ -13,10 +14,10 @@ from appschedulertest import AppSchedulerTest
 class TestJob(AppSchedulerTest):
 
 	def setUp(self):
-		pass
+		self.setupLogging()
 
 	def tearDown(self):
-		pass
+		self.closeLogging()
 
 
 	def compareJobs(self, j, j_copy):
@@ -102,8 +103,11 @@ class TestJob(AppSchedulerTest):
 		self.assertIsNotNone(j)
 
 		jDesc_copy = j.toJSON()
-		# compare with ignoring white characters
-		self.compareIgnoringWhiteSpaces(jDesc, jDesc_copy)
+
+		jDict = json.loads(jDesc)
+		jDictCopy = json.loads(jDesc_copy)
+
+		self.assertEqual(jDict, jDictCopy)
 
 
 	def __compareIgnoringWhiteSpaces(self, str1, str2):
@@ -154,8 +158,10 @@ class TestJob(AppSchedulerTest):
 		self.assertIsNotNone(j)
 
 		jDesc_copy = j.toJSON()
-		# compare with ignoring white characters
-		self.__compareIgnoringWhiteSpaces(jDesc, jDesc_copy)
+
+		jDict = json.loads(jDesc)
+		jDictCopy = json.loads(jDesc_copy)
+		self.assertEqual(jDict, jDictCopy)
 
 		self.assertEqual(j.name, "mscript")
 		self.assertEqual(j.execution.exec, "/usr/bin/bash")

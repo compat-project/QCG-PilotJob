@@ -3,15 +3,16 @@ import json
 
 import context
 from qcg.appscheduler.joblist import JobExecution, ResourceSize, JobResources, JobFiles, JobDependencies, IllegalJobDescription
+from appschedulertest import AppSchedulerTest
 
 
-class TestJobDependencies(unittest.TestCase):
+class TestJobDependencies(AppSchedulerTest):
 
 	def setUp(self):
-		pass
+		self.setupLogging()
 
 	def tearDown(self):
-		pass
+		self.closeLogging()
 
 
 	def test_JobDependenciesInit(self):

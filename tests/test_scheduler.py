@@ -15,7 +15,7 @@ class TestScheduler(AppSchedulerTest):
 		self.setupLogging()
 
 	def tearDown(self):
-		pass
+		self.closeLogging()
 
 	def createLocalResources(self):
 		node_names=['local1', 'local2', 'local3']

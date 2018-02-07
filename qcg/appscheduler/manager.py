@@ -105,12 +105,12 @@ class Manager:
 	Args:
 		resources (Resources): available resources
 	"""
-	def __init__(self, resources):
+	def __init__(self, resources, config = {}):
 		assert resources != None
 
 		self.resources = resources
 		self.__scheduler = Scheduler(self.resources)
-		self.__executor = Executor(self)
+		self.__executor = Executor(self, config)
 		self.jobList = JobList()
 
 		self.__scheduleQueue = []

@@ -25,14 +25,12 @@ class TestFileReceiver(AppSchedulerTest):
 		asyncio.set_event_loop(asyncio.new_event_loop())
 
 		self.testSandbox = 'test-sandbox'
-
 		self.setupLogging()
-
 		self.__prepareEnvironment()
 
 
 	def tearDown(self):
-		pass
+		self.closeLogging()
 
 
 	def __prepareEnvironment(self):
@@ -57,7 +55,7 @@ class TestFileReceiver(AppSchedulerTest):
 			"jobs": [ {
                 "name": "date",
                 "execution": {
-                  "exec": "/usr/bin/date",
+                  "exec": "date",
                   "wd": "%s",
                   "stdout": "%s",
                   "stderr": "%s"
@@ -110,7 +108,7 @@ class TestFileReceiver(AppSchedulerTest):
                 "name": "date_${it}",
 				"iterate": [ %d, %d ],
                 "execution": {
-                  "exec": "/usr/bin/env",
+                  "exec": "env",
                   "wd": "%s",
                   "stdout": "%s",
                   "stderr": "%s"
@@ -134,6 +132,11 @@ class TestFileReceiver(AppSchedulerTest):
 	async def __stopInterfaces(self, receiver, delay = 3):
 		await asyncio.sleep(delay)
 		receiver.stop()
+
+
+	async def __waitForFinish(self, manager):
+		await manager.waitForFinish()
+
 
 	async def __delayStop(self, delay = 5):
 		await asyncio.sleep(delay)
@@ -171,9 +174,12 @@ class TestFileReceiver(AppSchedulerTest):
 		receiver.run()
 
 		asyncio.get_event_loop().run_until_complete(asyncio.gather(
-			self.__stopInterfaces(receiver, 2)
+			self.__waitForFinish(manager)
+#			self.__stopInterfaces(receiver, 2)
 #			self.__delayStop(5)
 			))
+
+		asyncio.get_event_loop().close()
 
 		self.assertTrue(os.path.exists(self.jobSandbox))
 		self.assertTrue(os.path.exists(os.path.join(self.jobSandbox, self.jobStdoutName)))
@@ -195,9 +201,12 @@ class TestFileReceiver(AppSchedulerTest):
 		receiver.run()
 
 		asyncio.get_event_loop().run_until_complete(asyncio.gather(
-			self.__stopInterfaces(receiver, 2)
+			self.__waitForFinish(manager)
+#			self.__stopInterfaces(receiver, 8)
 #			self.__delayStop(5)
 			))
+
+		asyncio.get_event_loop().close()
 
 		for i in range(self.startIter, self.endIter):
 			jobWdDir = Template(self.iterJobSandbox).safe_substitute({ 'it': i })

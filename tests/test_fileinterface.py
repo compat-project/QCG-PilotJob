@@ -24,7 +24,7 @@ class TestFileInterface(AppSchedulerTest):
 
 
 	def tearDown(self):
-		pass
+		self.closeLogging()
 
 
 	def __prepareEnvironment(self):
@@ -108,8 +108,10 @@ echo "taskset: `taskset -p $$`"
 				]
 
 
-	def test_FileInterfaceSetup(self):
+	def test2_FileInterfaceSetup(self):
 		self.__prepareEnvironment()
 		self.__setupJobs()		
 		self.__generateJobsFile()
+
+		asyncio.get_event_loop().close()
 

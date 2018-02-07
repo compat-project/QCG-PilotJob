@@ -3,6 +3,8 @@ from qcg.appscheduler.joblist import JobResources
 from qcg.appscheduler.errors import *
 from qcg.appscheduler.resources import Node, Resources
 
+import logging
+
 
 class SchedulerAlgorithm:
 
@@ -125,19 +127,30 @@ class SchedulerAlgorithm:
 	def __allocateCoresOnNodes(self, min_nodes, max_nodes, min_cores, max_cores):
 		allocation = Allocation()
 
+#		logging.info("allocating (%d,%d) nodes with (%d,%d) cores" % 
+#				(min_nodes, max_nodes, min_cores, max_cores))
+
 		for node in self.resources.nodes:
 			ncores = node.allocate(max_cores)
-			if ncores > min_cores:
+
+#			logging.info("allocated %d cores on a single node" % (ncores))
+
+			if ncores >= min_cores:
 				allocation.addNode(NodeAllocation(node, ncores))
 
 				if len(allocation.nodeAllocations) == max_nodes:
+#					logging.info("already allocated enough %d nodes" % (len(allocation.nodeAllocations)))
 					break
 			else:
 				node.release(ncores)
 
-		if len(allocation.nodeAllocations) > min_nodes:
+		if len(allocation.nodeAllocations) >= min_nodes:
+			logging.info("allocation contains %d nodes which meets requirements (%d min)" %
+					(len(allocation.nodeAllocations), min_nodes))
 			return allocation
 		else:
+			logging.info("allocation contains %d nodes which doesn't meets requirements (%d min)" %
+					(len(allocation.nodeAllocations), min_nodes))
 			self.resources.releaseAllocation(allocation)
 			return None
 
@@ -226,6 +239,14 @@ class SchedulerAlgorithm:
 				raise InvalidResourceSpec(
 						"Invalid cores specification (min: %d, max: %d)" % (min_cores, max_cores))
 
+			if r.hasNodes():
+				if r.nodes.isExact():
+					max_nodes = min_nodes
+				else:
+					max_nodes = rnodes.max
+
+#			logging.info("looking for (%d,%d) nodes and (%d,%d) cores" %
+#					(min_nodes, max_nodes, min_cores, max_cores))
 
 			if min_nodes == 0:
 				# allocate ('min_cores', 'max_cores') on any number of nodes

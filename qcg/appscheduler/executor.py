@@ -1,12 +1,15 @@
 from qcg.appscheduler.allocation import Allocation, NodeAllocation
 from qcg.appscheduler.joblist import JobState, Job, JobExecution
 from qcg.appscheduler.errors import *
+from qcg.appscheduler.executionschema import ExecutionSchema
 
 from asyncio.queues import Queue
 import asyncio
 import logging
 import os
+import json
 from os.path import abspath
+from string import Template
 import uuid
 from datetime import datetime, timedelta
 
@@ -17,12 +20,14 @@ class ExecutorFinish:
 
 class ExecutorJob:
 
-	def __init__(self, executor, allocation, job):
+	def __init__(self, executor, schema, allocation, job):
 		assert allocation is not None
 		assert job is not None
+		assert schema is not None
 
 		self.allocation = allocation
 		self.job = job
+		self.__schema = schema
 		self.id = uuid.uuid4()
 		self.__processTask = None
 		self.__stdinF = None
@@ -32,112 +37,122 @@ class ExecutorJob:
 		self.__executor = executor
 		self.errorMessage = None
 
+		# temporary
+		self.wdPath = '.'
+
+		# inherit environment variables from parent process
+		self.env = os.environ.copy()
+
+		self.nnodes = len(self.allocation.nodeAllocations)
+		self.ncores = sum([ node.cores for node in self.allocation.nodeAllocations ])
+		self.nlist = ','.join([ node.node.name for node in self.allocation.nodeAllocations ])
+		self.tasks_per_node = ','.join([ str(node.cores) for node in self.allocation.nodeAllocations ])
+
+		self.__setupJobVariables()
+
+		# job execution description with variables replaced
+		self.jobExecution = JobExecution(
+				**json.loads(
+					self.__substituteJobVariables(self.job.execution.toJSON())
+				))
+
+
+	def __setupJobVariables(self):
+		self.__jobVars = {
+			'root_wd': self.__executor.base_wd,
+			'ncores': str(self.ncores),
+			'nnodes': str(self.nnodes),
+			'nlist': self.nlist
+		}
 	
+
+	def __substituteJobVariables(self, data):
+		if isinstance(data, str):
+			return Template(data).safe_substitute(self.__jobVars)
+		else:
+			return json.loads(Template(json.dumps(data)).safe_substitute(self.__jobVars))
+
+	
+	"""
+	Set a job's working directory based on execution description and root working directory of executor.
+	An attribute 'wdPath' is set as an output of this method and directory is created
+	"""
+	def __setupSandbox(self):
+		if self.jobExecution.wd is None:
+			self.wdPath = self.__executor.base_wd
+		else:
+			self.wdPath = self.jobExecution.wd
+
+			if not os.path.isabs(self.wdPath):
+				self.wdPath = os.path.join(self.__executor.base_wd, self.wdPath)
+			
+		logging.info("preparing job %s sanbox at %s" % (self.job.name, self.wdPath))
+		if not os.path.exists(self.wdPath):
+			logging.info("creating directory for job %s at %s" % (self.job.name, self.wdPath))
+			os.makedirs(self.wdPath)
+
+
+	"""
+	Setup an execution environment.
+	Mostly environment variables are set
+	"""
 	def __prepareEnv(self):
-		self.__env = os.environ.copy()
+		if self.jobExecution.env is not None:
+			self.env.update(self.jobExecution.env)
 
-		if self.job.execution.env is not None:
-			self.__env.update(self.job.execution.env)
+		self.env.update({
+			'QCG_PM_NNODES':         str(self.nnodes),
+			'QCG_PM_NODELIST':       self.nlist,
+			'QCG_PM_NPROCS':         str(self.ncores),
+			'QCG_PM_NTASKS':         str(self.ncores),
+			'QCG_PM_STEP_ID':        str(self.id),
+			'QCG_PM_TASKS_PER_NODE': self.tasks_per_node
+		})
 
-		self.__env.update({
-					'QCG_STEP_ID': str(self.id)
-			})
+		
+	"""
+	Prepare environment for job execution.
+	Setup sandbox, environment variables and modification of exec according to the execution schema
+	is made
+	"""
+	def preprocess(self):
+		self.__setupSandbox()
+		self.__prepareEnv()
 
-		nnodes = len(self.allocation.nodeAllocations)
-		ncores = sum([ node.cores for node in self.allocation.nodeAllocations ])
-		nlist = ','.join([ node.node.name for node in self.allocation.nodeAllocations ])
-		tasks_per_node = ','.join([ str(node.cores) for node in self.allocation.nodeAllocations ])
-		self.__env.update({
-					'SLURM_NNODES': str(nnodes),
-					'SLURM_NODELIST': nlist,
-					'SLURM_NPROCS': str(ncores),
-					'SLURM_NTASKS': str(ncores),
-					'SLURM_JOB_NODELIST': nlist,
-					'SLURM_JOB_NUM_NODES': str(nnodes),
-					'SLURM_STEP_NODELIST': nlist,
-					'SLURM_STEP_NUM_NODES': str(nnodes), 
-					'SLURM_STEP_NUM_TASKS': str(ncores),
-					'SLURM_NTASKS_PER_NODE': tasks_per_node,
-					'SLURM_STEP_TASKS_PER_NODE': tasks_per_node,
-					'SLURM_TASKS_PER_NODE': tasks_per_node
-				})
-
-		# create host file
-		self.hostfile=abspath(os.path.join(self.job.execution.wd, ".%s.hostfile" % self.job.name))
-		with open(self.hostfile, 'w') as f:
-			for node in self.allocation.nodeAllocations:
-				for i in range(0, node.cores):
-					f.write("%s\n" % node.node.name)
-
-		self.__env.update({
-					'SLURM_HOSTFILE': self.hostfile
-				})
-
-		# create run configuration
-		self.runConfFile=abspath(os.path.join(self.job.execution.wd, ".%s.runconfig" % self.job.name))
-		with open(self.runConfFile, 'w') as f:
-			f.write("0\t%s %s\n" % (
-					self.job.execution.exec,
-					' '.join('{0}'.format(arg) for arg in self.job.execution.args)))
-			if ncores > 1:
-				if ncores > 2:
-					f.write("1-%d /bin/true\n" % (ncores - 1))
-				else:
-					f.write("1 /bin/true\n")
-				
-		# run via srun
-		self.modifiedExec = "srun"
-#		self.modifiedArgs = [ "-n", str(ncores), "--export=NONE", "-m", "arbitrary", "--multi-prog", self.runConfFile ]
-#		self.modifiedArgs = [ "-n", str(ncores), "-m", "arbitrary", "--mem-per-cpu=0", "--slurmd-debug=verbose", "--multi-prog", self.runConfFile ]
-		self.modifiedArgs = [ "-n", str(ncores), "-m", "arbitrary", "--mem-per-cpu=0", "--multi-prog", self.runConfFile ]
-
-
-	def __prepareSandbox(self):
-		if self.job.execution.wd is not None:
-			wd = self.job.execution.wd
-
-			logging.info("preparing job %s sanbox at %s" % (self.job.name, wd))
-			if not os.path.exists(wd):
-				logging.info("creating directory for job %s at %s" % (self.job.name, wd))
-				os.makedirs(wd)
+		self.__schema.preprocess(self)
 
 
 	async def __launch(self):
-		je = self.job.execution
+		je = self.jobExecution
 		stdoutP = asyncio.subprocess.DEVNULL
 		stderrP = asyncio.subprocess.DEVNULL
 		stdinP = asyncio.subprocess.DEVNULL
-		cwd = '.'
 		startedDt = datetime.now()
 
 		exitCode = -1
 
 		try:
-			if je.wd is not None:
-				cwd = je.wd
-
 			if je.stdin is not None:
 				stdinP = self.__stdinF = open(je.stdin, 'r')
 
 			if je.stdout is not None:
-				stdoutP = self.__stdoutF = open(os.path.join(cwd, je.stdout), 'w')
+				stdoutP = self.__stdoutF = open(os.path.join(self.wdPath, je.stdout), 'w')
 
 			if je.stderr is not None:
-				stderrP = self.__stderrF = open(os.path.join(cwd, je.stderr), 'w')
+				stderrP = self.__stderrF = open(os.path.join(self.wdPath, je.stderr), 'w')
 
 			logging.info("creating process for job %s" % (self.job.name))
 			logging.info("with args %s" % (str([ je.exec, *je.args])))
 
-			self.job.appendRuntime( { 'wd': cwd } )
+			self.job.appendRuntime( { 'wd': self.wdPath } )
 
 			process = await asyncio.create_subprocess_exec(
-#					je.exec, *je.args,
-					self.modifiedExec, *self.modifiedArgs,
+					je.exec, *je.args,
 					stdin = stdinP,
 					stdout = stdoutP,
 					stderr = stderrP,
-					cwd = cwd,
-					env = self.__env
+					cwd = self.wdPath,
+					env = self.env
 					)
 
 			logging.info("job %s launched" % (self.job.name))
@@ -162,7 +177,6 @@ class ExecutorJob:
 
 
 	def __postprocess(self, exitCode):
-
 		self.exitCode = exitCode
 		logging.info("Postprocessing job %s with exit code %d" % (self.job.name, self.exitCode))
 
@@ -181,8 +195,7 @@ class ExecutorJob:
 		try:
 			logging.info("launching job %s" % (self.job.name))
 
-			self.__prepareSandbox()
-			self.__prepareEnv()
+			self.preprocess()
 
 			self.__processTask = asyncio.get_event_loop().create_task(self.__launch())
 		except Exception as ex:
@@ -194,12 +207,29 @@ class ExecutorJob:
 
 class Executor:
 
+	EXECUTOR_WD = 'executor.wd'
+	EXECUTION_SCHEMA = 'direct'
+
+	CONF_DEFAULT = {
+		EXECUTOR_WD: '.',
+		EXECUTION_SCHEMA: 'direct'
+	}
+
+
 	"""
 	Execute jobs inside allocations.
 	"""
-	def __init__(self, manager):
+	def __init__(self, manager, config):
 		self.__manager = manager
 		self.__notFinished = { }
+		self.__config = config
+
+		self.base_wd = abspath(config.get(self.EXECUTOR_WD, self.CONF_DEFAULT[self.EXECUTOR_WD]))
+		self.schemaName = config.get(self.EXECUTION_SCHEMA, self.CONF_DEFAULT[self.EXECUTION_SCHEMA])
+
+		logging.info("executor base working directory set to %s" % (self.base_wd))
+
+		self.schema = ExecutionSchema.GetSchema(self.schemaName, config)
 
 
 	"""
@@ -215,9 +245,14 @@ class Executor:
 		logging.info("executing job %s" % (job.name))
 
 		job.appendRuntime({ 'allocation': allocation.description() })
-		execTask = ExecutorJob(self, allocation, job)
-		self.__notFinished[execTask.id] = execTask
-		execTask.run()
+
+		try:
+			execTask = ExecutorJob(self, self.schema, allocation, job)
+			self.__notFinished[execTask.id] = execTask
+			execTask.run()
+		except Exception as e:
+			logging.exception("Failed to launch job %s" % (job.name))
+			self.__manager.jobFinished(job, allocation, -1, str(e))
 
 
 	"""

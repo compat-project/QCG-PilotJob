@@ -34,7 +34,7 @@ class TestZMQReceiver(AppSchedulerTest):
 
 
 	def tearDown(self):
-		pass
+		self.closeLogging()
 
 
 	def __prepareEnvironment(self):
@@ -43,9 +43,10 @@ class TestZMQReceiver(AppSchedulerTest):
 		os.makedirs(self.testSandbox)
 
 	
-	async def __stopInterfaces(self, zmqConf, receiver):
+	async def __stopInterfaces(self, zmqConf, receiver, manager):
 		await self.__zmqSimpleClient(zmqConf)
 		logging.info("stopping receiver ...")
+		await manager.waitForFinish()
 		receiver.stop()
 
 
@@ -118,7 +119,7 @@ class TestZMQReceiver(AppSchedulerTest):
 		receiver.run()
 
 		asyncio.get_event_loop().run_until_complete(asyncio.gather(
-			self.__stopInterfaces(zmqConf, receiver)
+			self.__stopInterfaces(zmqConf, receiver, manager)
 			))
 
 		asyncio.get_event_loop().close()

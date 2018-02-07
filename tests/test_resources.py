@@ -12,7 +12,7 @@ class TestResources(AppSchedulerTest):
 		self.setupLogging()
 
 	def tearDown(self):
-		pass
+		self.closeLogging()
 
 
 	def createLocalResources(self):
