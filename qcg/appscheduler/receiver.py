@@ -342,9 +342,31 @@ class Receiver:
 		jobNames = self.__manager.jobList.jobs()
 
 		logging.info("got %s jobs from list" % (str(len(jobNames))))
+
+		jobs = [ ]
+		for jobName in jobNames:
+			job = self.__manager.jobList.get(jobName)
+
+			if job is None:
+				return Response.Error('One of the job %s doesn\'t exist in registry' % (jobName))
+
+			jobData = {
+				'name': jobName,
+				'status': str(job.strState())
+			}
+
+			if job.messages is not None:
+				jobData['messages'] = job.messages
+
+			if job.getQueuePos() is not None:
+				jobData['inQueue'] = job.getQueuePos()
+
+			jobs.append(jobData)
+
+
 		return Response.Ok(data = {
 				'length': len(jobNames),
-				'names': list(jobNames)
+				'jobs': jobs,
 			})
 
 

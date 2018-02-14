@@ -319,6 +319,9 @@ class Job:
 
 		self.messages = None
 
+		# position in scheduling queue - None if not set
+		self.__queuePos = None
+
 
 	@property
 	def name(self):
@@ -365,6 +368,17 @@ class Job:
 			self.messages = msg
 		else:
 			self.messages = '\n'.join([ self.messages, msg ])
+
+
+	def getQueuePos(self):
+		return self.__queuePos
+
+	def setQueuePos(self, pos):
+		self.__queuePos = pos
+
+	def clearQueuePos(self):
+		self.__queuePos = None
+
 
 	def appendRuntime(self, data):
 		self.runtime.update(data)

@@ -136,6 +136,7 @@ class Manager:
 				# job will never be ready
 				logging.info("job %s not feasible - omitting" % (schedJob.job.name))
 				self.__changeJobState(schedJob.job, JobState.OMITTED)
+				schedJob.job.clearQueuePos()
 			else:
 				if schedJob.isReady:
 					logging.info("job %s is ready" % (schedJob.job.name))
@@ -144,6 +145,8 @@ class Manager:
 						allocation = self.__scheduler.allocateJob(schedJob.job.resources)
 
 						if allocation is not None:
+							schedJob.job.clearQueuePos()
+
 							logging.info("found resources for job %s" % (schedJob.job.name))
 
 							# allocation has been created - execute job
@@ -152,12 +155,12 @@ class Manager:
 						else:
 							logging.info("missing resources for job %s" % (schedJob.job.name))
 							# missing resources
-							newScheduleQueue.append(schedJob)
+							self.__appendToScheduleQueue(newScheduleQueue, schedJob)
 					except (NotSufficientResources, InvalidResourceSpec) as e:
 						# jobs will never schedule
 						logging.warning("Job %s scheduling failed - %s" % (schedJob.job.name, str(e)))
 				else:
-					newScheduleQueue.append(schedJob)
+					self.__appendToScheduleQueue(newScheduleQueue, schedJob)
 
 		self.__scheduleQueue = newScheduleQueue
 
@@ -285,9 +288,14 @@ class Manager:
 		if jobs is not None:
 			for job in jobs:
 				self.jobList.add(job)
-				self.__scheduleQueue.append(SchedulingJob(self, job))
+				self.__appendToScheduleQueue(self.__scheduleQueue, SchedulingJob(self, job))
 
 			self.__scheduleLoop()
+
+
+	def __appendToScheduleQueue(self, queue, schedJob):
+		queue.append(schedJob)
+		schedJob.job.setQueuePos(len(queue) - 1)
 
 
 	async def waitForFinish(self):

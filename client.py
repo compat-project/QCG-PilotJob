@@ -16,6 +16,7 @@ import zmq
 from zmq.asyncio import Context
 import json
 import logging
+import sys
 
 CommandCompleter = WordCompleter( [ 'jobs', 'status', 'jinfo', 'load', 'edit',
 	'jcancel', 'jdel', 'connect', 'exit', 'finish', 'help' ], ignore_case = True )
@@ -75,54 +76,45 @@ class CmdJobs:
 			else:
 				raise Exception('failed to get list of jobs')
 
-		if 'names' not in d['data']:
+		if 'jobs' not in d['data']:
 			raise Exception('invalid reply from the service')
 
-		for jName in d['data']['names']:
+		jobs = [ ]
+		for job in d['data']['jobs']:
 			jStatus = 'UNKNOWN'
 			jMessages = None
+			inQueue = sys.maxsize
 
-			# get job status
-			await ctx.zmqSock.send(str.encode(json.dumps({
-				"request": "jobStatus",
-				"jobName": jName
-			})))
-			jReply = bytes.decode(await ctx.zmqSock.recv())
-			jD = json.loads(jReply)
-			if 'code' in jD and jD['code'] == 0 and 'data' in jD and 'status' in jD['data']:
-				jStatus = jD['data']['status']
-			
-				if jStatus is not None:
-					if 'messages' in jD['data']:
-						jMessages = jD['data']['messages']
+			# optional
+			if 'messages' in job:
+				jMessages = job['messages']
 
-			jobs.append({ 'name': jName,
-				          'status': jStatus,
-						  'messages': jMessages })
+			# optional
+			if 'inQueue' in job:
+				inQueue = job['inQueue']
 
-		sorted(jobs, key=lambda job: StatusSortValues.get(job['status'].lower(), 'unknown'))
+			jobs.append({ 'name': job['name'],
+				          'status': job['status'],
+						  'messages': jMessages,
+						  'inQueue': inQueue })
+
+		# sort by position in queue
+		almostSortedJobs1 = sorted(jobs,
+				key=lambda job: job['inQueue'])
+
+		# sort by status
+		sortedJobs = sorted(almostSortedJobs1,
+				key=lambda job: StatusSortValues.get(job['status'].lower(), 'unknown'),
+				reverse = True)
 
 		status = []
-		for jName in d['data']['names']:
-			jStatus = None
-
-			# get job status
-			await ctx.zmqSock.send(str.encode(json.dumps({
-				"request": "jobStatus",
-				"jobName": jName
-			})))
-			jReply = bytes.decode(await ctx.zmqSock.recv())
-			jD = json.loads(jReply)
-			if 'code' in jD and jD['code'] == 0 and 'data' in jD and 'status' in jD['data']:
-				jStatus = jD['data']['status']
-			
-			if jStatus is not None:
-				if 'messages' in jD['data']:
-					status.append("%s (%s, %s)" % (jName, jStatus, jD['data']['messages']))
-				else:
-					status.append("%s (%s)" % (jName, jStatus))
+		for job in sortedJobs:
+			if 'messages' in job and job['messages']:
+#				status.append("%s (%s, %s) - %d" % (job['name'], job['status'], job['messages'], job['inQueue']))
+				status.append("%s (%s, %s)" % (job['name'], job['status'], job['messages']))
 			else:
-				status.append('%s' % jName)
+#				status.append("%s (%s) - %d" % (job['name'], job['status'], job['inQueue']))
+				status.append("%s (%s)" % (job['name'], job['status']))
 
 		statusStr = '\n'.join(status)
 
