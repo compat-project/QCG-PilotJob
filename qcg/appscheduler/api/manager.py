@@ -1,6 +1,5 @@
 import re
 import zmq
-from zmq.asyncio import Context
 import json
 import os
 from qcg.appscheduler.api import errors
@@ -24,7 +23,7 @@ class Manager:
 
 
     def __init__(self, address = None):
-        self.__zmqCtx = Context.instance()
+        self.__zmqCtx = zmq.Context()
         self.__zmqSock = None
         self.__connected = False
 
@@ -34,7 +33,7 @@ class Manager:
             else:
                 address = Manager.DEFAULT_ADDRESS
 
-        self.__address = self.__parseAddress(self, address)
+        self.__address = self.__parseAddress(address)
         self.__connect()
 
 
@@ -47,6 +46,7 @@ class Manager:
             # append default port
             address = "%s:%s" % (address, Manager.DEFAULT_PORT)
 
+        print("final QCG-PJM address to connect: %s" % (address))
         return address
 
 
@@ -66,7 +66,7 @@ class Manager:
     Connect to the QCG-PJM
     """
     def __connect(self):
-        self.disconnect()
+        self.__disconnect()
 
         try:
             self.__zmqSock = self.__zmqCtx.socket(zmq.REQ)
@@ -105,6 +105,8 @@ class Manager:
         self.__zmqSock.send(str.encode(json.dumps( data )))
 
         reply = bytes.decode(self.__zmqSock.recv())
+
+        print("got reply: %s" % reply)
         return self.__validateResponse(json.loads(reply))
 
 
@@ -129,7 +131,7 @@ class Manager:
     def submit(self, jobs):
         self.__sendAndValidateResult({
             "request": "submit",
-            "jobs": jobs.getJobsFormat()
+            "jobs": jobs.formatDoc()
         })
 
 
@@ -145,7 +147,7 @@ class Manager:
             raise errors.InternalError('Rquest failed - missing jobs data')
 
         jobs = {}
-        for job in data['data']['jobs']:
+        for job in data['jobs']:
             jMessages = None
             inQueue = sys.maxsize
 

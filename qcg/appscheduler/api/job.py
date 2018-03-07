@@ -108,3 +108,16 @@ class Jobs:
             raise JobNotDefined(name)
 
         del self.__list[name]
+
+
+    """
+    Return job descriptions in format acceptable by the QCG-PJM
+    """
+    def formatDoc(self):
+        resJobs = [ ]
+
+        for jName, job in self.__list.items():
+            resJob = {}
+
+            resJob['name'] = jName
+

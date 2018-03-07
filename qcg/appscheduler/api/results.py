@@ -44,14 +44,14 @@ class StatusResult:
         status (str) - current status of the job
 
     Attributes:
-        list (dict) - list of job names
+        jlist (dict) - list of job names
     """
 
-    def __init(self, list):
-        if list is None:
+    def __init__(self, jlist):
+        if jlist is None:
             raise InternalError("List of job statuses is None")
 
-        self.__list = list
+        self.__list = jlist
 
 
     def names(self):
