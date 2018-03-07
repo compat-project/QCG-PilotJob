@@ -1,42 +1,36 @@
-from enum import IntEnum
 import json
-import logging
-
+from enum import IntEnum
 
 
 class ResponseCode(IntEnum):
-	OK = 0
-	ERROR = 1
+    OK = 0
+    ERROR = 1
 
 
 class Response:
-	def __init__(self, code = ResponseCode.OK, msg = None, data = None):
-		self.code = code
-		self.msg = msg
-		self.data = data
+    def __init__(self, code=ResponseCode.OK, msg=None, data=None):
+        self.code = code
+        self.msg = msg
+        self.data = data
 
+    @classmethod
+    def Ok(cls, msg=None, data=None):
+        return Response(ResponseCode.OK, msg, data)
 
-	@classmethod
-	def Ok(cls, msg = None, data = None):
-		return Response(ResponseCode.OK, msg, data)
+    @classmethod
+    def Error(cls, msg=None, data=None):
+        return Response(ResponseCode.ERROR, msg, data)
 
+    def toDict(self):
+        res = {'code': int(self.code)}
 
-	@classmethod
-	def Error(cls, msg = None, data = None):
-		return Response(ResponseCode.ERROR, msg, data)
+        if self.msg is not None:
+            res['message'] = self.msg
 
-	
-	def toDict(self):
-		res = { 'code': int(self.code) }
+        if self.data is not None:
+            res['data'] = self.data
 
-		if self.msg is not None:
-			res['message'] = self.msg
+        return res
 
-		if self.data is not None:
-			res['data'] = self.data
-
-		return res
-
-
-	def toJSON(self):
-		return json.dumps(self.toDict(), indent=2)
+    def toJSON(self):
+        return json.dumps(self.toDict(), indent=2)

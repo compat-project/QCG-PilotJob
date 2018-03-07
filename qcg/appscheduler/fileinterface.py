@@ -1,51 +1,45 @@
-import asyncio
 import json
 import logging
 from os.path import exists
 
 from qcg.appscheduler.errors import JobFileNotExist, IllegalJobDescription
 
+
 class FileInterface:
+    CONF_FILE_PATH = 'file.path'
 
-	CONF_FILE_PATH = 'file.path'
+    CONF_DEFAULT = {
+        CONF_FILE_PATH: 'jobs.json'
+    }
 
-	CONF_DEFAULT = {
-			CONF_FILE_PATH: 'jobs.json'
-			}
+    def __init__(self):
+        pass
 
+    @classmethod
+    def name(cls):
+        return "FILE"
 
-	def __init__(self):
-		pass
+    def setup(self, conf):
+        self.data = []
+        self.path = str(conf.get(self.CONF_FILE_PATH, self.CONF_DEFAULT[self.CONF_FILE_PATH]))
 
-	@classmethod
-	def name(cls):
-		return "FILE"
+        if not exists(self.path):
+            raise JobFileNotExist(self.path)
 
+        with open(self.path) as jsonData:
+            self.data = json.load(jsonData)
 
-	def setup(self, conf):
-		self.data = []
-		self.path = str(conf.get(self.CONF_FILE_PATH, self.CONF_DEFAULT[self.CONF_FILE_PATH]))
+        if not isinstance(self.data, list):
+            raise IllegalJobDescription("Not an array of requests in json file")
 
-		if not exists(self.path):
-			raise JobFileNotExist(self.path)
+    def close(self):
+        self.data = []
 
-		with open(self.path) as jsonData:
-			self.data = json.load(jsonData)
+    async def receive(self):
+        if len(self.data) > 0:
+            return self.data.pop(0)
 
-		if not isinstance(self.data, list):
-			raise IllegalJobDescription("Not an array of requests in json file")
+        return None
 
-
-	def close(self):
-		self.data = []
-
-
-	async def receive(self):
-		if len(self.data) > 0:
-			return self.data.pop(0)
-
-		return None
-
-
-	async def reply(self, replyMsg):
-		logging.info("FileInterface reply message: %s" % (replyMsg))
+    async def reply(self, replyMsg):
+        logging.info("FileInterface reply message: %s" % (replyMsg))

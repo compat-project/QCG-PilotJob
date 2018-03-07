@@ -1,36 +1,50 @@
-
 class AppSchedulerError(Exception):
-	pass
+    pass
+
 
 class SlurmEnvError(AppSchedulerError):
-	pass
+    pass
+
 
 class InvalidArgument(AppSchedulerError):
-	pass
+    pass
+
 
 class InvalidAllocation(AppSchedulerError):
-	pass
+    pass
+
 
 class InvalidResourceSpec(AppSchedulerError):
-	pass
+    pass
+
 
 class NotSufficientResources(AppSchedulerError):
-	pass
+    pass
+
 
 class JobAlreadyExist(AppSchedulerError):
-	pass
+    pass
+
 
 class IllegalResourceRequirements(AppSchedulerError):
-	pass
+    pass
+
 
 class IllegalJobDescription(AppSchedulerError):
-	pass
+    pass
+
 
 class InternalError(AppSchedulerError):
-	pass
+    pass
+
 
 class JobFileNotExist(AppSchedulerError):
-	pass
+    pass
+
 
 class InvalidRequest(AppSchedulerError):
-	pass
+    pass
+
+
+class SlurmEnvError(AppSchedulerError):
+    pass

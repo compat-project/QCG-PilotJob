@@ -1,89 +1,87 @@
 from qcg.appscheduler.errors import *
-from qcg.appscheduler.joblist import JobResources
 from qcg.appscheduler.scheduleralgo import SchedulerAlgorithm
 
 
 class Scheduler:
+    """
+    Resource orchestration.
 
-	"""
-	Resource orchestration.
+    Args:
+        resources (Resources): available resources
 
-	Args:
-		resources (Resources): available resources
+    Attributes:
+        __resources (Resources): status of available resources
+    """
 
-	Attributes:
-		__resources (Resources): status of available resources
-	"""
-	def __init__(self, resources):
-		assert resources != None
+    def __init__(self, resources):
+        assert resources != None
 
-		self.__resources = resources
-		self.__schedulerAlg = SchedulerAlgorithm(self.__resources)
-		self.__activeAllocations = set()
+        self.__resources = resources
+        self.__schedulerAlg = SchedulerAlgorithm(self.__resources)
+        self.__activeAllocations = set()
 
+    """
+    Create allocation with given number of cores.
 
-	"""
-	Create allocation with given number of cores.
-
-	Args:
-		min_cores (int): minimum requested number of cores
-		max_cores (int): maximum requested number of cores, if None 'min_cores'
-						 will mean also 'max_cores'
-
-
-	Returns:
-		Allocation: created allocation 
-		None: not enough free resources
-
-	Raises:
-		NotSufficientResources: when there are not enough resources avaiable
-	"""
-	def allocateCores(self, min_cores, max_cores = None):
-		alloc = self.__schedulerAlg.allocateCores(min_cores, max_cores)
-
-		if alloc is not None:
-			self.__activeAllocations.add(alloc)
-
-		return alloc
+    Args:
+        min_cores (int): minimum requested number of cores
+        max_cores (int): maximum requested number of cores, if None 'min_cores'
+                         will mean also 'max_cores'
 
 
-	"""
-	Create allocation for job with given resources.
+    Returns:
+        Allocation: created allocation 
+        None: not enough free resources
 
-	Args:
-		resources (JobResources): job's resource requirements
+    Raises:
+        NotSufficientResources: when there are not enough resources avaiable
+    """
 
-	Returns:
-		Allocation: created allocation 
-		None: not enough free resources
+    def allocateCores(self, min_cores, max_cores=None):
+        alloc = self.__schedulerAlg.allocateCores(min_cores, max_cores)
 
-	Raises:
-		NotSufficientResources: when there are not enough resources avaiable
-		InvalidResourceSpec: when resource requirements are not valid
-	"""
-	def allocateJob(self, resources):
-		alloc = self.__schedulerAlg.allocateJob(resources)
+        if alloc is not None:
+            self.__activeAllocations.add(alloc)
 
-		if alloc is not None:
-			self.__activeAllocations.add(alloc)
+        return alloc
 
-		return alloc
+    """
+    Create allocation for job with given resources.
 
+    Args:
+        resources (JobResources): job's resource requirements
 
-	"""
-	Release resources assigned for the specificated allocation.
+    Returns:
+        Allocation: created allocation 
+        None: not enough free resources
 
-	Args:
-		alloc (Allocation): allocation to release
+    Raises:
+        NotSufficientResources: when there are not enough resources avaiable
+        InvalidResourceSpec: when resource requirements are not valid
+    """
 
-	Raises:
-		InvalidAllocation: when the allocation is not registered in the scheduler (it
-		  might be released earlier)
-	"""
-	def releaseAllocation(self, alloc):
-		if alloc not in self.__activeAllocations:
-			raise InvalidAllocation()
+    def allocateJob(self, resources):
+        alloc = self.__schedulerAlg.allocateJob(resources)
 
-		self.__activeAllocations.remove(alloc)
-		self.__resources.releaseAllocation(alloc)
+        if alloc is not None:
+            self.__activeAllocations.add(alloc)
 
+        return alloc
+
+    """
+    Release resources assigned for the specificated allocation.
+
+    Args:
+        alloc (Allocation): allocation to release
+
+    Raises:
+        InvalidAllocation: when the allocation is not registered in the scheduler (it
+          might be released earlier)
+    """
+
+    def releaseAllocation(self, alloc):
+        if alloc not in self.__activeAllocations:
+            raise InvalidAllocation()
+
+        self.__activeAllocations.remove(alloc)
+        self.__resources.releaseAllocation(alloc)
