@@ -23,13 +23,16 @@ class Manager:
     DEFAULT_PORT = "5555"
 
 
-    def __init__(self, address):
+    def __init__(self, address = None):
         self.__zmqCtx = Context.instance()
         self.__zmqSock = None
         self.__connected = False
 
-        if address is None and Manager.DEFAULT_ADDRESS_ENV in os.environ:
-            address = os.environ[Manager.DEFAULT_ADDRESS_ENV]
+        if address is None:
+            if Manager.DEFAULT_ADDRESS_ENV in os.environ:
+                address = os.environ[Manager.DEFAULT_ADDRESS_ENV]
+            else:
+                address = Manager.DEFAULT_ADDRESS
 
         self.__address = self.__parseAddress(self, address)
         self.__connect()
