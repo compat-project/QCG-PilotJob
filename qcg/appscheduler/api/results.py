@@ -55,7 +55,7 @@ class StatusResult:
 
 
     def names(self):
-        return self.__list.keys()
+        return self.__list
 
 
     def status(self, job):

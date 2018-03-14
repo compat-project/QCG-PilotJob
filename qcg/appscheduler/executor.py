@@ -9,6 +9,7 @@ from string import Template
 
 from qcg.appscheduler.executionschema import ExecutionSchema
 from qcg.appscheduler.joblist import JobExecution
+from qcg.appscheduler.zmqinterface import ZMQInterface
 
 
 class ExecutorFinish:
@@ -103,6 +104,11 @@ class ExecutorJob:
             'QCG_PM_STEP_ID': str(self.id),
             'QCG_PM_TASKS_PER_NODE': self.tasks_per_node
         })
+
+        if hasattr(self.__executor, 'zmq_address'):
+            self.env.update({
+                'QCG_PM_ZMQ_ADDRESS': self.__executor.zmq_address
+            })
 
     """
     Prepare environment for job execution.
@@ -221,6 +227,10 @@ class Executor:
         logging.info("executor base working directory set to %s" % (self.base_wd))
 
         self.schema = ExecutionSchema.GetSchema(self.schemaName, config)
+
+        if ZMQInterface.CONF_ZMQ_IFACE_ADDRESS in config:
+            self.zmq_address = config[ZMQInterface.CONF_ZMQ_IFACE_ADDRESS]
+
 
     """
     Asynchronusly execute job inside allocation.

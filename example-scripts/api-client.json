@@ -1,0 +1,20 @@
+[
+  {
+	"request": "submit",
+	"jobs": [ {
+		"name": "env_${rcnt}",
+		"execution": {
+		  "exec": "python",
+		  "args": [ "../tests/api_ex3.py" ],
+		  "wd": "client-api-wd",
+		  "stdout": "stdout",
+		  "stderr": "stderr"
+		},
+		"resources": {
+		  "numCores": {
+				"exact": 1
+		  }
+		}
+	} ]
+  }
+]

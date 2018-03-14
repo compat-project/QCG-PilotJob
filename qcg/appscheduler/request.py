@@ -162,6 +162,10 @@ class SubmitReq(Request):
 
                     del reqJob['resources']['numNodes']['split-into']
 
+            # default value for missing 'resources' definition
+            if 'resources' not in reqJob:
+                reqJob['resources'] = { 'numCores': { 'exact': 1 } }
+
             for idx in range(start, end):
                 if haveIterations:
                     vars['it'] = idx
@@ -207,13 +211,31 @@ class JobStatusReq(Request):
     def __init__(self, reqData, env=None):
         assert reqData is not None
 
-        if 'jobName' not in reqData or not isinstance(reqData['jobName'], str) or not reqData['jobName']:
-            raise InvalidRequest('Wrong job status request - missing job name')
+        if 'jobNames' not in reqData or not isinstance(reqData['jobNames'], list) or len(reqData['jobNames']) < 1:
+            raise InvalidRequest('Wrong job status request - missing job names')
 
-        self.jobName = reqData['jobName']
+        self.jobNames = reqData['jobNames']
 
     def toDict(self):
-        return {'request': self.REQ_NAME, 'jobName': self.jobName}
+        return {'request': self.REQ_NAME, 'jobNames': self.jobNames}
+
+    def toJSON(self):
+        return json.dumps(self.toDict())
+
+
+class JobInfoReq(Request):
+    REQ_NAME = 'jobInfo'
+
+    def __init__(self, reqData, env=None):
+        assert reqData is not None
+
+        if 'jobNames' not in reqData or not isinstance(reqData['jobNames'], list) or len(reqData['jobNames']) < 1:
+            raise InvalidRequest('Wrong job status request - missing job names')
+
+        self.jobNames = reqData['jobNames']
+
+    def toDict(self):
+        return {'request': self.REQ_NAME, 'jobNames': self.jobNames}
 
     def toJSON(self):
         return json.dumps(self.toDict())
@@ -243,13 +265,13 @@ class RemoveJobReq(Request):
     def __init__(self, reqData, env=None):
         assert reqData is not None
 
-        if 'jobName' not in reqData or not isinstance(reqData['jobName'], str) or not reqData['jobName']:
-            raise InvalidRequest('Wrong remove job request - missing job name')
+        if 'jobNames' not in reqData or not isinstance(reqData['jobNames'], list) or len(reqData['jobNames']) < 1:
+            raise InvalidRequest('Wrong remove job request - missing job names')
 
-        self.jobName = reqData['jobName']
+        self.jobNames = reqData['jobNames']
 
     def toDict(self):
-        return {'request': self.REQ_NAME, 'jobName': self.jobName}
+        return {'request': self.REQ_NAME, 'jobNames': self.jobNames }
 
     def toJSON(self):
         return json.dumps(self.toDict())
@@ -298,6 +320,7 @@ __REQS__ = {
     ControlReq.REQ_NAME: ControlReq,
     SubmitReq.REQ_NAME: SubmitReq,
     JobStatusReq.REQ_NAME: JobStatusReq,
+    JobInfoReq.REQ_NAME: JobInfoReq,
     CancelJobReq.REQ_NAME: CancelJobReq,
     RemoveJobReq.REQ_NAME: RemoveJobReq,
     ListJobsReq.REQ_NAME: ListJobsReq,

@@ -16,3 +16,7 @@ class JobNotDefined(QCGPJMAError):
 
 class ConnectionError(QCGPJMAError):
     pass
+
+
+class WrongArguments(QCGPJMAError):
+    pass

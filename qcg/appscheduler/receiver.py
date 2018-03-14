@@ -7,8 +7,8 @@ from qcg.appscheduler.errors import InvalidRequest
 from qcg.appscheduler.manager import Manager
 from qcg.appscheduler.request import ListJobsReq, ResourcesInfoReq, FinishReq
 from qcg.appscheduler.request import RemoveJobReq, ControlReq
-from qcg.appscheduler.request import Request, SubmitReq, JobStatusReq, CancelJobReq
-from qcg.appscheduler.response import Response
+from qcg.appscheduler.request import Request, SubmitReq, JobStatusReq, JobInfoReq, CancelJobReq
+from qcg.appscheduler.response import Response, ResponseCode
 
 
 class ResponseStatus(Enum):
@@ -64,6 +64,7 @@ class Receiver:
             ControlReq: self.__handleControlReq,
             SubmitReq: self.__handleSubmitReq,
             JobStatusReq: self.__handleJobStatusReq,
+            JobInfoReq: self.__handleJobInfoReq,
             CancelJobReq: self.__handleCancelJobReq,
             RemoveJobReq: self.__handleRemoveJobReq,
             ListJobsReq: self.__handleListJobsReq,
@@ -203,10 +204,10 @@ class Receiver:
     '''
 
     def stop(self):
-        logging.info("canceling %d tasks" % len(self.__tasks))
+        logging.info("canceling %d listener tasks" % len(self.__tasks))
         for task in self.__tasks:
             if task is not None:
-                logging.info("canceling task")
+                logging.info("canceling listener task")
                 task.cancel()
 
         self.__tasks = []
@@ -258,7 +259,13 @@ class Receiver:
         # enqueue job in the manager
         self.__manager.enqueue(request.jobs)
 
-        return Response.Ok('%d jobs submited' % (len(request.jobs)))
+        jobs = len(request.jobs)
+        data = {
+            'submitted': jobs,
+            'jobs': [ job.name for job in request.jobs ]
+        }
+
+        return Response.Ok('%d jobs submitted' % (len(request.jobs)), data = data)
 
     '''
     Handler for job status checking.
@@ -270,35 +277,75 @@ class Receiver:
     Returns:
         Response: the response data
     '''
-
     async def __handleJobStatusReq(self, iface, request):
         logging.info("Handling job status request from %s iface" % (iface.__class__.__name__))
 
-        job = self.__manager.jobList.get(request.jobName)
+        result = { }
 
-        if job is None:
-            return Response.Error('Job %s doesn\'t exist' % (request.jobName))
+        for jobName in request.jobNames:
+            try:
+                job = self.__manager.jobList.get(jobName)
 
-        data = {
-            'jobName': request.jobName,
-            'status': str(job.strState())
-        }
+                if job is None:
+                    return Response.Error('Job %s doesn\'t exist' % (request.jobName))
 
-        if job.messages is not None:
-            data['messages'] = job.messages
+                result[jobName] = { 'status': int(ResponseCode.OK), 'data': {
+                    'jobName': jobName,
+                    'status': str(job.strState())
+                } }
+            except Exception as e:
+                result[jobName] = { 'status': int(ResponseCode.ERROR), 'message': e.args[0] }
 
-        if job.runtime is not None and len(job.runtime) > 0:
-            data['runtime'] = job.runtime
+        return Response.Ok(data = { 'jobs': result })
 
-        if job.history is not None and len(job.history) > 0:
-            history_str = ''
 
-            for entry in job.history:
-                history_str = '\n'.join([history_str, "%s: %s" % (str(entry[1]), entry[0].name)])
+    '''
+    Handler for job info checking.
 
-            data['history'] = history_str
+    Args:
+        iface (Interface): interface which received request
+        request (JobInfoReq): job status request
 
-        return Response.Ok(data=data)
+    Returns:
+        Response: the response data
+    '''
+    async def __handleJobInfoReq(self, iface, request):
+        logging.info("Handling job info request from %s iface" % (iface.__class__.__name__))
+
+        result = { }
+
+        for jobName in request.jobNames:
+            try:
+                job = self.__manager.jobList.get(jobName)
+
+                if job is None:
+                    return Response.Error('Job %s doesn\'t exist' % (request.jobName))
+
+                jobData = {
+                    'jobName': jobName,
+                    'status': str(job.strState())
+                }
+
+                if job.messages is not None:
+                    jobData['messages'] = job.messages
+
+                if job.runtime is not None and len(job.runtime) > 0:
+                    jobData['runtime'] = job.runtime
+
+                if job.history is not None and len(job.history) > 0:
+                    history_str = ''
+
+                    for entry in job.history:
+                        history_str = '\n'.join([history_str, "%s: %s" % (str(entry[1]), entry[0].name)])
+
+                    jobData['history'] = history_str
+
+                result[jobName] = { 'status': int(ResponseCode.OK), 'data': jobData }
+            except Exception as e:
+                result[jobName] = { 'status': int(ResponseCode.ERROR), 'message': e.args[0] }
+
+        return Response.Ok(data = { 'jobs': result })
+
 
     async def __handleCancelJobReq(self, iface, request):
         logging.info("Handling cancel job from %s iface" % (iface.__class__.__name__))
@@ -311,23 +358,35 @@ class Receiver:
         return Response.Error('Cancel job is not supported')
 
     async def __handleRemoveJobReq(self, iface, request):
-        logging.info("Handling remove job from %s iface" % (iface.__class__.__name__))
+        logging.info("Handling remove jobs from %s iface" % (iface.__class__.__name__))
 
-        job = self.__manager.jobList.get(request.jobName)
+        removed = 0
+        errors = { }
 
-        if job is None:
-            return Response.Error('Job %s doesn\'t exist' % (request.jobName))
+        for jobName in request.jobNames:
+            try:
+                job = self.__manager.jobList.get(jobName)
 
-        if not job.state.isFinished():
-            return Response.Error('Job %s not finished - can not be removed' % (request.jobName))
+                if job is None:
+                    raise InvalidRequest('Job %s doesn\'t exist' % (jobName))
 
-        self.__manager.jobList.remove(request.jobName)
+                if not job.state.isFinished():
+                    raise InvalidRequest('Job %s not finished - can not be removed' % (jobName))
+
+                self.__manager.jobList.remove(jobName)
+                removed += 1
+            except Exception as e:
+                errors[jobName] = e.args[0]
 
         data = {
-            'messages': 'Job %s removed' % request.jobName
+            'removed': removed,
         }
 
-        return Response.Ok(data=data)
+        if len(errors) > 0:
+            data['errors'] = errors
+
+        return Response.Ok(data = data)
+
 
     async def __handleListJobsReq(self, iface, request):
         logging.info("Handling list jobs info from %s iface" % (iface.__class__.__name__))

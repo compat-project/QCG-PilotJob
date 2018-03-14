@@ -14,6 +14,9 @@ class ZMQInterface:
         CONF_PORT: '5555'
     }
 
+    CONF_ZMQ_IFACE_ADDRESS = 'zmq.address'
+
+
     @classmethod
     def name(cls):
         return "ZMQ"
@@ -35,7 +38,11 @@ class ZMQInterface:
         self.socket = self.zmqCtx.socket(zmq.REP)
         self.socket.bind(self.address)
 
-        logging.info("ZMQ interface configured (address %s)" % (self.address))
+        conf[ZMQInterface.CONF_ZMQ_IFACE_ADDRESS] = str(bytes.decode(self.socket.getsockopt(zmq.LAST_ENDPOINT)))
+
+        logging.info("ZMQ interface configured (address %s) @ %s" % (
+            self.address, conf[ZMQInterface.CONF_ZMQ_IFACE_ADDRESS]))
+
 
     def close(self):
         pass
