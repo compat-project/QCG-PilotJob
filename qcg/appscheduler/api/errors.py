@@ -20,3 +20,7 @@ class ConnectionError(QCGPJMAError):
 
 class WrongArguments(QCGPJMAError):
     pass
+
+
+class FileError(QCGPJMAError):
+    pass

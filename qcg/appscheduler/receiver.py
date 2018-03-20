@@ -395,7 +395,7 @@ class Receiver:
 
         logging.info("got %s jobs from list" % (str(len(jobNames))))
 
-        jobs = []
+        jobs = { }
         for jobName in jobNames:
             job = self.__manager.jobList.get(jobName)
 
@@ -403,7 +403,6 @@ class Receiver:
                 return Response.Error('One of the job %s doesn\'t exist in registry' % (jobName))
 
             jobData = {
-                'name': jobName,
                 'status': str(job.strState())
             }
 
@@ -413,12 +412,12 @@ class Receiver:
             if job.getQueuePos() is not None:
                 jobData['inQueue'] = job.getQueuePos()
 
-            jobs.append(jobData)
-
+            jobs[jobName] = jobData
         return Response.Ok(data={
             'length': len(jobNames),
             'jobs': jobs,
         })
+
 
     async def __handleResourcesInfoReq(self, iface, request):
         logging.info("Handling resources info from %s iface" % (iface.__class__.__name__))

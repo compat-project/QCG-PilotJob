@@ -170,7 +170,7 @@ class Manager:
         ConnectionError - in case of non zero exit code
     """
     def __validateResponse(self, response):
-        if not isinstance(response, dict) or 'code' not in response or 'data' not in response:
+        if not isinstance(response, dict) or 'code' not in response:
             raise errors.InternalError('Invalid reply from the service')
 
         if response['code'] != 0:
@@ -178,6 +178,9 @@ class Manager:
                 raise errors.ConnectionError('Request failed - %s' % response['message'])
 
             raise errors.ConnectionError('Request failed')
+
+        if 'data' not in response:
+            raise errors.InternalError('Invalid reply from the service')
 
         return response['data']
 
@@ -239,11 +242,9 @@ class Manager:
         see __sendAndValidateResult
     """
     def submit(self, jobs):
-        d = jobs.formatDoc()
-
         data = self.__sendAndValidateResult({
             "request": "submit",
-            "jobs": jobs.formatDoc()
+            "jobs": jobs.jobs()
         })
 
         if 'submitted' not in data or 'jobs' not in data:

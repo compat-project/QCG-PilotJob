@@ -1,16 +1,19 @@
+import json
+
 from qcg.appscheduler.api.errors import *
 
 
 # top level job description attributes
 JOB_TOP_ATTRS = {
+    "name":    { 'req': True,  'types': [ str ]       },
     "exec":    { 'req': True,  'types': [ str ]       },
     "args":    { 'req': False, 'types': [ list, str ] },
     "stdin":   { 'req': False, 'types': [ str ]       },
     "stdout":  { 'req': False, 'types': [ str ]       },
     "stderr":  { 'req': False, 'types': [ str ]       },
     "wd":      { 'req': False, 'types': [ str ]       },
-    "nodes":   { 'req': False, 'types': [ dict ]      },
-    "cores":   { 'req': False, 'types': [ dict ]      },
+    "numNodes":{ 'req': False, 'types': [ dict ]      },
+    "numCores":{ 'req': False, 'types': [ dict ]      },
     "wt":      { 'req': False, 'types': [ str ]       },
     "iterate": { 'req': False, 'types': [ list ]      },
     "after":   { 'req': False, 'types': [ list, str ] }
@@ -44,7 +47,13 @@ class Jobs:
     Raises:
         InvalidJobDescription - in case of invalid job description
     """
-    def __validateJob(self, attrs):
+    def __validateSmplJob(self, attrs):
+        if 'name' not in attrs:
+            raise InvalidJobDescription("Missing job name")
+
+        if attrs['name'] in self.__list:
+            raise InvalidJobDescription("Job %s already in list" % attrs['name'])
+
         for attr in attrs:
             if attr not in JOB_TOP_ATTRS:
                 raise InvalidJobDescription("Unknown attribute '%s'" % attr)
@@ -62,14 +71,14 @@ class Jobs:
             if JOB_TOP_ATTRS[reqAttr]['req'] and reqAttr not in attrs:
                 raise InvalidJobDescription("Required attribute '%s' not defined" % reqAttr)
 
-        for res in [ 'nodes', 'cores' ]:
+        for res in [ 'numNodes', 'numCores' ]:
             if res in attrs:
                 for nattr in attrs[res]:
                     if nattr not in JOB_RES_ATTRS:
                         raise InvalidJobDescription("Unknown attribute %s->'%s'" % (res, nattr))
 
                     typeValid = False
-                    for t in JOB_RES_ATTRS[nattr]:
+                    for t in JOB_RES_ATTRS[nattr]['types']:
                         if isinstance(attrs[res][nattr], t):
                             typeValid = True
                             break
@@ -87,22 +96,151 @@ class Jobs:
 
 
     """
-    Add a new job description to the group.
+    Perform simple validation of a job in format acceptable (StdJob) by the QCG-PJM
+
+    Args:
+        stdJob (dict) - job description
+
+    Raises:
+        InvalidJobDescription - in case of invalid job description
+    """
+    def __validateStdJob(self, stdJob):
+        if 'name' not in stdJob:
+            raise InvalidJobDescription('Missing "name" key')
+
+        if 'execution' not in stdJob or 'exec' not in stdJob['execution']:
+            raise InvalidJobDescription('Missing "execution/exec" key')
+
+        if stdJob['name'] in self.__list:
+            raise InvalidJobDescription("Job %s already in list" % (stdJob['name']))
+
+
+    """
+    Convert simple job description to a standard format.
+
+    Args:
+        jName (str) - a job name
+        smplJob (dict) - simple job description
+
+    Returns:
+        dict - simple job description
+    """
+    def __convertSimpleToStd(self, smplJob):
+        stdJob = {}
+
+        stdJob['name'] = smplJob['name']
+        stdJob['execution'] = {
+            'exec': smplJob['exec']
+        }
+
+        for key in [ 'args', 'stdin', 'stdout', 'stderr', 'wd' ]:
+            if key in smplJob:
+                stdJob['execution'][key] = smplJob[key]
+
+        resources = { }
+        for mKey in [ 'numCores', 'numNodes' ]:
+            if mKey in smplJob:
+                resources[mKey] = smplJob[mKey]
+
+        for rKey in [ 'wt' ]:
+            if rKey in smplJob:
+                resources[rKey] = smplJob[rKey]
+
+        if len(resources) > 0:
+            stdJob['resources'] = resources
+
+        for key in [ 'iterate' ]:
+            if key in smplJob:
+                stdJob[key] = smplJob[key]
+
+        if 'after' in smplJob:
+            stdJob['dependencies'] = { 'after': smplJob['after'] }
+
+        return stdJob
+
+
+    """
+    Convert standard job description to a simple format.
+
+    Args:
+        stdJob (dict) - standard job description
+
+    Returns:
+        dict - simple job description
+    """
+    def convertStdToSimple(self, stdJob):
+        smplJob = { }
+
+        name = stdJob['name']
+
+        for key in [ 'iterate', 'after' ]:
+            if key in stdJob:
+                smplJob[key] = stdJob[key]
+
+        for eKey in [ 'exec', 'args', 'stdin', 'stdout', 'stderr', 'wd' ]:
+            if eKey in stdJob['execution']:
+                smplJob[eKey] = stdJob['execution'][eKey]
+
+        if 'resources' in stdJob:
+            for rKey in [ 'numCores', 'numNodes', 'wt' ]:
+                if rKey in stdJob['resources']:
+                    smplJob[rKey] = stdJob['resources'][rKey]
+
+        if 'dependencies' in stdJob and 'after' in stdJob['dependencies']:
+            smplJob['after'] = stdJob['dependencies']['after']
+
+        return (name, smplJob)
+
+
+    """
+    Add a new, simple job description to the group.
+    If both arguments are present, they are merged and processed as a single dictionary.
     
     Args:
-        name (str) - unique (among the group) name of the job
-        attrs (dict) - job attributes
+        dAttrs (dict) - attributes as a dictionary in a simple format
+        stdAttrs (dict) - attributes as a named arguments in a simple format
 
     Raises:
         InvalidJobDescription - in case of non-unique job name or invalid job description
     """
-    def add(self, name, attrs):
-        if name in self.__list:
-            raise InvalidJobDescription("Job %s already in list" % name)
+    def add(self, dAttrs = None, **attrs):
+        data = attrs
 
-        self.__validateJob(attrs)
+        if dAttrs is not None:
+            if data is not None:
+                data = { **dAttrs, **data }
+            else:
+                data = dAttrs
 
-        self.__list[name] = attrs
+        self.__validateSmplJob(data)
+        self.__list[data['name']] = self.__convertSimpleToStd(data)
+
+        return self
+
+
+    """
+    Add a new, standard job description (acceptable by the QCG PJM) to the group.
+    If both arguments are present, they are merged and processed as a single dictionary.
+
+    Args:
+        dAttrs (dict) - attributes as a dictionary in a standard format
+        stdAttrs (dict) - attributes as a named arguments in a standard format
+
+    Raises:
+        InvalidJobDescription - in case of non-unique job name or invalid job description
+
+    """
+    def addStd(self, dAttrs = None, **stdAttrs):
+        data = stdAttrs
+
+        if dAttrs is not None:
+            if data is not None:
+                data = { **dAttrs, **data }
+            else:
+                data = dAttrs
+
+        self.__validateStdJob(data)
+        self.__list[data['name']] = data
 
         return self
 
@@ -132,38 +270,53 @@ class Jobs:
 
     """
     Return job descriptions in format acceptable by the QCG-PJM
+
+    Returns:
+        list - a list of jobs in the format acceptable by the QCG PJM (standard format)
     """
-    def formatDoc(self):
-        resJobs = [ ]
+    def jobs(self):
+        return list(self.__list.values())
 
-        for jName, job in self.__list.items():
-            resJob = {}
 
-            resJob['name'] = jName
-            resJob['execution'] = {
-                'exec': job['exec']
-            }
+    """
+    Read job's descriptions in format acceptable (StdJob) by the QCG-PJM
 
-            for key in [ 'args', 'stdin', 'stdout', 'stderr', 'wd' ]:
-                if key in job:
-                    resJob['execution'][key] = job[key]
+    Args:
+        formattedDoc (list) - data read from the JSON document, it should be a list with the
+          job descriptions - this is the value of 'jobs' key in 'submit' request
 
-            resources = { }
-            for mKey in [ { 'name': 'cores', 'alias': 'numCores' },
-                          { 'name': 'nodes', 'alias': 'numNodes' } ]:
-                if mKey['name'] in job:
-                    resources[mKey['alias']] = { } 
+    Raises:
+        InvalidJobDescription - in case of invalid job description
+    """
+    def loadFromFile(self, filePath):
+        try:
+            with open(filePath, 'r') as f:
+                for job in json.load(f):
+                    self.__validateStdJob(job)
 
-                    for key in [ 'min', 'max', 'exact', 'split-into' ]:
-                        if key in job:
-                            resources[mKey['alias']][key] = job[key]
+                    name = job['name']
+                    if name in self.__list:
+                        raise InvalidJobDescription('Job "%s" already defined"' % (name))
 
-            if len(resources) > 0:
-                resJob['resources'] = resources
+                    self.__list[name] = job
+        except QCGPJMAError as qe:
+            raise qe
+        except Exception as e:
+            raise FileError('File to open/write file "%s": %s', fileName, e.args[0])
 
-            if 'iterate' in job:
-                resJob['iterate'] = job['iterate']
 
-            resJobs.append(resJob)
+    """
+    Save job list to file in a JSON format.
 
-        return resJobs
+    Args:
+        fileName (str) - path to the destination file
+
+    Raises:
+        FileError - in case of problems with opening / writing output file.
+    """
+    def saveToFile(self, fileName):
+        try:
+            with open(fileName, 'w') as f:
+                f.write(json.dumps(self.jobs(), indent=2))
+        except Exception as e:
+            raise FileError('File to open/write file "%s": %s', fileName, e.args[0])

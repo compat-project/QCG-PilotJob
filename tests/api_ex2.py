@@ -14,7 +14,7 @@ print("submited jobs:\n%s\n" % str(m.list().names()))
 #j.add( 'j1', { 'exec': '/bin/date' } )
 
 ids = m.submit(Jobs().
-        add( 'j_${it}', { 'iterate': [ 0, 100 ], 'exec': '/bin/sleep', 'args': [ '2s' ] } )
+        add( name = 'j_${it}', iterate = [ 0, 100 ], exec = '/bin/sleep', args = [ '2s' ] )
         )
 
 #status = m.status(ids)

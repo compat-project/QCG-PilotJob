@@ -55,13 +55,13 @@ class QCGPMService:
         }
 
         self.__ifaces = []
-        if self.__args.net:
-            iface = ZMQInterface()
+        if self.__args.file:
+            iface = FileInterface()
             iface.setup(self.__conf)
             self.__ifaces.append(iface)
 
-        if self.__args.file:
-            iface = FileInterface()
+        if self.__args.net:
+            iface = ZMQInterface()
             iface.setup(self.__conf)
             self.__ifaces.append(iface)
 
