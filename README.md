@@ -530,15 +530,13 @@ This method returns information about current status of resources available in t
         InternalError - in case of unexpected result format
         ConnectionError - if connection has not been established yet or non zero exit code
     """
-
 	def submit(jobs)
 ```
-
 Submit a list of jobs. The jobs to submit are stored in a `Jobs` object. In case of success the list of submitted job names is returned. The resulted list can be used in other methods to get actual status of jobs or synchronize their execution.
 
-#### `qcg.appscheduler.api.Jobs`
-```python
 
+##### `qcg.appscheduler.api.Jobs`
+```python
     """
     Add a new, simple job description to the group.
     If both arguments are present, they are merged and processed as a single dictionary.
@@ -551,8 +549,8 @@ Submit a list of jobs. The jobs to submit are stored in a `Jobs` object. In case
         InvalidJobDescription - in case of non-unique job name or invalid job description
     """
     def add(self, dAttrs = None, **attrs)
-
 	
+
     """
     Add a new, standard job description (acceptable by the QCG PJM) to the group.
     If both arguments are present, they are merged and processed as a single dictionary.

@@ -25,7 +25,52 @@ class SlurmExecution(ExecutionSchema):
     def __init__(self, config):
         super(SlurmExecution, self).__init__()
 
+    def __mergePerNodeSpec(self, strList):
+        prev_value = None
+        result = [ ]
+        n = 1
+
+        for t in strList.split(','):
+            if prev_value is not None:
+                if prev_value == t:
+                    n += 1
+                else:
+                    if n > 1:
+                        result.append("%s(x%d)" % (prev_value, n))
+                    else:
+                        result.append(prev_value)
+
+                    prev_value = t
+                    n = 1
+            else:
+                prev_value = t
+                n = 1
+
+        if prev_value is not None:
+            if n > 1:
+                result.append("%s(x%d)" % (prev_value, n))
+            else:
+                result.append(prev_value)
+
+        return ','.join([str(el) for el in result])
+
+
+    def __checkSameCores(self, tasksList):
+        same = None
+
+        for t in tasksList.split(','):
+            if same is not None:
+                if t != same:
+                    return None
+            else:
+                same = t
+
+        return same
+
+
     def preprocess(self, exJob):
+        merged_tasks_per_node = self.__mergePerNodeSpec(exJob.tasks_per_node)
+
         exJob.env.update({
             'SLURM_NNODES': str(exJob.nnodes),
             'SLURM_NODELIST': exJob.nlist,
@@ -36,10 +81,14 @@ class SlurmExecution(ExecutionSchema):
             'SLURM_STEP_NODELIST': exJob.nlist,
             'SLURM_STEP_NUM_NODES': str(exJob.nnodes),
             'SLURM_STEP_NUM_TASKS': str(exJob.ncores),
-            'SLURM_NTASKS_PER_NODE': exJob.tasks_per_node,
-            'SLURM_STEP_TASKS_PER_NODE': exJob.tasks_per_node,
-            'SLURM_TASKS_PER_NODE': exJob.tasks_per_node
+            'SLURM_JOB_CPUS_PER_NODE': merged_tasks_per_node,
+            'SLURM_STEP_TASKS_PER_NODE': merged_tasks_per_node,
+            'SLURM_TASKS_PER_NODE': merged_tasks_per_node 
         })
+
+        same_cores = self.__checkSameCores(exJob.tasks_per_node)
+        if same_cores is not None:
+            exJob.env.update({ 'SLURM_NTASKS_PER_NODE': same_cores })
 
         # create host file
         hostfile = os.path.join(exJob.wdPath, ".%s.hostfile" % exJob.job.name)

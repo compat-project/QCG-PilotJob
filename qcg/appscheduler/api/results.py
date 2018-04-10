@@ -24,7 +24,7 @@ class SubmitResult:
 
     def submitResult(self, job):
         if job not in self.__list:
-            raise JobNotDefined(job)
+            raise JobNotDefinedError(job)
 
         return self.__list[job]['result']
 
@@ -60,7 +60,7 @@ class StatusResult:
 
     def status(self, job):
         if job not in self.__list:
-            raise JobNotDefined(job)
+            raise JobNotDefinedError(job)
 
         return self.__list[job]['status']
 

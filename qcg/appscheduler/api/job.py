@@ -45,18 +45,18 @@ class Jobs:
         attrs (dict) - job description attributes
 
     Raises:
-        InvalidJobDescription - in case of invalid job description
+        InvalidJobDescriptionError - in case of invalid job description
     """
     def __validateSmplJob(self, attrs):
         if 'name' not in attrs:
-            raise InvalidJobDescription("Missing job name")
+            raise InvalidJobDescriptionError("Missing job name")
 
         if attrs['name'] in self.__list:
-            raise InvalidJobDescription("Job %s already in list" % attrs['name'])
+            raise InvalidJobDescriptionError("Job %s already in list" % attrs['name'])
 
         for attr in attrs:
             if attr not in JOB_TOP_ATTRS:
-                raise InvalidJobDescription("Unknown attribute '%s'" % attr)
+                raise InvalidJobDescriptionError("Unknown attribute '%s'" % attr)
 
             typeValid = False
             for t in JOB_TOP_ATTRS[attr]['types']:
@@ -65,17 +65,17 @@ class Jobs:
                     break
 
             if not typeValid:
-                raise InvalidJobDescription("Invalid attribute '%s' type '%" % (attr, type(attrs[attr])))
+                raise InvalidJobDescriptionError("Invalid attribute '%s' type '%" % (attr, type(attrs[attr])))
 
         for reqAttr in JOB_TOP_ATTRS:
             if JOB_TOP_ATTRS[reqAttr]['req'] and reqAttr not in attrs:
-                raise InvalidJobDescription("Required attribute '%s' not defined" % reqAttr)
+                raise InvalidJobDescriptionError("Required attribute '%s' not defined" % reqAttr)
 
         for res in [ 'numNodes', 'numCores' ]:
             if res in attrs:
                 for nattr in attrs[res]:
                     if nattr not in JOB_RES_ATTRS:
-                        raise InvalidJobDescription("Unknown attribute %s->'%s'" % (res, nattr))
+                        raise InvalidJobDescriptionError("Unknown attribute %s->'%s'" % (res, nattr))
 
                     typeValid = False
                     for t in JOB_RES_ATTRS[nattr]['types']:
@@ -84,15 +84,15 @@ class Jobs:
                             break
 
                 if not typeValid:
-                    raise InvalidJobDescription("Invalid attribute %s->'%s' type '%" % (res, nattr, type(attrs[res][attr])))
+                    raise InvalidJobDescriptionError("Invalid attribute %s->'%s' type '%" % (res, nattr, type(attrs[res][attr])))
 
                 for reqAttr in JOB_RES_ATTRS:
                     if JOB_RES_ATTRS[reqAttr]['req'] and reqAttr not in attrs[res]:
-                        raise InvalidJobDescription("Required attribute %s->'%s' not defined" % (res, reqAttr))
+                        raise InvalidJobDescriptionError("Required attribute %s->'%s' not defined" % (res, reqAttr))
 
         if 'iterate' in attrs:
             if len(attrs['iterate']) < 2 or len(attrs['iterate']) > 3:
-                raise InvalidJobDescription("The iterate must contain 2 or 3 element list")
+                raise InvalidJobDescriptionError("The iterate must contain 2 or 3 element list")
 
 
     """
@@ -102,17 +102,17 @@ class Jobs:
         stdJob (dict) - job description
 
     Raises:
-        InvalidJobDescription - in case of invalid job description
+        InvalidJobDescriptionError - in case of invalid job description
     """
     def __validateStdJob(self, stdJob):
         if 'name' not in stdJob:
-            raise InvalidJobDescription('Missing "name" key')
+            raise InvalidJobDescriptionError('Missing "name" key')
 
         if 'execution' not in stdJob or 'exec' not in stdJob['execution']:
-            raise InvalidJobDescription('Missing "execution/exec" key')
+            raise InvalidJobDescriptionError('Missing "execution/exec" key')
 
         if stdJob['name'] in self.__list:
-            raise InvalidJobDescription("Job %s already in list" % (stdJob['name']))
+            raise InvalidJobDescriptionError("Job %s already in list" % (stdJob['name']))
 
 
     """
@@ -201,7 +201,7 @@ class Jobs:
         stdAttrs (dict) - attributes as a named arguments in a simple format
 
     Raises:
-        InvalidJobDescription - in case of non-unique job name or invalid job description
+        InvalidJobDescriptionError - in case of non-unique job name or invalid job description
     """
     def add(self, dAttrs = None, **attrs):
         data = attrs
@@ -227,7 +227,7 @@ class Jobs:
         stdAttrs (dict) - attributes as a named arguments in a standard format
 
     Raises:
-        InvalidJobDescription - in case of non-unique job name or invalid job description
+        InvalidJobDescriptionError - in case of non-unique job name or invalid job description
 
     """
     def addStd(self, dAttrs = None, **stdAttrs):
@@ -252,11 +252,11 @@ class Jobs:
         name (str) - name of the job to remove
 
     Raises:
-        JobNotDefined - in case of missing job in a group with given name
+        JobNotDefinedError - in case of missing job in a group with given name
     """
     def remove(self, name):
         if name not in self.__list:
-            raise JobNotDefined(name)
+            raise JobNotDefinedError(name)
 
         del self.__list[name]
 
@@ -279,14 +279,13 @@ class Jobs:
 
 
     """
-    Read job's descriptions in format acceptable (StdJob) by the QCG-PJM
+    Read job's descriptions from JSON file in format acceptable (StdJob) by the QCG-PJM
 
     Args:
-        formattedDoc (list) - data read from the JSON document, it should be a list with the
-          job descriptions - this is the value of 'jobs' key in 'submit' request
+        filePath (str) - path to the file with jobs descriptions in a standard format
 
     Raises:
-        InvalidJobDescription - in case of invalid job description
+        InvalidJobDescriptionError - in case of invalid job description
     """
     def loadFromFile(self, filePath):
         try:
@@ -296,27 +295,27 @@ class Jobs:
 
                     name = job['name']
                     if name in self.__list:
-                        raise InvalidJobDescription('Job "%s" already defined"' % (name))
+                        raise InvalidJobDescriptionError('Job "%s" already defined"' % (name))
 
                     self.__list[name] = job
         except QCGPJMAError as qe:
             raise qe
         except Exception as e:
-            raise FileError('File to open/write file "%s": %s', fileName, e.args[0])
+            raise FileError('File to open/write file "%s": %s', filePath, e.args[0])
 
 
     """
-    Save job list to file in a JSON format.
+    Save job list to JSON file in a standard format.
 
     Args:
-        fileName (str) - path to the destination file
+        filePath (str) - path to the destination file
 
     Raises:
         FileError - in case of problems with opening / writing output file.
     """
-    def saveToFile(self, fileName):
+    def saveToFile(self, filePath):
         try:
-            with open(fileName, 'w') as f:
+            with open(filePath, 'w') as f:
                 f.write(json.dumps(self.jobs(), indent=2))
         except Exception as e:
-            raise FileError('File to open/write file "%s": %s', fileName, e.args[0])
+            raise FileError('File to open/write file "%s": %s', filepath, e.args[0])

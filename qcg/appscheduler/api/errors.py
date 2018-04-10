@@ -6,11 +6,11 @@ class InternalError(QCGPJMAError):
     pass
 
 
-class InvalidJobDescription(QCGPJMAError):
+class InvalidJobDescriptionError(QCGPJMAError):
     pass
 
 
-class JobNotDefined(QCGPJMAError):
+class JobNotDefinedError(QCGPJMAError):
     pass
 
 
@@ -18,7 +18,7 @@ class ConnectionError(QCGPJMAError):
     pass
 
 
-class WrongArguments(QCGPJMAError):
+class WrongArgumentsError(QCGPJMAError):
     pass
 
 
