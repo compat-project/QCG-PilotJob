@@ -1,5 +1,4 @@
-# The QCG Pilot Manager v 0.2
-
+# The QCG Pilot Manager v 0.3
 
 Author: Piotr Kopta <pkopta@man.poznan.pl>, Tomasz Piontek <piontek@man.poznan.pl>, Bartosz Bosak <bbosak@man.poznan.pl>
 
@@ -7,10 +6,10 @@ Copyright (C) 2017-2018 Poznan Supercomputing and Networking Center
 
 
 ## OVERVIEW
-The QCG PilotJob Manager system is designed to schedule and execute many small tasks inside one scheduling system allocation. Direct submission of a large group of jobs to a scheduling system can result in long aggregated time to finish as each single job is scheduled independently and waits in a queue. On the other hand the submission of a group of tasks can be restricted or even forbidden by administrative policies defined on clusters.
-One can argue that there are available job array mechanisms in many systems, however the traditional job array mechanism allows to run only bunch of jobs having the same resource requirements while tasks being parts of a multiscale simulation by nature vary in requirements and therefore need more flexible solutions.
+The QCG PilotJob Manager system is designed to schedule and execute many small jobs inside one scheduling system allocation. Direct submission of a large group of jobs to a scheduling system can result in long aggregated time to finish as each single job is scheduled independently and waits in a queue. On the other hand the submission of a group of jobs can be restricted or even forbidden by administrative policies defined on clusters.
+One can argue that there are available job array mechanisms in many systems, however the traditional job array mechanism allows to run only bunch of jobs having the same resource requirements while jobs being parts of a multiscale simulation by nature vary in requirements and therefore need more flexible solutions.
 
-From the scheduling system perspective, QCG PilotJob Manager is seen as a single job inside a single user allocation. In the other words, the manager controls an execution of a complex experiment consisting of many tasks on resources reserved for the single job allocation. The manager listens to user's requests and executes commands like submit job, cancel job and report resources usage. In order to manage the resources and jobs the system takes into account both resources availability and mutual dependencies between tasks . Two interfaces are defined to communicate with the system: file-based and network-based. The former one is dedicated and more convenient for a static pilot job when a number of jobs is known in advance to the QCG PilotJob Manager start. The network interface is more general and flexible as it allows to dynamically send new requests and track execution of previously submitted jobs during the run-time. 
+From the scheduling system perspective, QCG PilotJob Manager is seen as a single job inside a single user allocation. In the other words, the manager controls an execution of a complex experiment consisting of many jobs on resources reserved for the single job allocation. The manager listens to user's requests and executes commands like submit job, cancel job and report resources usage. In order to manage the resources and jobs the system takes into account both resources availability and mutual dependencies between jobs . Two interfaces are defined to communicate with the system: file-based and network-based. The former one is dedicated and more convenient for a static scenarios when a number of jobs is known in advance to the QCG PilotJob Manager start. The network interface is more general and flexible as it allows to dynamically send new requests and track execution of previously submitted jobs during the run-time. 
 
 ## MODULES
 QCG Pilot Job Manager consists of the following internal functional modules:
@@ -31,7 +30,7 @@ All the jobs submitted to the QCG PilotJob Manger system are placed in the queue
 
 
 ## EXECUTOR
-The QCG PilotJob Manager module called Executor is responsible for execution and control of jobs by interacting with the cluster resource management system. The current implementation is integrated with the SLURM system, but the modular approach allows for relatively easy integration also with other queuing systems. The PilotJob Manager and all the jobs controlled by it are executed in a single allocation. To hide this fact from the individual job and to give it an impression that it is executed directly by the queuing system a set of environment variables, typically set by the queuing system, is overwritten and passed to the job. These variables give the application all typical information about a job it can be interested in, e.g. the amount of assigned resources. In case of parallel application an appropriate machine file is created with a list of resources for each job.
+The QCG PilotJob Manager module named Executor is responsible for execution and control of jobs by interacting with the cluster resource management system. The current implementation is integrated with the SLURM system, but the modular approach allows for relatively easy integration also with other queuing systems. The PilotJob Manager and all the jobs controlled by it are executed in a single allocation. To hide this fact from the individual job and to give it an impression that it is executed directly by the queuing system a set of environment variables, typically set by the queuing system, is overwritten and passed to the job. These variables give the application all typical information about a job it can be interested in, e.g. the amount of assigned resources. In case of parallel application an appropriate machine file is created with a list of resources for each job.
 
 ### SLURM EXECUTION ENVIRONMENT
 For the SLURM scheduling system, an execution environment for a single job contains the following set of variables:
@@ -479,19 +478,18 @@ the corresponding iteration of the first sub-job (namd).  The control request
 is used to tell the Manager to finish after all jobs will be handled and
 finished (with any result).
 
-
 ## API
-The QCG PilotJob Manager provides a Python API which allows users to dynamically control execution of Pilot Jobs. The user program is run inside an allocation as one of the Pilot job. The communication is done through the network interface provided by the QCG PilotJob Manager. The Python API is provided in the `qcg.appscheduler.api` package.
+QCG PilotJob Manager provides a client side Python API which allows users to dynamically control the instance of the Pilot Job and all its jobs. To avoid communication issues, we assume that the user's program (Application Controller) that refers via API to the QCG PilotJob Manager is run inside an allocation as one of the jobs. The communication is done through the network interface provided by QCG PilotJob Manager. The Python API is provided in the `qcg.appscheduler.api` package.
 
 ### Manager
-The `qcg.appscheduler.api.Manager` class is a main actor of the API. This class handles an initialization and communication with the QCG PilotJob Manager single instance. It provides methods for:
-- obtaining resources status (`resources` method)
-- job submission (`submit` method),
-- listening all jobs (`list` method),
-- obtaining current status of jobs (`status` method),
-- obtaining detailed information about jobs (`info` method),
-- removing jobs (`remove` method),
-- synchronization of job execution (`wait4` method).
+The `qcg.appscheduler.api.Manager` class is the main actor of the API. This class is responsible for the initialisation of the client and handles communication with a single instance of QCG PilotJob Manager. The class provides interface for:
+- determining the resources status (the `resources` method)
+- job submission (the `submit` method),
+- listing all jobs (the `list` method),
+- obtaining the current status of jobs (the `status` method),
+- obtaining the detailed information about jobs (the `info` method),
+- removing jobs (the `remove` method),
+- synchronisation of the job execution (the `wait4` method).
 
 
 #### Initialization
@@ -499,168 +497,178 @@ The `qcg.appscheduler.api.Manager` class is a main actor of the API. This class 
 def __init__(address = None, cfg = { })
 ```
 
-In order to initialize the `Manager` class, the address of the QCG PJM instance must be available. In case where the client application is run as a one of job in QCG PJM, this address is exported in `QCG_PM_ZMQ_ADDRESS`, and is automatically used by the API when user has not provided the address explicitely.
+To its proper work, the `Manager` class needs to know the address of the QCG PilotJob Manager instance. In case where the client application is run as one of jobs in QCG PilotJob Manager this address is stored in the `QCG_PM_ZMQ_ADDRESS` environment variable, and is automatically used by the API when it was not provided explicitly.
 
-During the initialization of the `Manager` class the user can specify some configuration variables that will influence a behavior of the class. Currently the following configuration keys are supported:
-* `poll_delay` - the delay between following status polls in wait methods,
-* `log_file` - the location of the log file
-* `log_level` - the log level (e.g. `DEBUG`); by default the log level is set to INFO
+During the initialisation of the `Manager` class the user can specify some variables that configure behaviour of the class. Currently the following configuration keys are supported:
+* `poll_delay` - a delay in seconds between successive updates of the job status in the *wait* method,
+* `log_file` - a location of the log file
+* `log_level` - a logging level (e.g. `DEBUG`); by default the logging level is set to INFO. Levels allowed and supported so far are: *DEBUG* and *INFO*.
 
 
 #### `resources`
 ```python
+"""
+Raises:
+        InternalError - in case of request processing internal error
+        ConnectionError - in case of lack of connection to the service or nonzero response code.
+"""
 def resources()
 ```
 
-This method returns information about current status of resources available in the QCG PJM. The output format is described in [this section](#resourcesInfo-command)
+This method returns information about current status of resources available (allocated) in QCG PilotJob Manager. The output format is described in [this section](#resourcesInfo-command)
 
 
 #### `submit`
 ```python
     """
-    Submit a jobs.
+    Submit jobs.
 
     Args:
-        jobs (qcg.appscheduler.api.Jobs) - a job description list
+        jobs (qcg.appscheduler.api.Jobs) - a list of job descriptions
 
     Returns:
-        list - a list of submitted job names
+        list - a list of names (identifiers) of submitted jobs
 
     Raises:
-        InternalError - in case of unexpected result format
-        ConnectionError - if connection has not been established yet or non zero exit code
+        InternalError - in case of request processing internal error
+        ConnectionError - in case of lack of connection to the service or nonzero response code.
     """
+
 	def submit(jobs)
 ```
-Submit a list of jobs. The jobs to submit are stored in a `Jobs` object. In case of success the list of submitted job names is returned. The resulted list can be used in other methods to get actual status of jobs or synchronize their execution.
 
+Submit a list of jobs. The jobs to be submitted are stored in a `Jobs` object. In case of success the list of names (identifiers) of submitted jobs is returned. The returned list can be used in other methods for example to get actual statuses of jobs or to synchronise their execution.
 
-##### `qcg.appscheduler.api.Jobs`
+#### `qcg.appscheduler.api.Jobs`
 ```python
+
     """
-    Add a new, simple job description to the group.
+    Validates and adds a new job description in a simple format to the group of jobs.
     If both arguments are present, they are merged and processed as a single dictionary.
 
     Args:
-        dAttrs (dict) - attributes as a dictionary in a simple format
-        stdAttrs (dict) - attributes as a named arguments in a simple format
+        dAttrs (dict) - simple format attributes as a dictionary
+        attrs (dict) - simple format attributes as a named arguments
 
     Raises:
-        InvalidJobDescription - in case of non-unique job name or invalid job description
+        InvalidJobDescriptionError - in case of non-unique job name or invalid job description
     """
     def add(self, dAttrs = None, **attrs)
+```
+```python
 	
-
     """
-    Add a new, standard job description (acceptable by the QCG PJM) to the group.
+    Validates and adds a new job description in a standard format (acceptable to the QCG PJM) to the group.
     If both arguments are present, they are merged and processed as a single dictionary.
 
     Args:
-        dAttrs (dict) - attributes as a dictionary in a standard format
-        stdAttrs (dict) - attributes as a named arguments in a standard format
+        dAttrs (dict) - standard format attributes as a dictionary
+        stdAttrs (dict) - standard format attributes as a named arguments
 
     Raises:
-        InvalidJobDescription - in case of non-unique job name or invalid job description
+        InvalidJobDescriptionError - in case of non-unique job name or invalid job description
 
     """
     def addStd(self, dAttrs = None, **stdAttrs)
-
+```
+```python
 	
     """
-    Remote a job from the group.
+    Remove a job from the group.
 
     Args:
-        name (str) - name of the job to remove
+        name (str) - name of the job to be removed
 
     Raises:
-        JobNotDefined - in case of missing job in a group with given name
+        JobNotDefinedError - in case of lack in a group of a job with the given name
     """
     def remove(self, name)
+````
 
-
+```python
     """
-    Read job's descriptions in format acceptable (StdJob) by the QCG-PJM
+    Read job descriptions (in a standard format acceptable to the QCG-PJM) from a JSON file 
 
     Args:
-        formattedDoc (list) - data read from the JSON document, it should be a list with the
-          job descriptions - this is the value of 'jobs' key in 'submit' request
+        filePath (str) - path to the file containing job descriptions in a standard format
 
     Raises:
-        InvalidJobDescription - in case of invalid job description
+        InvalidJobDescriptionError - in case of invalid job description
     """
     def loadFromFile(self, filePath)
-
+```
+```python
 
     """
-    Save job list to file in a JSON format.
+    Save job list to a file in a JSON format.
 
     Args:
-        fileName (str) - path to the destination file
+        filePath (str) - path to the destination file
 
     Raises:
         FileError - in case of problems with opening / writing output file.
     """
-    def saveToFile(self, fileName)
+    def saveToFile(self, filePath)
 ```
-The `Jobs` object holds a list of jobs description. The names of jobs must be uniqe.  The jobs can be described in a format presented in [this section](#submit-command), as well as a simplified format. The main change is a more flat out structure of job description data, where elements of structures `execution` and `resources` has been moved to the top level. The other change is also simplified `dependencies` section, which has been replaced by the `after` element, that contains a list of ancestor jobs.
+The `Jobs` object holds a list of job descriptions. The names of jobs must be unique.  The jobs can be described in a format presented in [this section](#submit-command), as well as in a simplified one. The main difference between formats is that the simplified one has a more flat structure, where `execution` and `resources` elements have been moved to the top level. The next difference is that the  `dependencies` section, has been simplified and replaced with the `after` element, that contains a list of ancestor jobs.
 
-The simplified job description format contains following keys:
-* `name` (required - `True`, allowed types - `str`) - the job name,
-* `exec` (required - `True`, allowed types - `str`) - path to the exectuable,
-* `args` (required - `False`,allowed types - `list`, `str`) - a list of (or single entry) of arguments,
-* `stdin` (required - `False`,allowed types - `str) - a path to the standard input file,
-* `stdout` (required - `False`,allowed types - `str`) - a path to the standard output file,
-* `stderr` (required - `False`,allowed types - `str`) - a path to the standard error file,
-* `wd` (required - `False`,allowed types - `str`) - a path to the working directory,
-* `numNodes` (required - `False`,allowed types - `dict`) - numer of nodes requirements (described in [section](#job-description-format)),
-* `numCores` (required - `False`,allowed types - `dict`) - number of cores requirements (described in [section](#job-description-format)),
-* `wt` (required - `False`,allowed types - `str`) - a wall-time specification,
-* `iterate` (required - `False`,allowed types - `list`) - iterations description, a list must contain a two, or three following elements: `start iteration`, `end iteration` and optionally, `the step iteration`,
-* `after` (required - `False`,allowed types - `list`, `str`) - a list of (or single entry) of tasks that should finish before current one starts,
+The simplified job description format contains the following keys:
+* `name` (required - `True`, allowed types - `str`) - a job's name,
+* `exec` (required - `True`, allowed types - `str`) - a path to the executable,
+* `args` (required - `False`, allowed types - `list`, `str`) - an argument or a  list of arguments,
+* `stdin` (required - `False`, allowed types - `str`) - a path to the standard input file,
+* `stdout` (required - `False`, allowed types - `str`) - a path to the standard output file,
+* `stderr` (required - `False`, allowed types - `str`) - a path to the standard error file,
+* `wd` (required - `False`, allowed types - `str`) - a path to the working directory,
+* `numNodes` (required - `False`, allowed types - `dict`) - number of nodes requirements (described in [section](#job-description-format)),
+* `numCores` (required - `False`, allowed types - `dict`) - number of cores requirements (described in [section](#job-description-format)),
+* `wt` (required - `False`, allowed types - `str`) - a wall-time specification,
+* `iterate` (required - `False`, allowed types - `list`) - a list describing iterations, it should contain two or three elements: `start iteration`, `end iteration` and optionally, `the step iteration`,
+* `after` (required - `False`, allowed types - `list`, `str`) - a list of (or single entry) of tasks that should finish before current one starts.
 
 
 #### `list`
 ```python
     """
     List all the jobs.
-    Return a list of all job names along with their status.
+    Return a list of all job names along with their statuses.
 
     Returns:
         list - list of jobs with additional data in format described in 'listJobs' method in QCG PJM.
 
     Raises:
-        InternalError - in case of unexpected result format
-        ConnectionError - if connection has not been established yet or non zero exit code
+        InternalError - in case of request processing internal error
+        ConnectionError - in case of lack of connection to the service or nonzero response code.
     """
     def list(self)
 ```
-This method returns a list of all submitted and registered (not yet removed) jobs from the QCG PilotJob Manager instance along with their status. The output format is described [in](#listJobs-command).
+This method returns a list of all submitted and registered (not yet removed) jobs from the QCG PilotJob Manager instance along with their statuses. The output format is described [in](#listJobs-command).
 
 
 #### `status`
 ```python
     """
-    Return current status of jobs.
+    Return current statuses of the given jobs.
 
     Args:
         names (list, str) - list of job names
 
     Returns:
-        list - a list of job's status in the format described in 'jobStatus' method of QCG PJM.
+        list - a list of job statuses in the format described in 'jobStatus' method of QCG PJM.
 
     Raises:
-        InternalError - in case of unexpected result format
-        ConnectionError - if connection has not been established yet or non zero exit code
+        InternalError - in case of request processing internal error
+        ConnectionError - in case of lack of connection to the service or nonzero response code.
     """
     def status(self, names)
 ```
-This method returns a status of specified jobs. The output format is described [in](#jobstatus-command).
+This method returns a statuses of the given jobs. The output format is described [in](#jobstatus-command).
 
 
 #### `info`
 ```python
     """
-    Return detailed information about jobs.
+    Return detailed information about the given jobs.
 
     Args:
         names (list, str) - a list of job names
@@ -670,8 +678,8 @@ This method returns a status of specified jobs. The output format is described [
           QCG PJM.
 
     Raises:
-        InternalError - in case of unexpected result format
-        ConnectionError - if connection has not been established yet or non zero exit code
+        InternalError - in case of request processing internal error
+        ConnectionError - in case of lack of connection to the service or nonzero response code.
     """
     def info(self, names)
 ```
@@ -687,20 +695,20 @@ The `info` method returns detailed information about specified jobs. The output 
         names (list, str) - a list of job names
 
     Raises:
-        InternalError - in case of unexpected result format
-        ConnectionError - if connection has not been established yet or non zero exit code
+        InternalError - in case of request processing internal error
+        ConnectionError - in case of lack of connection to the service or nonzero response code.
     """
     def remove(self, names)
 ```
-The `remove` method removes a specified jobs from the registry of QCG PilotJob Manager. The output format is described [in][#removejob-command).
+The `remove` method removes specified jobs from the registry of QCG PilotJob Manager. The output format is described [in][#removejob-command).
 
 
 #### `wait4`
 ```python
     """
-    Wait for finish of specific jobs.
+    Wait until the given jobs finish.
     This method waits until all specified jobs finish its execution (successfully or not).
-    The QCG PJM is periodically polled about status of not finished jobs. The poll interval (2 sec by
+    The QCG PJM is periodically polled about statuses of not finished jobs. The poll interval (2 sec by
     default) can be changed by defining a 'poll_delay' key with appropriate value (in seconds) in
     configuration of constructor.
 
@@ -708,16 +716,15 @@ The `remove` method removes a specified jobs from the registry of QCG PilotJob M
         names (list, str) - a list of job names
 
     Returns:
-        dict - a map with job names and their terminal status
+        dict - a map with job names and their terminal statuses
 
     Raises:
-        InternalError - in case of unexpected response
-        ConnectionError - in case of connection problems
-        see status
+        InternalError - in case of request processing internal error
+        ConnectionError - in case of lack of connection to the service or nonzero response code.
     """
     def wait4(self, names)
 ```
-The `wait4` method synchronizes the execution of jobs - it will wait until all specified jobs not finish. The example output map is presented below:
+The `wait4` method synchronises the execution of jobs - it waits (blocks) until all specified jobs are completed. The example output returned by the method is presented below:
 ```json
 {
    'msleep2': 'SUCCEED',
@@ -726,7 +733,7 @@ The `wait4` method synchronizes the execution of jobs - it will wait until all s
 ```
 
 ### Examples
-The example user program with the QCG PJM API is presnted below:
+An example user program utilising the QCG PilotJob Manager API is presented below:
 ```python
 import zmq
 
@@ -757,7 +764,7 @@ print("jobs details:\n%s\n" % str(m.info(ids)))
 ```
 
 ### Running with QCG
-The QCG instance available at Eagle cluster contains registered application `qcg-pm-client`. As a single argument, the application requires the user's Python application. During the execution of user's application, the environment is setup with the required Python compiler (version 3.5) as well as all needed modules (`qcg.appscheduler.api`). The example QCG job description is presented below:
+The QCG instance available at the Eagle cluster contains registered application `qcg-pm-client`. As a single argument, the application requires a user's Python application. During the execution of user's application, the environment is setup with the required Python compiler (version 3.5) as well as all needed modules (`qcg.appscheduler.api`). An example QCG job description is presented below:
 
 ```bash
 #QCG note=pjm-client
@@ -773,4 +780,13 @@ The QCG instance available at Eagle cluster contains registered application `qcg
 #QCG argument=api_ex.py
 ```
 
-In this case, program from the file `api_ex.py` will be executed in a QCG PilotJob Manager environemnt.
+In this case, the program from the file `api_ex.py` will be executed in a QCG PilotJob Manager environment.
+
+## Dictionary
+* **Scheduling system** - a service that controls and schedules access to the fixed set of computational resources (aka. queuing system, workload manager, resource management system). The current implementation of QCG Pilot Job supports SLURM cluster management and job scheduling system.
+* **Job** - a sequential or parallel program with defined resource requirements
+* **Job array** - a mechanism that allows to submit a set of jobs with the same resource requirements to the scheduling system at once; commonly used in parameter sweep scenarios
+* **Allocation** - a set of resources allocated by the scheduling system for a specific time period; resources assigned to an allocation are static and do not change in time
+* **QCG PilotJob Manager** - a service started inside a scheduling system allocation that schedules and controls execution of jobs on the same allocation
+* **QCG PilotJob Manager API** - an interface in the form of Python module that provides communication with the QCG PilotJob Manager
+* **Application Controller** - a user's program run as one of jobs inside QCG PilotJob Manager that, using the QCG PilotJob Manager API, dynamically submits and synchronizes new jobs
