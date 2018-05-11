@@ -26,8 +26,12 @@ class FileInterface:
         if not exists(self.path):
             raise JobFileNotExist(self.path)
 
+        try:
         with open(self.path) as jsonData:
             self.data = json.load(jsonData)
+        except Exception as e:
+            logging.error("Fail to parse job description: %s" % (e.args[0]))
+            raise IllegalJobDescription("Wrong job description: %s" % (e.args[0]))
 
         if not isinstance(self.data, list):
             raise IllegalJobDescription("Not an array of requests in json file")
