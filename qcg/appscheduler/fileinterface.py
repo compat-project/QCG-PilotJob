@@ -27,8 +27,8 @@ class FileInterface:
             raise JobFileNotExist(self.path)
 
         try:
-        with open(self.path) as jsonData:
-            self.data = json.load(jsonData)
+            with open(self.path) as jsonData:
+                self.data = json.load(jsonData)
         except Exception as e:
             logging.error("Fail to parse job description: %s" % (e.args[0]))
             raise IllegalJobDescription("Wrong job description: %s" % (e.args[0]))

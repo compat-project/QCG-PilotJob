@@ -109,7 +109,7 @@ class SlurmExecution(ExecutionSchema):
         with open(runConfFile, 'w') as f:
             f.write("0\t%s %s\n" % (
                 job_exec,
-                ' '.join('{0}'.format(arg) for arg in job_args)))
+                ' '.join('{0}'.format(arg.replace(" ", "\ ")) for arg in job_args)))
             if exJob.ncores > 1:
                 if exJob.ncores > 2:
                     f.write("1-%d /bin/true\n" % (exJob.ncores - 1))

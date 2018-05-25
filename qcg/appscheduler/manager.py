@@ -158,6 +158,8 @@ class Manager:
                     except (NotSufficientResources, InvalidResourceSpec) as e:
                         # jobs will never schedule
                         logging.warning("Job %s scheduling failed - %s" % (schedJob.job.name, str(e)))
+                        self.__changeJobState(schedJob.job, JobState.FAILED, str(e))
+                        schedJob.job.clearQueuePos()
                 else:
                     self.__appendToScheduleQueue(newScheduleQueue, schedJob)
 

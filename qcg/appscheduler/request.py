@@ -7,6 +7,7 @@ from string import Template
 
 from qcg.appscheduler.errors import InvalidRequest
 from qcg.appscheduler.joblist import Job
+from qcg.appscheduler.iterscheduler import IterScheduler
 
 
 class Request:
@@ -116,51 +117,33 @@ class SubmitReq(Request):
             logging.debug("request job params: start(%d), end(%d), haveIters(%s)" %
                           (start, end, haveIterations))
 
+            if 'resources' not in env or env['resources'] is None:
+                raise InvalidRequest(
+                    'Wrong submit request - failed to resolve split-into without resource information')
+
+            numCoresPlans = []
             # look for 'split-into' in resources->numCores
             if 'resources' in reqJob and 'numCores' in reqJob['resources']:
                 if 'split-into' in reqJob['resources']['numCores']:
-                    if 'max' in reqJob['resources']['numCores']:
-                        raise InvalidRequest(
-                            'Wrong submit request - split-into cores directive mixed with max directive')
+                    numCoresPlans = IterScheduler.GetScheduler('split-into').Schedule(reqJob['resources']['numCores'],
+                            end - start, env['resources'].totalCores)
+                elif 'scheduler' in reqJob['resources']['numCores']:
+                    Scheduler = IterScheduler.GetScheduler(reqJob['resources']['numCores']['scheduler'])
+                    del reqJob['resources']['numCores']['scheduler']
+                    numCoresPlans = Scheduler.Schedule(reqJob['resources']['numCores'],
+                            end - start, env['resources'].totalCores)
 
-                    splitInto = reqJob['resources']['numCores']['split-into']
-                    if not isinstance(splitInto, int) or splitInto <= 0:
-                        raise InvalidRequest('Wrong submit request - wrong format of cores split-into directive')
-
-                    if env is None or not 'resources' in env or env['resources'] is None:
-                        raise InvalidRequest(
-                            'Wrong submit request - failed to resolve split-into without resource information')
-
-                    splitPart = int(math.floor(env['resources'].totalCores / splitInto))
-                    if splitPart <= 0:
-                        raise InvalidRequest('Wrong submit request - split-into cores resolved to zero')
-
-                    reqJob['resources']['numCores']['max'] = splitPart
-
-                    del reqJob['resources']['numCores']['split-into']
-
+            numNodesPlans = []
             # look for 'split-into' in resources->numNodes
             if 'resources' in reqJob and 'numNodes' in reqJob['resources']:
                 if 'split-into' in reqJob['resources']['numNodes']:
-                    if 'max' in reqJob['resources']['numNodes']:
-                        raise InvalidRequest(
-                            'Wrong submit request - split-into nodes directive mixed with max directive')
-
-                    splitInto = reqJob['resources']['numNodes']['split-into']
-                    if not isinstance(splitInto, int) or splitInto <= 0:
-                        raise InvalidRequest('Wrong submit request - wrong format of nodes split-into directive')
-
-                    if not 'resources' in env or env['resources'] is None:
-                        raise InvalidRequest(
-                            'Wrong submit request - failed to resolve split-into without resource information')
-
-                    splitPart = int(math.floor(env['resources'].totalNodes / splitInto))
-                    if splitPart <= 0:
-                        raise InvalidRequest('Wrong submit request - split-into nodes resolved to zero')
-
-                    reqJob['resources']['numNodes']['max'] = splitPart
-
-                    del reqJob['resources']['numNodes']['split-into']
+                    numNodesPlans = IterScheduler.GetScheduler('split-into').Schedule(reqJob['resources']['numNodes'],
+                            end - start, env['resources'].totalNodes)
+                elif 'scheduler' in reqJob['resources']['numNodes']:
+                    Scheduler = IterScheduler.GetScheduler(reqJob['resources']['numNodes']['scheduler'])
+                    del reqJob['resources']['numNodes']['scheduler']
+                    numNodesPlans = Scheduler.Schedule(reqJob['resources']['numNodes'],
+                            end - start, env['resources'].totalNodes)
 
             # default value for missing 'resources' definition
             if 'resources' not in reqJob:
@@ -180,6 +163,13 @@ class SubmitReq(Request):
                     logging.debug("replacing jname variable with %s" % (reqJob['name']))
 
                     reqJob_vars = self.__replaceVariables(reqJob_vars, varsStep2)
+
+                    if numCoresPlans is not None and len(numCoresPlans) > idx - start:
+                        reqJob_vars['resources']['numCores'] = numCoresPlans[idx - start]
+
+                    if numNodesPlans is not None and len(numNodesPlans) > idx - start:
+                        reqJob_vars['resources']['numNodes'] = numNodesPlans[idx - start]
+
                     newJobs.append(Job(**reqJob_vars))
                 except Exception as e:
                     logging.exception('Wrong submit request')

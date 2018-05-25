@@ -3,15 +3,16 @@
 module load namd/2.12-ibverbs-smp
 module load openmpi
 
-ID=${QCG_APP_LOCAL_JOB_ID:-$QCG_STEP_ID}
+#ID=${QCG_APP_LOCAL_JOB_ID:-$QCG_STEP_ID}
 
-[[ "x$ID" == "x" ]] && { echo "environment is not valid - missing identifier"; exit 1; }
+#[[ "x$ID" == "x" ]] && { echo "environment is not valid - missing identifier"; exit 1; }
 [[ "x$SLURM_HOSTFILE" == "x" ]] && { echo "environment is not valid - missing SLURM_HOSTFILE"; exit 1; }
 [[ "x$SLURM_NTASKS" == "x" ]] && { echo "environment is not valid - missing SLURM_NTASKS"; exit 1; }
 [[ "x$SLURM_NTASKS_PER_NODE" == "x" ]] && { echo "environment is not valid - missing SLURM_NTASKS"; exit 1; }
 [[ ! "$SLURM_NTASKS_PER_NODE" =~ ^[0-9]+$ ]] && { echo "environment is not valid - SLURM_NTASKS_PER_NODE is not homegenous"; exit 1; }
 
-NAMD_NODEFILE=".namd_nodes.$ID"
+#NAMD_NODEFILE=".namd_nodes.$ID"
+NAMD_NODEFILE=".namd_nodes.$RANDOM"
 echo "group main" >> $NAMD_NODEFILE
 
 for NODE in $(cat $SLURM_HOSTFILE | uniq); do
