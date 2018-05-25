@@ -3,6 +3,7 @@ import asyncio
 import logging
 import os
 import sys
+import traceback
 from os.path import exists, join
 
 from qcg.appscheduler.errors import InvalidArgument
@@ -120,5 +121,5 @@ if __name__ == "__main__":
         QCGPMService().start()
     except Exception as e:
         sys.stderr.write('Error: %s\n' % (str(e)))
-        #		traceback.print_exc()
+        traceback.print_exc()
         exit(1)
