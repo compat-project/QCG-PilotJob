@@ -24,7 +24,8 @@ JOB_RES_ATTRS = {
     "min":        { 'req': False,  'types': [ int ] },
     "max":        { 'req': False,  'types': [ int ] },
     "exact":      { 'req': False,  'types': [ int ] },
-    "split-into": { 'req': False,  'types': [ int ] }
+    "split-into": { 'req': False,  'types': [ int ] },
+    "scheduler":  { 'req': False,  'types': [ str ] }
 }
 
 
