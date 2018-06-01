@@ -1,5 +1,6 @@
 # The QCG Pilot Manager v 0.3
 
+
 Author: Piotr Kopta <pkopta@man.poznan.pl>, Tomasz Piontek <piontek@man.poznan.pl>, Bartosz Bosak <bbosak@man.poznan.pl>
 
 Copyright (C) 2017-2018 Poznan Supercomputing and Networking Center
@@ -753,7 +754,8 @@ ids = m.submit(Jobs().
         )
 
 # list submited jobs
-print("submited jobs:\n%s\n" % str(m.list(ids)))
+print("submited jobs:\n%s\n" % str(m.list()))
+
 
 # wait until submited jobs finish
 m.wait4(ids)
