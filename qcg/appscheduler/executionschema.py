@@ -1,4 +1,5 @@
 import os
+import logging
 
 from qcg.appscheduler.errors import *
 
@@ -116,15 +117,20 @@ class SlurmExecution(ExecutionSchema):
                 else:
                     f.write("1 /bin/true\n")
 
-        #		exJob.modifiedArgs = [ "-n", str(exJob.ncores), "--export=NONE", "-m", "arbitrary", "--multi-prog", runConfFile ]
-        #		exJob.modifiedArgs = [ "-n", str(exJob.ncores), "-m", "arbitrary", "--mem-per-cpu=0", "--slurmd-debug=verbose", "--multi-prog", runConfFile ]
+        #        exJob.modifiedArgs = [ "-n", str(exJob.ncores), "--export=NONE", "-m", "arbitrary", "--multi-prog", runConfFile ]
+        #        exJob.modifiedArgs = [ "-n", str(exJob.ncores), "-m", "arbitrary", "--mem-per-cpu=0", "--slurmd-debug=verbose", "--multi-prog", runConfFile ]
 
         exJob.jobExecution.exec = 'srun'
         exJob.jobExecution.args = [
             "-n", str(exJob.ncores),
             "-m", "arbitrary",
             "--mem-per-cpu=0",
-            "--multi-prog", runConfFile]
+            "--multi-prog" ]
+
+        if exJob.job.resources.wt:
+            exJob.jobExecution.args.extend(["--time", "0:{}".format(int(exJob.job.resources.wt.total_seconds()))])
+
+        exJob.jobExecution.args.append(runConfFile)
 
 
 class DirectExecution(ExecutionSchema):
