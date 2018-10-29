@@ -9,7 +9,7 @@
 #QCG stage-in-file=bac16-reqs.json
 #QCG stage-in-file=bac-amber.sh
 #QCG stage-in-file=bac-namd.sh 
-#
+
 #QCG stage-out-dir=.->out/eagle.bac16.wd.${JOB_ID}
 
 #QCG application=qcg-pm
