@@ -1,0 +1,17 @@
+Version 0.2   2018-03-14 Piotr Kopta <pkopta@man.poznan.pl>
+	* new variable in job's execution environemnt QCG_PM_ZMQ_ADDRESS with
+	address of QCG PJM ZMQ interface
+	* changed response format of 'submit' method - besides the number of
+	submited jobs, there is also a list with the submitted job names returned
+	* changed arguments of 'jobStatus' method - instead of a single job name,
+	now the list of job names is expected
+	* changed response format of 'jobStatus' method - instead of a single job
+	name and status, now the list of job names with their status is returned
+	as a dictionary - under the key 'jobs'
+	* changed arguments of 'jobRemove' method - instead of a single job name,
+	now the list of job names is expected
+	* new interface method 'jobInfo' - method returns a detailed information
+	about given jobs
+	* now 'resources' attribute of job description in a 'submit' method is
+	optionaly - if not defined the single core will be taken as a default
+	value

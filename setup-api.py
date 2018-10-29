@@ -1,0 +1,23 @@
+from distutils.core import setup
+
+setup(
+	name='QCGPilotManagerAPI',
+
+	version='0.1',
+
+	author='Piotr Kopta',
+	author_email='pkopta@man.poznan.pl',
+
+	packages=['qcg.appscheduler.api'],
+    package_dir={'qcg.appscheduler.api': 'qcg/appscheduler/api'},
+
+	url='http://dokumentacja',
+
+	description='API for QCG PilotJob Manager',
+
+	install_requires=[
+		'zmq',
+		],
+)
+
+

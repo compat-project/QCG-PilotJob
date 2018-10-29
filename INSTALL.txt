@@ -1,0 +1,9 @@
+1. To install dependencies:
+
+$ PYTHONPATH=$PYTHONPATH:${DEST_PATH}/lib/python3.5/site-packages easy_install --prefix=${DEST_PATH} QCGPilotManager-0.1.tar.gz
+
+2. To install package:
+
+$ tar xzf QCGPilotManager-0.1.tar.gz
+$ cd QCGPilotManager-0.1
+$ python setup.py install --prefix=${DEST_PATH}
