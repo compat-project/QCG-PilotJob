@@ -16,10 +16,10 @@ def parse_nodelist(nodespec):
     return stdout.splitlines()
 
 
-def parse_slurm_ntasks(ntasks):
+def parse_slurm_job_cpus(cpus):
     result = []
 
-    for part in ntasks.split(','):
+    for part in cpus.split(','):
         #		print "part %s" % part
         if part.find('(') != -1:
             cores, n = part.rstrip(')').replace('(x', 'x').split('x')
@@ -36,14 +36,14 @@ def parse_slurm_resources():
     if 'SLURM_NODELIST' not in os.environ:
         raise SlurmEnvError("missing SLURM_NODELIST settings")
 
-    if 'SLURM_TASKS_PER_NODE' not in os.environ:
-        raise SlurmEnvError("missing SLURM_TASKS_PER_NODE settings")
+    if 'SLURM_JOB_CPUS_PER_NODE' not in os.environ:
+        raise SlurmEnvError("missing SLURM_JOB_CPUS_PER_NODE settings")
 
     slurm_nodes = os.environ['SLURM_NODELIST']
     node_names = parse_nodelist(slurm_nodes)
 
-    slurm_tasks = os.environ['SLURM_TASKS_PER_NODE']
-    cores_num = parse_slurm_ntasks(slurm_tasks)
+    slurm_job_cpus = os.environ['SLURM_JOB_CPUS_PER_NODE']
+    cores_num = parse_slurm_job_cpus(slurm_job_cpus)
 
     if len(node_names) != len(cores_num):
         raise SlurmEnvError(
