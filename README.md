@@ -160,7 +160,6 @@ The sample submit job request is presented below:
             "exact": 2
           }
         }
-      }
    }
    ]
 }  
@@ -704,7 +703,7 @@ The `info` method returns detailed information about specified jobs. The output 
     """
     def remove(self, names)
 ```
-The `remove` method removes specified jobs from the registry of QCG PilotJob Manager. The output format is described [in][#removejob-command).
+The `remove` method removes specified jobs from the registry of QCG PilotJob Manager. The output format is described [in](#removejob-command).
 
 
 #### `wait4`
@@ -731,8 +730,8 @@ The `remove` method removes specified jobs from the registry of QCG PilotJob Man
 The `wait4` method synchronises the execution of jobs - it waits (blocks) until all specified jobs are completed. The example output returned by the method is presented below:
 ```json
 {
-   'msleep2': 'SUCCEED',
-   'echo': 'SUCCEED'
+   "msleep2": "SUCCEED",
+   "echo": "SUCCEED"
 }
 ```
 
