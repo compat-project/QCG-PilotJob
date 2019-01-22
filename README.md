@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # QCG-PilotJob
 The QCG Pilot Job service for execution of many computing tasks inside one allocation
 =======
@@ -796,4 +795,3 @@ In this case, the program from the file `api_ex.py` will be executed in a QCG Pi
 * **QCG PilotJob Manager** - a service started inside a scheduling system allocation that schedules and controls execution of jobs on the same allocation
 * **QCG PilotJob Manager API** - an interface in the form of Python module that provides communication with the QCG PilotJob Manager
 * **Application Controller** - a user's program run as one of jobs inside QCG PilotJob Manager that, using the QCG PilotJob Manager API, dynamically submits and synchronizes new jobs
->>>>>>> 4ea89623c7298ba465513a20854ead7f144ce538
