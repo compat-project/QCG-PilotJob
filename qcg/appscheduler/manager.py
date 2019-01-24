@@ -26,7 +26,7 @@ class SchedulingJob:
         if job.hasDependencies():
             for jobId in job.dependencies.after:
                 if not self.__manager.jobList.exist(jobId):
-                    raise IllegalJobDescription("Dependency job %s not registered" % jobId)
+                    raise IllegalJobDescription("Job {} - dependency job {} not registered".format(job.name, jobId))
 
                 self.__afterJobs.add(jobId)
 

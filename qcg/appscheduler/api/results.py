@@ -2,16 +2,16 @@ from qcg.appscheduler.api.errors import *
 
 
 class SubmitResult:
-    """
-    Result of job list submission, contains list of job names along with submit result.
-    Each element in alist must contain following elements:
-        result (str) - 'OK' or Error description
-
-    Attributes:
-        list (dict) - list of job names
-    """
 
     def __init__(self, list):
+        """
+        Result of job list submission, contains list of job names along with submit result.
+        Each element in alist must contain following elements:
+            result (str) - 'OK' or Error description
+
+        Attributes:
+            list (dict) - list of job names
+        """
         if list is None:
             raise InternalError("List of submited jobs is None")
 
@@ -38,16 +38,16 @@ class SubmitResult:
 
 
 class StatusResult:
-    """
-    Result of job list status check, contains list of job names along with current status.
-    Each element in a list must contain following elements:
-        status (str) - current status of the job
-
-    Attributes:
-        jlist (dict) - list of job names
-    """
 
     def __init__(self, jlist):
+        """
+        Result of job list status check, contains list of job names along with current status.
+        Each element in a list must contain following elements:
+            status (str) - current status of the job
+
+        Attributes:
+            jlist (dict) - list of job names
+        """
         if jlist is None:
             raise InternalError("List of job statuses is None")
 
