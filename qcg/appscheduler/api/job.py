@@ -30,26 +30,26 @@ JOB_RES_ATTRS = {
 
 
 class Jobs:
-    """
-    Group of job descriptions to submit
-    """
 
     def __init__(self):
+        """
+        Group of job descriptions to submit
+        """
         self.__list = {}
         self.__jobIdx = 0
 
 
-    """
-    Validate job description attributes.
-    It's is not a full validation, only the attributes names and types are checked.
-
-    Args:
-        attrs (dict) - job description attributes
-
-    Raises:
-        InvalidJobDescriptionError - in case of invalid job description
-    """
     def __validateSmplJob(self, attrs):
+        """
+        Validate job description attributes.
+        It's is not a full validation, only the attributes names and types are checked.
+
+        Args:
+            attrs (dict) - job description attributes
+
+        Raises:
+            InvalidJobDescriptionError - in case of invalid job description
+        """
         if 'name' not in attrs:
             raise InvalidJobDescriptionError("Missing job name")
 
@@ -97,16 +97,16 @@ class Jobs:
                 raise InvalidJobDescriptionError("The iterate must contain 2 or 3 element list")
 
 
-    """
-    Perform simple validation of a job in format acceptable (StdJob) by the QCG-PJM
-
-    Args:
-        stdJob (dict) - job description
-
-    Raises:
-        InvalidJobDescriptionError - in case of invalid job description
-    """
     def __validateStdJob(self, stdJob):
+        """
+        Perform simple validation of a job in format acceptable (StdJob) by the QCG-PJM
+
+        Args:
+            stdJob (dict) - job description
+
+        Raises:
+            InvalidJobDescriptionError - in case of invalid job description
+        """
         if 'name' not in stdJob:
             raise InvalidJobDescriptionError('Missing "name" key')
 
@@ -117,17 +117,17 @@ class Jobs:
             raise InvalidJobDescriptionError("Job %s already in list" % (stdJob['name']))
 
 
-    """
-    Convert simple job description to a standard format.
-
-    Args:
-        jName (str) - a job name
-        smplJob (dict) - simple job description
-
-    Returns:
-        dict - simple job description
-    """
     def __convertSimpleToStd(self, smplJob):
+        """
+        Convert simple job description to a standard format.
+
+        Args:
+            jName (str) - a job name
+            smplJob (dict) - simple job description
+
+        Returns:
+            dict - simple job description
+        """
         stdJob = {}
 
         stdJob['name'] = smplJob['name']
@@ -161,16 +161,16 @@ class Jobs:
         return stdJob
 
 
-    """
-    Convert standard job description to a simple format.
-
-    Args:
-        stdJob (dict) - standard job description
-
-    Returns:
-        dict - simple job description
-    """
     def convertStdToSimple(self, stdJob):
+        """
+        Convert standard job description to a simple format.
+
+        Args:
+            stdJob (dict) - standard job description
+
+        Returns:
+            dict - simple job description
+        """
         smplJob = { }
 
         name = stdJob['name']
@@ -221,32 +221,32 @@ class Jobs:
 
 
     def __appendJob(self, jName, jData):
-    """
-    Append a new job to internal list.
-    All jobs should be appended by this function, which also put each of the job the index,
-    which will be used to return ordered list of jobs.
+        """
+        Append a new job to internal list.
+        All jobs should be appended by this function, which also put each of the job the index,
+        which will be used to return ordered list of jobs.
 
-    Args:
-        jName (str) - job name
-        jData (dict) - job attributes in standard format
-    """
+        Args:
+            jName (str) - job name
+            jData (dict) - job attributes in standard format
+        """
         self.__list[jName] = { 'idx': self.jobIdx, 'data': jData }
         self.__jobIdx += 1
 
 
-    """
-    Add a new, standard job description (acceptable by the QCG PJM) to the group.
-    If both arguments are present, they are merged and processed as a single dictionary.
-
-    Args:
-        dAttrs (dict) - attributes as a dictionary in a standard format
-        stdAttrs (dict) - attributes as a named arguments in a standard format
-
-    Raises:
-        InvalidJobDescriptionError - in case of non-unique job name or invalid job description
-
-    """
     def addStd(self, dAttrs = None, **stdAttrs):
+        """
+        Add a new, standard job description (acceptable by the QCG PJM) to the group.
+        If both arguments are present, they are merged and processed as a single dictionary.
+
+        Args:
+            dAttrs (dict) - attributes as a dictionary in a standard format
+            stdAttrs (dict) - attributes as a named arguments in a standard format
+
+        Raises:
+            InvalidJobDescriptionError - in case of non-unique job name or invalid job description
+
+        """
         data = stdAttrs
 
         if dAttrs is not None:
@@ -261,66 +261,66 @@ class Jobs:
         return self
 
 
-    """
-    Remote a job from the group.
-    
-    Args:
-        name (str) - name of the job to remove
-
-    Raises:
-        JobNotDefinedError - in case of missing job in a group with given name
-    """
     def remove(self, name):
+        """
+        Remote a job from the group.
+        
+        Args:
+            name (str) - name of the job to remove
+
+        Raises:
+            JobNotDefinedError - in case of missing job in a group with given name
+        """
         if name not in self.__list:
             raise JobNotDefinedError(name)
 
         del self.__list[name]
 
 
-    """
-    Return a list with job names in grup.
-    """
     def jobNames(self):
+        """
+        Return a list with job names in grup.
+        """
         return list(self.__list)
 
 
-    """
-    Return a list with job names in group in order they were appended.
-    """
     def orderedJobNames(self):
+        """
+        Return a list with job names in group in order they were appended.
+        """
         return [j[0] for j in sorted(list(self.__list.items()), key=lambda j: j[1]['idx'])]
 
 
-    """
-    Return job descriptions in format acceptable by the QCG-PJM
-
-    Returns:
-        list - a list of jobs in the format acceptable by the QCG PJM (standard format)
-    """
     def jobs(self):
+        """
+        Return job descriptions in format acceptable by the QCG-PJM
+
+        Returns:
+            list - a list of jobs in the format acceptable by the QCG PJM (standard format)
+        """
         return [j['jdata'] for j in list(self.__list.values())]
 
 
-    """
-    Return job descriptions in format acceptable by the QCG-PJM in order they were appended.
-
-    Returns:
-        list - a list of jobs in the format acceptable by the QCG PJM (standard format)
-    """
     def orderedJobs(self):
+        """
+        Return job descriptions in format acceptable by the QCG-PJM in order they were appended.
+
+        Returns:
+            list - a list of jobs in the format acceptable by the QCG PJM (standard format)
+        """
         return [j['data'] for j in sorted(list(self.__list.values()), key=lambda j: j['idx'])]
 
 
-    """
-    Read job's descriptions from JSON file in format acceptable (StdJob) by the QCG-PJM
-
-    Args:
-        filePath (str) - path to the file with jobs descriptions in a standard format
-
-    Raises:
-        InvalidJobDescriptionError - in case of invalid job description
-    """
     def loadFromFile(self, filePath):
+        """
+        Read job's descriptions from JSON file in format acceptable (StdJob) by the QCG-PJM
+
+        Args:
+            filePath (str) - path to the file with jobs descriptions in a standard format
+
+        Raises:
+            InvalidJobDescriptionError - in case of invalid job description
+        """
         try:
             with open(filePath, 'r') as f:
                 for job in json.load(f):
@@ -337,16 +337,16 @@ class Jobs:
             raise FileError('File to open/write file "%s": %s', filePath, e.args[0])
 
 
-    """
-    Save job list to JSON file in a standard format.
-
-    Args:
-        filePath (str) - path to the destination file
-
-    Raises:
-        FileError - in case of problems with opening / writing output file.
-    """
     def saveToFile(self, filePath):
+        """
+        Save job list to JSON file in a standard format.
+
+        Args:
+            filePath (str) - path to the destination file
+
+        Raises:
+            FileError - in case of problems with opening / writing output file.
+        """
         try:
             with open(filePath, 'w') as f:
                 f.write(json.dumps(self.orderedJobs(), indent=2))

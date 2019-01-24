@@ -25,24 +25,24 @@ class Manager:
     DEFAULT_POLL_DELAY = 2
 
 
-    """
-    Create Manager object.
-
-    Args:
-        address (str) - the address of the PJM manager to connect to in the form:
-             [proto://]host[:port]
-          the default values for 'proto' and 'port' are respectively - 'tcp' and '5555'; if 'address'
-          is not defined the following procedure will be performed:
-            a) if the environment contains QCG_PM_ZMQ_ADDRESS - the value of this var will be used,
-              else
-            b) the tcp://127.0.0.1:5555 default address will be used
-        cfg (dict) - the configuration; currently the following keys are supported:
-          'poll_delay' - the delay between following status polls in wait methods
-          'log_file' - the location of the log file
-          'log_level' - the log level ('DEBUG'); by default the log level is set to INFO
-    
-    """
     def __init__(self, address = None, cfg = { }):
+        """
+        Create Manager object.
+
+        Args:
+            address (str) - the address of the PJM manager to connect to in the form:
+                 [proto://]host[:port]
+              the default values for 'proto' and 'port' are respectively - 'tcp' and '5555'; if 'address'
+              is not defined the following procedure will be performed:
+                a) if the environment contains QCG_PM_ZMQ_ADDRESS - the value of this var will be used,
+                  else
+                b) the tcp://127.0.0.1:5555 default address will be used
+            cfg (dict) - the configuration; currently the following keys are supported:
+              'poll_delay' - the delay between following status polls in wait methods
+              'log_file' - the location of the log file
+              'log_level' - the log level ('DEBUG'); by default the log level is set to INFO
+        
+        """
         self.__zmqCtx = zmq.Context()
         self.__zmqSock = None
         self.__connected = False
@@ -65,14 +65,14 @@ class Manager:
         self.__connect()
 
 
-    """
-    Validate the QCG PJM address.
-
-    Args:
-        address (str) - the address to validate; if address is not in the complete form, it will be
-          extended with the default values (protocol, port)
-    """
     def __parseAddress(self, address):
+        """
+        Validate the QCG PJM address.
+
+        Args:
+            address (str) - the address to validate; if address is not in the complete form, it will be
+              extended with the default values (protocol, port)
+        """
         if not re.match('\w*://', address):
             # append default protocol
             address = "%s://%s" % (Manager.DEFAULT_PROTO, address)
@@ -84,14 +84,14 @@ class Manager:
         return address
 
 
-    """
-    Setup the logging.
-    The log file and the log level are set.
-
-    Args:
-        cfg (dict) - see constructor.
-    """
     def __setupLogging(self, cfg):
+        """
+        Setup the logging.
+        The log file and the log level are set.
+
+        Args:
+            cfg (dict) - see constructor.
+        """
         self.__logFile = 'api.log'
         if 'log_file' in cfg:
             self.__logFile = cfg['log_file']
@@ -112,13 +112,13 @@ class Manager:
         rootLogger.setLevel(level)
 
 
-    """
-    Close connection to the QCG-PJM
-
-    Raises:
-        ConnectionError - if there was an error during closing the connection.
-    """
     def __disconnect(self):
+        """
+        Close connection to the QCG-PJM
+
+        Raises:
+            ConnectionError - if there was an error during closing the connection.
+        """
         try:
             if self.__connected:
                 self.__zmqSock.close()
@@ -127,14 +127,14 @@ class Manager:
             raise errors.ConnectionError('Failed to disconnect - %s' % (e.args[0]))
 
 
-    """
-    Connect to the QCG-PJM
-    The connection is made to the address defined in the constructor.
-
-    Raises:
-        ConnectionError - in case of error during establishing connection.
-    """
     def __connect(self):
+        """
+        Connect to the QCG-PJM
+        The connection is made to the address defined in the constructor.
+
+        Raises:
+            ConnectionError - in case of error during establishing connection.
+        """
         self.__disconnect()
 
         logging.info("connecting to the PJM @ %s" % (self.__address))
@@ -147,29 +147,29 @@ class Manager:
             raise errors.ConnectionError('Failed to connect to %s - %s' % (self.__address, e.args[0]))
 
 
-    """
-    Check if connection has been successfully opened.
-
-    Raises:
-        ConnectionError - if connection has not been established yet
-    """
     def __assureConnected(self):
+        """
+        Check if connection has been successfully opened.
+
+        Raises:
+            ConnectionError - if connection has not been established yet
+        """
         if not self.__connected:
             raise errors.ConnectionError('Not connected')
 
 
-    """
-    Validate the response from the QCG PJM.
-    This method checks the format of the response and exit code.
-
-    Returns:
-        dict - response data
-
-    Raises:
-        InternalError - in case the response format is invalid
-        ConnectionError - in case of non zero exit code
-    """
     def __validateResponse(self, response):
+        """
+        Validate the response from the QCG PJM.
+        This method checks the format of the response and exit code.
+
+        Returns:
+            dict - response data
+
+        Raises:
+            InternalError - in case the response format is invalid
+            ConnectionError - in case of non zero exit code
+        """
         if not isinstance(response, dict) or 'code' not in response:
             raise errors.InternalError('Invalid reply from the service')
 
@@ -185,21 +185,21 @@ class Manager:
         return response['data']
 
 
-    """
-    Send syncronically request to the QCG-PJM and validate response
-    The input data is encoded in the JSON format and send to the QCG PJM. After receiving response,
-    it is validated.
-
-    Args:
-        data - data to send as a JSON document
-
-    Returns:
-        data - received data from the QCG PJM service
-
-    Raises:
-        see __assureConnected, __validateResponse
-    """
     def __sendAndValidateResult(self, data):
+        """
+        Send syncronically request to the QCG-PJM and validate response
+        The input data is encoded in the JSON format and send to the QCG PJM. After receiving response,
+        it is validated.
+
+        Args:
+            data - data to send as a JSON document
+
+        Returns:
+            data - received data from the QCG PJM service
+
+        Raises:
+            see __assureConnected, __validateResponse
+        """
         self.__assureConnected()
 
         msg = str.encode(json.dumps( data ))
@@ -212,36 +212,36 @@ class Manager:
         return self.__validateResponse(json.loads(reply))
 
 
-    """
-    Return available resources.
-    Return information about current resource status of QCG PJM.
-
-    Returns:
-        data - data in format described in 'resourceInfo' method of QCG PJM.
-
-    Raises:
-        see __sendAndValidateResult
-    """
     def resources(self):
+        """
+        Return available resources.
+        Return information about current resource status of QCG PJM.
+
+        Returns:
+            data - data in format described in 'resourceInfo' method of QCG PJM.
+
+        Raises:
+            see __sendAndValidateResult
+        """
         return self.__sendAndValidateResult({
             "request": "resourcesInfo"
         })
 
 
-    """
-    Submit a jobs.
-    
-    Args:
-        jobs (Jobs) - a job description list
-        
-    Returns:
-        list - a list of submitted job names
-
-    Raises:
-        InternalError - in case of unexpected result format
-        see __sendAndValidateResult
-    """
     def submit(self, jobs):
+        """
+        Submit a jobs.
+        
+        Args:
+            jobs (Jobs) - a job description list
+            
+        Returns:
+            list - a list of submitted job names
+
+        Raises:
+            InternalError - in case of unexpected result format
+            see __sendAndValidateResult
+        """
         data = self.__sendAndValidateResult({
             "request": "submit",
             "jobs": jobs.orderedJobs()
@@ -253,19 +253,19 @@ class Manager:
         return data['jobs']
 
 
-    """
-    List all the jobs.
-    Return a list of all job names along with their status and additional data currently registered
-    in the QCG PJM.
-
-    Returns:
-        list - list of jobs with additional data in format described in 'listJobs' method in QCG PJM.
-
-    Raises:
-        InternalError - in case of unexpected result format
-        see __sendAndValidateResult
-    """
     def list(self):
+        """
+        List all the jobs.
+        Return a list of all job names along with their status and additional data currently registered
+        in the QCG PJM.
+
+        Returns:
+            list - list of jobs with additional data in format described in 'listJobs' method in QCG PJM.
+
+        Raises:
+            InternalError - in case of unexpected result format
+            see __sendAndValidateResult
+        """
         data = self.__sendAndValidateResult({
             "request": "listJobs"
         })
@@ -297,19 +297,19 @@ class Manager:
 #        return StatusResult(jobs)
 
 
-    """
-    Return current status of jobs.
-    
-    Args:
-        names (list, str) - list of job names
-
-    Returns:
-        list - a list of job's status in the format described in 'jobStatus' method of QCG PJM.
-
-    Raises:
-        see __sendAndValidateResult
-    """
     def status(self, names):
+        """
+        Return current status of jobs.
+        
+        Args:
+            names (list, str) - list of job names
+
+        Returns:
+            list - a list of job's status in the format described in 'jobStatus' method of QCG PJM.
+
+        Raises:
+            see __sendAndValidateResult
+        """
         if isinstance(names, str):
             jNames = [ names ]
         else:
@@ -321,20 +321,20 @@ class Manager:
         })
 
 
-    """
-    Return detailed information about jobs.
-
-    Args:
-        names (list, str) - a list of job names
-
-    Returns:
-        list - a list of job's detailed information in the format described in 'jobStatus' method of 
-          QCG PJM.
-
-    Raises:
-        see __sendAndValidateResult
-    """
     def info(self, names):
+        """
+        Return detailed information about jobs.
+
+        Args:
+            names (list, str) - a list of job names
+
+        Returns:
+            list - a list of job's detailed information in the format described in 'jobStatus' method of 
+              QCG PJM.
+
+        Raises:
+            see __sendAndValidateResult
+        """
         if isinstance(names, str):
             jNames = [ names ]
         else:
@@ -346,16 +346,16 @@ class Manager:
         })
 
 
-    """
-    Remove jobs from registry.
-
-    Args:
-        names (list, str) - a list of job names
-
-    Raises:
-        see __sendAndValidateResult
-    """
     def remove(self, names):
+        """
+        Remove jobs from registry.
+
+        Args:
+            names (list, str) - a list of job names
+
+        Raises:
+            see __sendAndValidateResult
+        """
         if isinstance(names, str):
             jNames = [ names ]
         else:
@@ -367,21 +367,21 @@ class Manager:
         })
 
 
-    """
-    Cancel job.
-    Method currenlty not supported.
-    """
     def cancel(self, names):
+        """
+        Cancel job.
+        Method currenlty not supported.
+        """
         raise errors.InternalError('Request not implemented')
 
 
-    """
-    Finish QCG PJM and disconnect.
-
-    Raises:
-        see __sendAndValidateResult, __disconnect
-    """
     def finish(self):
+        """
+        Finish QCG PJM and disconnect.
+
+        Raises:
+            see __sendAndValidateResult, __disconnect
+        """
         self.__assureConnected()
 
         self.__zmqSock.send(str.encode(json.dumps({
@@ -394,25 +394,25 @@ class Manager:
         self.__disconnect()
 
 
-    """
-    Wait for finish of specific jobs.
-    This method waits until all specified jobs finish its execution (successfully or not).
-    The QCG PJM is periodically polled about status of not finished jobs. The poll interval (2 sec by
-    default) can be changed by defining a 'poll_delay' key with appropriate value (in seconds) in
-    configuration of constructor.
-
-    Args:
-        names (list, str) - a list of job names
-
-    Returns:
-        dict - a map with job names and their terminal status
-
-    Raises:
-        InternalError - in case of unexpected response
-        ConnectionError - in case of connection problems
-        see status
-    """
     def wait4(self, names):
+        """
+        Wait for finish of specific jobs.
+        This method waits until all specified jobs finish its execution (successfully or not).
+        The QCG PJM is periodically polled about status of not finished jobs. The poll interval (2 sec by
+        default) can be changed by defining a 'poll_delay' key with appropriate value (in seconds) in
+        configuration of constructor.
+
+        Args:
+            names (list, str) - a list of job names
+
+        Returns:
+            dict - a map with job names and their terminal status
+
+        Raises:
+            InternalError - in case of unexpected response
+            ConnectionError - in case of connection problems
+            see status
+        """
         if isinstance(names, str):
             jNames = [ names ]
         else:
@@ -449,23 +449,23 @@ class Manager:
 
 
 
-    """
-    Wait for finish of all submited jobs.
-    This method waits until all specified jobs finish its execution (successfully or not).
-    See 'wait4'.
-    """
     def wait4all(self):
+        """
+        Wait for finish of all submited jobs.
+        This method waits until all specified jobs finish its execution (successfully or not).
+        See 'wait4'.
+        """
         self.wait4(self.list().names())
 
 
-    """
-    Check if status of a job is a terminal status.
-
-    Args:
-        status (str) - a job status
-
-    Returns:
-        bool - true if a given status is a terminal status, false elsewhere.
-    """
     def isStatusFinished(self, status):
+        """
+        Check if status of a job is a terminal status.
+
+        Args:
+            status (str) - a job status
+
+        Returns:
+            bool - true if a given status is a terminal status, false elsewhere.
+        """
         return status in [ 'SUCCEED', 'FAILED', 'CANCELED', 'OMITTED' ]
