@@ -9,9 +9,9 @@ setup(
 	author_email="pkopta@man.poznan.pl",
 
 	#packages=["qcg"],
-	packages=["qcg.appscheduler"],
+	packages=["qcg.appscheduler", "qcg.appscheduler.api"],
 
-	url="http://dokumentacja",
+	url="http://github.com/vecma-project/QCG-PilotJob",
 
 	description="Manage many jobs inside one allocation",
 
