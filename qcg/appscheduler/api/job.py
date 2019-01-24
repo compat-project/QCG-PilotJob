@@ -230,7 +230,7 @@ class Jobs:
             jName (str) - job name
             jData (dict) - job attributes in standard format
         """
-        self.__list[jName] = { 'idx': self.jobIdx, 'data': jData }
+        self.__list[jName] = { 'idx': self.__jobIdx, 'data': jData }
         self.__jobIdx += 1
 
 
