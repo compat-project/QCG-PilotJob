@@ -69,6 +69,10 @@ class Jobs:
             if not typeValid:
                 raise InvalidJobDescriptionError("Invalid attribute '%s' type '%" % (attr, type(attrs[attr])))
 
+        if 'after' in attrs and isinstance(attrs['after'], str):
+            # convert after string to single element list
+            attrs['after'] = [ attrs['after'] ]
+
         for reqAttr in JOB_TOP_ATTRS:
             if JOB_TOP_ATTRS[reqAttr]['req'] and reqAttr not in attrs:
                 raise InvalidJobDescriptionError("Required attribute '%s' not defined" % reqAttr)
