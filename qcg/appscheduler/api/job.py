@@ -36,6 +36,7 @@ class Jobs:
 
     def __init__(self):
         self.__list = {}
+        self.__jobIdx = 0
 
 
     """
@@ -214,9 +215,23 @@ class Jobs:
                 data = dAttrs
 
         self.__validateSmplJob(data)
-        self.__list[data['name']] = self.__convertSimpleToStd(data)
+        self.__appendJob(data['name'], self.__convertSimpleToStd(data))
 
         return self
+
+
+    def __appendJob(self, jName, jData):
+    """
+    Append a new job to internal list.
+    All jobs should be appended by this function, which also put each of the job the index,
+    which will be used to return ordered list of jobs.
+
+    Args:
+        jName (str) - job name
+        jData (dict) - job attributes in standard format
+    """
+        self.__list[jName] = { 'idx': self.jobIdx, 'data': jData }
+        self.__jobIdx += 1
 
 
     """
@@ -241,7 +256,7 @@ class Jobs:
                 data = dAttrs
 
         self.__validateStdJob(data)
-        self.__list[data['name']] = data
+        self.__appendJob(data['name'], data)
 
         return self
 
@@ -270,13 +285,30 @@ class Jobs:
 
 
     """
+    Return a list with job names in group in order they were appended.
+    """
+    def orderedJobNames(self):
+        return [j[0] for j in sorted(list(self.__list.items()), key=lambda j: j[1]['idx'])]
+
+
+    """
     Return job descriptions in format acceptable by the QCG-PJM
 
     Returns:
         list - a list of jobs in the format acceptable by the QCG PJM (standard format)
     """
     def jobs(self):
-        return list(self.__list.values())
+        return [j['jdata'] for j in list(self.__list.values())]
+
+
+    """
+    Return job descriptions in format acceptable by the QCG-PJM in order they were appended.
+
+    Returns:
+        list - a list of jobs in the format acceptable by the QCG PJM (standard format)
+    """
+    def orderedJobs(self):
+        return [j['data'] for j in sorted(list(self.__list.values()), key=lambda j: j['idx'])]
 
 
     """
@@ -298,7 +330,7 @@ class Jobs:
                     if name in self.__list:
                         raise InvalidJobDescriptionError('Job "%s" already defined"' % (name))
 
-                    self.__list[name] = job
+                    self.__appendJob(name, job)
         except QCGPJMAError as qe:
             raise qe
         except Exception as e:
@@ -317,6 +349,6 @@ class Jobs:
     def saveToFile(self, filePath):
         try:
             with open(filePath, 'w') as f:
-                f.write(json.dumps(self.jobs(), indent=2))
+                f.write(json.dumps(self.orderedJobs(), indent=2))
         except Exception as e:
             raise FileError('File to open/write file "%s": %s', filepath, e.args[0])

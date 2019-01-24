@@ -244,7 +244,7 @@ class Manager:
     def submit(self, jobs):
         data = self.__sendAndValidateResult({
             "request": "submit",
-            "jobs": jobs.jobs()
+            "jobs": jobs.orderedJobs()
         })
 
         if 'submitted' not in data or 'jobs' not in data:
