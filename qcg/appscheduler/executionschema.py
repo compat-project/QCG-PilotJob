@@ -2,6 +2,8 @@ import os
 import logging
 
 from qcg.appscheduler.errors import *
+from qcg.appscheduler.slurmenv import parse_slurm_resources, in_slurm_allocation
+from qcg.appscheduler.localenv import parse_local_resources
 
 
 class ExecutionSchema:
@@ -11,10 +13,15 @@ class ExecutionSchema:
         if name not in __SCHEMAS__:
             raise InternalError('Invalid execution schema name: %s' % name)
 
+        logging.info('execution schema {}'.format(name))
+
         return __SCHEMAS__[name](config)
 
-    def __init__(self):
-        pass
+    def __init__(self, config):
+        self.config = config
+
+    def parseResources(self):
+        raise NotImplementedError()
 
     def preprocess(self, exJob):
         pass
@@ -24,84 +31,12 @@ class SlurmExecution(ExecutionSchema):
     EXEC_NAME = 'slurm'
 
     def __init__(self, config):
-        super(SlurmExecution, self).__init__()
+        super(SlurmExecution, self).__init__(config)
 
-    def __mergePerNodeSpec(self, strList):
-        prev_value = None
-        result = [ ]
-        n = 1
-
-        for t in strList.split(','):
-            if prev_value is not None:
-                if prev_value == t:
-                    n += 1
-                else:
-                    if n > 1:
-                        result.append("%s(x%d)" % (prev_value, n))
-                    else:
-                        result.append(prev_value)
-
-                    prev_value = t
-                    n = 1
-            else:
-                prev_value = t
-                n = 1
-
-        if prev_value is not None:
-            if n > 1:
-                result.append("%s(x%d)" % (prev_value, n))
-            else:
-                result.append(prev_value)
-
-        return ','.join([str(el) for el in result])
-
-
-    def __checkSameCores(self, tasksList):
-        same = None
-
-        for t in tasksList.split(','):
-            if same is not None:
-                if t != same:
-                    return None
-            else:
-                same = t
-
-        return same
-
+    def parseResources(self):
+        return parse_slurm_resources(self.config)
 
     def preprocess(self, exJob):
-        merged_tasks_per_node = self.__mergePerNodeSpec(exJob.tasks_per_node)
-
-        exJob.env.update({
-            'SLURM_NNODES': str(exJob.nnodes),
-            'SLURM_NODELIST': exJob.nlist,
-            'SLURM_NPROCS': str(exJob.ncores),
-            'SLURM_NTASKS': str(exJob.ncores),
-            'SLURM_JOB_NODELIST': exJob.nlist,
-            'SLURM_JOB_NUM_NODES': str(exJob.nnodes),
-            'SLURM_STEP_NODELIST': exJob.nlist,
-            'SLURM_STEP_NUM_NODES': str(exJob.nnodes),
-            'SLURM_STEP_NUM_TASKS': str(exJob.ncores),
-            'SLURM_JOB_CPUS_PER_NODE': merged_tasks_per_node,
-            'SLURM_STEP_TASKS_PER_NODE': merged_tasks_per_node,
-            'SLURM_TASKS_PER_NODE': merged_tasks_per_node 
-        })
-
-        same_cores = self.__checkSameCores(exJob.tasks_per_node)
-        if same_cores is not None:
-            exJob.env.update({ 'SLURM_NTASKS_PER_NODE': same_cores })
-
-        # create host file
-        hostfile = os.path.join(exJob.wdPath, ".%s.hostfile" % exJob.job.name)
-        with open(hostfile, 'w') as f:
-            for node in exJob.allocation.nodeAllocations:
-                for i in range(0, node.cores):
-                    f.write("%s\n" % node.node.name)
-
-        exJob.env.update({
-            'SLURM_HOSTFILE': hostfile
-        })
-
         job_exec = exJob.jobExecution.exec
         job_args = exJob.jobExecution.args
 
@@ -137,13 +72,28 @@ class DirectExecution(ExecutionSchema):
     EXEC_NAME = 'direct'
 
     def __init__(self, config):
-        super(DirectExecution, self).__init__()
+        super(DirectExecution, self).__init__(config)
+
+    def parseResources(self):
+        return parse_local_resources(self.config)
 
     def preprocess(self, exJob):
         pass
 
 
+def __detect_execution_schema(config):
+    logging.info('determining execution schema ...')
+
+    if in_slurm_allocation():
+        logging.info('selected slurm execution schema ...')
+        return SlurmExecution(config)
+    else:
+        logging.info('selected direct execution schema ...')
+        return DirectExecution(config)
+    
+
 __SCHEMAS__ = {
+    'auto': __detect_execution_schema,
     SlurmExecution.EXEC_NAME: SlurmExecution,
     DirectExecution.EXEC_NAME: DirectExecution
 }
