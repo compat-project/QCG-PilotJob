@@ -10,6 +10,8 @@ from string import Template
 from qcg.appscheduler.executionschema import ExecutionSchema
 from qcg.appscheduler.joblist import JobExecution
 from qcg.appscheduler.zmqinterface import ZMQInterface
+from qcg.appscheduler.config import Config
+from qcg.appscheduler.environment import getEnvironment
 
 
 class ExecutorFinish:
@@ -18,7 +20,7 @@ class ExecutorFinish:
 
 class ExecutorJob:
 
-    def __init__(self, executor, schema, allocation, job):
+    def __init__(self, executor, schema, envs, allocation, job):
         assert allocation is not None
         assert job is not None
         assert schema is not None
@@ -26,6 +28,7 @@ class ExecutorJob:
         self.allocation = allocation
         self.job = job
         self.__schema = schema
+        self.__envs = envs
         self.id = uuid.uuid4()
         self.__processTask = None
         self.__stdinF = None
@@ -68,12 +71,12 @@ class ExecutorJob:
         else:
             return json.loads(Template(json.dumps(data)).safe_substitute(self.__jobVars))
 
-    """
-    Set a job's working directory based on execution description and root working directory of executor.
-    An attribute 'wdPath' is set as an output of this method and directory is created
-    """
 
     def __setupSandbox(self):
+        """
+        Set a job's working directory based on execution description and root working directory of executor.
+        An attribute 'wdPath' is set as an output of this method and directory is created
+        """
         if self.jobExecution.wd is None:
             self.wdPath = self.__executor.base_wd
         else:
@@ -87,40 +90,39 @@ class ExecutorJob:
             logging.info("creating directory for job %s at %s" % (self.job.name, self.wdPath))
             os.makedirs(self.wdPath)
 
-    """
-    Setup an execution environment.
-    Mostly environment variables are set
-    """
 
     def __prepareEnv(self):
+        """
+        Setup an execution environment.
+        Mostly environment variables are set
+        """
         if self.jobExecution.env is not None:
             self.env.update(self.jobExecution.env)
-
-        self.env.update({
-            'QCG_PM_NNODES': str(self.nnodes),
-            'QCG_PM_NODELIST': self.nlist,
-            'QCG_PM_NPROCS': str(self.ncores),
-            'QCG_PM_NTASKS': str(self.ncores),
-            'QCG_PM_STEP_ID': str(self.id),
-            'QCG_PM_TASKS_PER_NODE': self.tasks_per_node
-        })
 
         if hasattr(self.__executor, 'zmq_address'):
             self.env.update({
                 'QCG_PM_ZMQ_ADDRESS': self.__executor.zmq_address
             })
 
-    """
-    Prepare environment for job execution.
-    Setup sandbox, environment variables and modification of exec according to the execution schema
-    is made
-    """
+        logging.info('updating job\'s environment from {} objects'.format(str(self.__envs)))
+        if self.__envs:
+            for env in self.__envs:
+                env.updateEnv(self, self.env)
+
+        logging.info('environment after update: {}'.format(str(self.env)))
+
 
     def preprocess(self):
+        """
+        Prepare environment for job execution.
+        Setup sandbox, environment variables and modification of exec according to the execution schema
+        is made
+        """
         self.__setupSandbox()
         self.__prepareEnv()
 
         self.__schema.preprocess(self)
+
 
     async def __launch(self):
         je = self.jobExecution
@@ -159,7 +161,7 @@ class ExecutorJob:
 
             await process.wait()
 
-            await asyncio.sleep(1)
+#            await asyncio.sleep(1)
 
             exitCode = process.returncode
         except Exception as e:
@@ -204,77 +206,79 @@ class ExecutorJob:
 
 
 class Executor:
-    EXECUTOR_WD = 'executor.wd'
-    EXECUTION_SCHEMA = 'direct'
-
-    CONF_DEFAULT = {
-        EXECUTOR_WD: '.',
-        EXECUTION_SCHEMA: 'direct'
-    }
-
-    """
-    Execute jobs inside allocations.
-    """
-
     def __init__(self, manager, config):
+        """
+        Execute jobs inside allocations.
+        """
         self.__manager = manager
         self.__notFinished = {}
         self.__config = config
 
-        self.base_wd = abspath(config.get(self.EXECUTOR_WD, self.CONF_DEFAULT[self.EXECUTOR_WD]))
-        self.schemaName = config.get(self.EXECUTION_SCHEMA, self.CONF_DEFAULT[self.EXECUTION_SCHEMA])
+        self.base_wd = abspath(Config.EXECUTOR_WD.get(config))
+        self.schemaName = Config.EXECUTION_SCHEMA.get(config)
 
         logging.info("executor base working directory set to %s" % (self.base_wd))
 
         self.schema = ExecutionSchema.GetSchema(self.schemaName, config)
 
-        if ZMQInterface.CONF_ZMQ_IFACE_ADDRESS in config:
-            self.zmq_address = config[ZMQInterface.CONF_ZMQ_IFACE_ADDRESS]
+        envsSet = set([getEnvironment('common')])
+        for envName in set([env.lower() for env in Config.ENVIRONMENT_SCHEMA.get(config).split(',') ]):
+            if envName:
+                envsSet.add(getEnvironment(envName))
+        logging.info('job\' environment contains {} elements'.format(str(envsSet)))
+        self.jobEnvs = [ env() for env in envsSet ]
+
+        if manager.ifaces:
+            logging.info('defined ifaces {}'.format(str(manager.ifaces)))
+            zmqiface = next((iface for iface in manager.ifaces if isinstance(iface, ZMQInterface)), None)
+
+            if zmqiface:
+                self.zmq_address = zmqiface.real_address
 
 
-    """
-    Asynchronusly execute job inside allocation.
-    After successfull prepared environment, a new task will be created
-    for the job, this function call will return before job finish.
+    def getResources(self):
+        """
+        Return available resources according to chosen execution schema.
+        """
+        return self.schema.parseResources()
 
-    Args:
-        allocation (Allocation): allocation of resources for job
-        job (Job): job execution details
-    """
+
 
     def execute(self, allocation, job):
+        """
+        Asynchronusly execute job inside allocation.
+        After successfull prepared environment, a new task will be created
+        for the job, this function call will return before job finish.
+
+        Args:
+            allocation (Allocation): allocation of resources for job
+            job (Job): job execution details
+        """
         logging.info("executing job %s" % (job.name))
 
         job.appendRuntime({'allocation': allocation.description()})
 
         try:
-            execTask = ExecutorJob(self, self.schema, allocation, job)
+            execTask = ExecutorJob(self, self.schema, self.jobEnvs, allocation, job)
             self.__notFinished[execTask.id] = execTask
             execTask.run()
         except Exception as e:
             logging.exception("Failed to launch job %s" % (job.name))
             self.__manager.jobFinished(job, allocation, -1, str(e))
 
-    """
-    Wait for all job finish execution.
-    """
 
-    async def waitForUnfinished(self):
-        while len(self.__notFinished) > 0:
-            logging.info("Still %d unfinished jobs" % (len(self.__notFinished)))
+    def allJobsFinished(self):
+        return len(self.__notFinished) == 0
 
-            if len(self.__notFinished) > 0:
-                await asyncio.sleep(1)
-
-    """
-    Signal job finished.
-    This function should be called by a task which created a process for job.
-
-    Args:
-        task (ExecutorJob): task data
-    """
 
     def taskFinished(self, task):
+        """
+        Signal job finished.
+        This function should be called by a task which created a process for job.
+
+        Args:
+            task (ExecutorJob): task data
+        """
         del self.__notFinished[task.id]
 
         if self.__manager is not None:
