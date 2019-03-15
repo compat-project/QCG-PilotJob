@@ -11,23 +11,23 @@ from qcg.appscheduler.iterscheduler import IterScheduler
 
 
 class Request:
-    '''
-    Parse request.
-
-    Args:
-        data (dict): parsed data
-
-    Returns:
-        req (Request): request object
-        env (dict): some additional environment data, e.g. resources info used
-            during parsing 'SubmitReq'
-
-    Raises:
-        InvalidRequest: in case of wrong or unknown request
-    '''
 
     @classmethod
     def Parse(cls, data, env=None):
+        """
+        Parse request.
+
+        Args:
+            data (dict): parsed data
+
+        Returns:
+            req (Request): request object
+            env (dict): some additional environment data, e.g. resources info used
+                during parsing 'SubmitReq'
+
+        Raises:
+            InvalidRequest: in case of wrong or unknown request
+        """
         if not isinstance(data, dict) or 'request' not in data or not data['request']:
             raise InvalidRequest('Invalid request')
 

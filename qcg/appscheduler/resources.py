@@ -31,17 +31,17 @@ class Node:
     def __str__(self):
         return "%s %d (%d used)" % (self.__name, self.__totalCores, self.__usedCores)
 
-    """
-    Allocate maximum number of cores on a node.
-
-    Args:
-        cores (int): maximum number of cores to allocate
-
-    Returns:
-        int: number of allocated cores
-    """
 
     def allocate(self, cores):
+        """
+        Allocate maximum number of cores on a node.
+
+        Args:
+            cores (int): maximum number of cores to allocate
+
+        Returns:
+            int: number of allocated cores
+        """
         allocated = min(cores, self.free)
         self.__usedCores += allocated
 
@@ -50,18 +50,18 @@ class Node:
 
         return allocated
 
-    """
-    Release specified number of cores on a node.
-
-    Args:
-        cores (int): number of cores to release
-
-    Raises:
-        InvalidResourceSpec: when number of cores to release exceeds number of of
-          used cores.
-    """
 
     def release(self, cores):
+        """
+        Release specified number of cores on a node.
+
+        Args:
+            cores (int): number of cores to release
+
+        Raises:
+            InvalidResourceSpec: when number of cores to release exceeds number of of
+              used cores.
+        """
         if cores > self.__usedCores:
             raise InvalidResourceSpec()
 
@@ -113,40 +113,40 @@ class Resources:
     def __getFreeCores(self):
         return self.__totalCores - self.__usedCores
 
-    """
-    Function called by the node when some cores has been allocated.
-    This function should track number of used cores in Resources statistics.
-
-    Args:
-        cores (int): number of allocated cores
-    """
 
     def nodeCoresAllocated(self, cores):
+        """
+        Function called by the node when some cores has been allocated.
+        This function should track number of used cores in Resources statistics.
+
+        Args:
+            cores (int): number of allocated cores
+        """
         self.__usedCores += cores
 
-    """
-    Function called by the node when some cores has been released.
-    This function should track number of used cores in Resources statistics.
-
-    Args:
-        cores (int): number of released cores
-    """
 
     def nodeCoresReleased(self, cores):
+        """
+        Function called by the node when some cores has been released.
+        This function should track number of used cores in Resources statistics.
+
+        Args:
+            cores (int): number of released cores
+        """
         self.__usedCores -= cores
 
-    """
-    Relase allocated resources.
-
-    Args:
-        alloc (Allocation): allocation to release
-
-    Raises:
-        InvalidResourceSpec: when number of cores to release on a node is greater 
-          than number of used cores.
-    """
 
     def releaseAllocation(self, alloc):
+        """
+        Relase allocated resources.
+
+        Args:
+            alloc (Allocation): allocation to release
+
+        Raises:
+            InvalidResourceSpec: when number of cores to release on a node is greater
+              than number of used cores.
+        """
         for node in alloc.nodeAllocations:
             node.node.release(node.cores)
 

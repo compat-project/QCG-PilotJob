@@ -41,17 +41,17 @@ class ValidateResponse:
 
 
 class Receiver:
-    '''
-    Receiver listen on interfaces, valide requests and pass them to manager.
-    Some requests, e.g. job status and some statistics may be handled without
-    communication with manager.
-
-    Args:
-        manager (Manager): jobs manager
-        ifaces (Interface[]): list of interfaces
-    '''
 
     def __init__(self, manager, ifaces):
+        """
+        Receiver listen on interfaces, valide requests and pass them to manager.
+        Some requests, e.g. job status and some statistics may be handled without
+        communication with manager.
+
+        Args:
+            manager (Manager): jobs manager
+            ifaces (Interface[]): list of interfaces
+        """
         assert ifaces is not None and isinstance(ifaces, list) and len(ifaces) > 0
 
         self.__manager = manager
@@ -75,11 +75,11 @@ class Receiver:
         self.__finishTask = None
         self.isFinished = False
 
-    '''
-    Handling an interface.
-    '''
 
     async def __listen(self, iface):
+        """
+        Handling an interface.
+        """
         logging.info("Listener on interface %s started" % (iface.__class__.__name__))
 
         while True:
@@ -115,20 +115,20 @@ class Receiver:
             except Exception as e:
                 logging.exception("Failed to process request from interface %s" % (iface.__class__.__name__))
 
-    '''
-    Handle single request.
-    The proper handler for given request type should be found (in handlers map) and
-    called.
-
-    Args:
-        iface (Interface): interface which received request
-        request (Request): parsed request data
-
-    Returns:
-        Response: response that should be returned to user
-    '''
 
     async def __handleRequest(self, iface, request):
+        """
+        Handle single request.
+        The proper handler for given request type should be found (in handlers map) and
+        called.
+
+        Args:
+            iface (Interface): interface which received request
+            request (Request): parsed request data
+
+        Returns:
+            Response: response that should be returned to user
+        """
         if request.__class__ not in self.__handlers:
             logging.error("Failed to handle request: unknown request class '%s'" %
                           (request.__class__.__name__))
@@ -140,19 +140,19 @@ class Receiver:
                 logging.exception('Failed to process request')
                 return Response.Error('Failed to process request')
 
-    '''
-    Validate incoming request.
-    In this first step only form of JSON format is validated along with some basic checks.
-    More specific validation should be provided on further steps.
-
-    Args:
-        reqData (dict): request data
-
-    Returns:
-        ValidateResponse: validation result
-    '''
 
     def __validate(self, reqData):
+        """
+        Validate incoming request.
+        In this first step only form of JSON format is validated along with some basic checks.
+        More specific validation should be provided on further steps.
+
+        Args:
+            reqData (dict): request data
+
+        Returns:
+            ValidateResponse: validation result
+        """
         logging.info("Validating request")
 
         response = ValidateResponse()
@@ -176,13 +176,13 @@ class Receiver:
         #	cancelJob, statusJob job names exists or submitJob job name uniqness
         return response
 
-    '''
-    Start listening on interfaces.
-    This method creates asynchronic tasks and returns. To stop created tasks, method 'stop'
-    must be called.
-    '''
 
     def run(self):
+        """
+        Start listening on interfaces.
+        This method creates asynchronic tasks and returns. To stop created tasks, method 'stop'
+        must be called.
+        """
         # are old tasks should be stoped here ?
         self.__tasks = []
 
@@ -199,11 +199,11 @@ class Receiver:
 
         logging.info("Successfully initialized %d interfaces" % (len(self.__tasks)))
 
-    '''
-    Stop all listening on interfaces.
-    '''
 
     def stop(self):
+        """
+        Stop all listening on interfaces.
+        """
         logging.info("canceling %d listener tasks" % len(self.__tasks))
         for task in self.__tasks:
             if task is not None:
@@ -212,19 +212,19 @@ class Receiver:
 
         self.__tasks = []
 
-    '''
-    Handlder for control commands.
-    Control commands are used to configure system during run-time.
-
-    Args:
-        iface (Interface): interface which received request
-        request (ControlReq): control request data
-
-    Returns:
-        Response: the response data
-    '''
 
     async def __handleControlReq(self, iface, request):
+        """
+        Handlder for control commands.
+        Control commands are used to configure system during run-time.
+
+        Args:
+            iface (Interface): interface which received request
+            request (ControlReq): control request data
+
+        Returns:
+            Response: the response data
+        """
         logging.info("Handling control request from %s iface" % (iface.__class__.__name__))
 
         if request.command == ControlReq.REQ_CONTROL_CMD_FINISHAFTERALLTASKSDONE:
@@ -235,20 +235,20 @@ class Receiver:
 
         return Response.Ok('%s command accepted' % (request.command))
 
-    '''
-    Handlder for job submission.
-    Before job will be submited the in-depth validation will be proviede, e.g.: job name
-    uniqness.
-
-    Args:
-        iface (Interface): interface which received request
-        request (SubmitJobReqest): submit request data
-
-    Returns:
-        Response: the response data
-    '''
 
     async def __handleSubmitReq(self, iface, request):
+        """
+        Handlder for job submission.
+        Before job will be submited the in-depth validation will be proviede, e.g.: job name
+        uniqness.
+
+        Args:
+            iface (Interface): interface which received request
+            request (SubmitJobReqest): submit request data
+
+        Returns:
+            Response: the response data
+        """
         logging.info("Handling submit request from %s iface" % (iface.__class__.__name__))
 
         for job in request.jobs:
@@ -267,17 +267,17 @@ class Receiver:
 
         return Response.Ok('%d jobs submitted' % (len(request.jobs)), data = data)
 
-    '''
-    Handler for job status checking.
-
-    Args:
-        iface (Interface): interface which received request
-        request (JobStatusReq): job status request
-
-    Returns:
-        Response: the response data
-    '''
     async def __handleJobStatusReq(self, iface, request):
+        """
+        Handler for job status checking.
+
+        Args:
+            iface (Interface): interface which received request
+            request (JobStatusReq): job status request
+
+        Returns:
+            Response: the response data
+        """
         logging.info("Handling job status request from %s iface" % (iface.__class__.__name__))
 
         result = { }
@@ -299,17 +299,17 @@ class Receiver:
         return Response.Ok(data = { 'jobs': result })
 
 
-    '''
-    Handler for job info checking.
-
-    Args:
-        iface (Interface): interface which received request
-        request (JobInfoReq): job status request
-
-    Returns:
-        Response: the response data
-    '''
     async def __handleJobInfoReq(self, iface, request):
+        """
+        Handler for job info checking.
+
+        Args:
+            iface (Interface): interface which received request
+            request (JobInfoReq): job status request
+
+        Returns:
+            Response: the response data
+        """
         logging.info("Handling job info request from %s iface" % (iface.__class__.__name__))
 
         result = { }
@@ -445,8 +445,19 @@ class Receiver:
             'when': '%ds' % delay,
         })
 
+
     async def __waitForAllJobs(self):
-        logging.info("waiting for all jobs to finish")
+        logging.info("waiting for all jobs to finish (the new method)")
+
+        while not self.__manager.allJobsFinished():
+            await asyncio.sleep(0.2)
+
+        self.isFinished = True
+
+
+
+    async def __waitForAllJobsOriginal(self):
+        logging.info("waiting for all jobs to finish (the old method)")
 
         notFinished = 1
 
