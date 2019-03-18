@@ -10,6 +10,7 @@ setup(
 
 	#packages=["qcg"],
 	packages=["qcg.appscheduler"],
+        package_dir={'qcg.appscheduler': 'src/qcg/appscheduler'},
 
 	url="http://dokumentacja",
 
