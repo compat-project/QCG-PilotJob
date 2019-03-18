@@ -17,6 +17,20 @@ From the scheduling system perspective, QCG PilotJob Manager is seen as a single
 
 To allow user's to test their scenarious, the QCG PilotJob Manager supports *local* execution mode, in which all job's are executed on local machine and doesn't require any scheduling system allocation.
 
+## INSTALLATION
+The QCG PilotJob Manager requires Python3.
+
+To create private virtual environment for installed packages, type following commands:
+```bash
+virtualenv venv
+. venv/bin/activate
+```
+
+To install QCG PilotJob Manager directly from github.com into virtual environment, type following command:
+```bash
+pip install --upgrade git+https://github.com/vecma-project/QCG-PilotJob.git
+```
+
 ## MODULES
 QCG Pilot Job Manager consists of the following internal functional modules:
  - **Queue** - the queue containing jobs waiting for resources,
