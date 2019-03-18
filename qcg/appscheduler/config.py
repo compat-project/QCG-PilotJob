@@ -48,6 +48,16 @@ class Config(Enum):
 
     }
 
+    REPORT_FORMAT = {
+        'name': 'report.format',
+        'default': 'text'
+    }
+
+    REPORT_FILE = {
+        'name': 'report.file',
+        'default': 'jobs.report'
+    }
+
     def get(self, config):
         if 'get' in self.value:
             return self.value['get'](config)
