@@ -25,5 +25,3 @@ setup(
         'console_scripts': ['qcg-pm-service=qcg.appscheduler.command_line:service'],
     },
 )
-
-
