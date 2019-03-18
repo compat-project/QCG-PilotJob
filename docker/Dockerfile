@@ -25,5 +25,5 @@ WORKDIR /srv/
 COPY reqs /srv/reqs
 RUN . /srv/venv/bin/activate && pip install -U --no-cache-dir -r /srv/reqs/requirements.txt
 
-RUN mkdir -p /srv/src/qcg
-COPY qcg /srv/src/qcg/
+RUN mkdir -p /srv/src/
+COPY src/ /srv/src/

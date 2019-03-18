@@ -5,6 +5,6 @@ services:
     restart: unless-stopped
     image: qcg-pilotjob:develop
     volumes:
-      - "${REPO_DIR}/qcg:/srv/src/qcg"
+      - "${REPO_DIR}/src:/srv/src"
       - "${REPO_DIR}/example-scripts:/srv/example-scripts"
 
