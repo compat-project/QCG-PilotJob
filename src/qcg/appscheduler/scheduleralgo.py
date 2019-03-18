@@ -10,35 +10,35 @@ class SchedulerAlgorithm:
     def __init__(self, resources=None):
         self.resources = resources
 
-    """
-    Validate if the resources has been set.
-
-    Raises:
-        InternalError: when resources has not been set
-    """
 
     def __checkResources(self):
+        """
+        Validate if the resources has been set.
+
+        Raises:
+            InternalError: when resources has not been set
+        """
         if self.resources is None:
             raise InternalError("Missing resources in scheduler algorithm")
 
-    """
-    Create allocation with maximum number of cores from given range.
-    The cores will be allocated in a linear method.
-
-    Args:
-        min_cores (int): minimum requested number of cores
-        max_cores (int): maximum requested number of cores
-
-    Returns:
-        Allocation: created allocation 
-        None: not enough free resources
-
-    Raises:
-        NotSufficientResources: when there are not enough resources avaiable
-        InvalidResourceSpec: when the min_cores < 0 or min_cores > max_cores
-    """
 
     def allocateCores(self, min_cores, max_cores=None):
+        """
+        Create allocation with maximum number of cores from given range.
+        The cores will be allocated in a linear method.
+
+        Args:
+            min_cores (int): minimum requested number of cores
+            max_cores (int): maximum requested number of cores
+
+        Returns:
+            Allocation: created allocation
+            None: not enough free resources
+
+        Raises:
+            NotSufficientResources: when there are not enough resources avaiable
+            InvalidResourceSpec: when the min_cores < 0 or min_cores > max_cores
+        """
         self.__checkResources()
 
         if max_cores == None:
@@ -73,19 +73,19 @@ class SchedulerAlgorithm:
 
         return allocation
 
-    """
-    Create allocation with specified number of entire nodes (will all available cores).
-
-    Args:
-        min_nodes (int): minimum number of nodes
-        max_nodes (int): maximum number of nodes
-
-    Returns:
-        Allocation: created allocation
-        None: not enough free resources
-    """
 
     def __allocateEntireNodes(self, min_nodes, max_nodes):
+        """
+        Create allocation with specified number of entire nodes (will all available cores).
+
+        Args:
+            min_nodes (int): minimum number of nodes
+            max_nodes (int): maximum number of nodes
+
+        Returns:
+            Allocation: created allocation
+            None: not enough free resources
+        """
         allocation = Allocation()
 
         for node in self.resources.nodes:
@@ -108,22 +108,22 @@ class SchedulerAlgorithm:
             self.resources.releaseAllocation(allocation)
             return None
 
-    """
-    Create allocation with specified number of nodes, where on each node should be
-    given number of allocated cores.
-
-    Args:
-        min_nodes (int): minimum number of nodes
-        max_nodes (int): maximum number of nodes
-        min_cores (int): minimum number of cores to allocate on each node
-        max_cores (int): maximum number of cores to allocate on each node
-
-    Returns:
-        Allocation: created allocation
-        None: not enough free resources
-    """
 
     def __allocateCoresOnNodes(self, min_nodes, max_nodes, min_cores, max_cores):
+        """
+        Create allocation with specified number of nodes, where on each node should be
+        given number of allocated cores.
+
+        Args:
+            min_nodes (int): minimum number of nodes
+            max_nodes (int): maximum number of nodes
+            min_cores (int): minimum number of cores to allocate on each node
+            max_cores (int): maximum number of cores to allocate on each node
+
+        Returns:
+            Allocation: created allocation
+            None: not enough free resources
+        """
         allocation = Allocation()
 
         #		logging.info("allocating (%d,%d) nodes with (%d,%d) cores" %
@@ -153,22 +153,22 @@ class SchedulerAlgorithm:
             self.resources.releaseAllocation(allocation)
             return None
 
-    """
-    Create allocation for job with given resource requirements.
-
-    Args:
-        r (JobResources): job's resource requirements
-
-    Returns:
-        Allocation: created allocation 
-        None: not enough free resources
-
-    Raises:
-        NotSufficientResources: when there are not enough resources avaiable
-        InvalidResourceSpec: when resource requirements are not valid
-    """
 
     def allocateJob(self, r):
+        """
+        Create allocation for job with given resource requirements.
+
+        Args:
+            r (JobResources): job's resource requirements
+
+        Returns:
+            Allocation: created allocation
+            None: not enough free resources
+
+        Raises:
+            NotSufficientResources: when there are not enough resources avaiable
+            InvalidResourceSpec: when resource requirements are not valid
+        """
         self.__checkResources()
 
         if r is None or not isinstance(r, JobResources):

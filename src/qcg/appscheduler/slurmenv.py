@@ -32,7 +32,7 @@ def parse_slurm_job_cpus(cpus):
     return result
 
 
-def parse_slurm_resources():
+def parse_slurm_resources(config):
     if 'SLURM_NODELIST' not in os.environ:
         raise SlurmEnvError("missing SLURM_NODELIST settings")
 
@@ -58,3 +58,7 @@ def parse_slurm_resources():
 
     logging.debug("generated %d nodes" % len(nodes))
     return Resources(nodes)
+
+
+def in_slurm_allocation():
+    return 'SLURM_NODELIST' in os.environ and 'SLURM_TASKS_PER_NODE' in os.environ

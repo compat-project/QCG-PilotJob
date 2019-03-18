@@ -9,11 +9,10 @@ from qcg.appscheduler.scheduler import Scheduler
 
 
 class SchedulingJob:
-    """
-    Data necessary for scheduling job.
-    """
-
     def __init__(self, manager, job):
+        """
+        Data necessary for scheduling job.
+        """
         assert job is not None
         assert manager is not None
 
@@ -32,12 +31,12 @@ class SchedulingJob:
 
             self.checkDependencies()
 
-    """
-    Update dependency state.
-    Check all dependent jobs and update job's ready (and possible feasible) status.
-    """
 
     def checkDependencies(self):
+        """
+        Update dependency state.
+        Check all dependent jobs and update job's ready (and possible feasible) status.
+        """
         logging.info("updating dependencies of job %s ..." % self.job.name)
 
         if not self.isReady:
@@ -63,28 +62,28 @@ class SchedulingJob:
             logging.info("#%d dependency (%s feasible) jobs after update of job %s" % (
             len(self.__afterJobs), str(self.__isFeasible), self.job.name))
 
-    """
-    Check if job can be executed.
-    Job that dependency will never be satisfied (dependent jobs failed) should never be run.
-
-    Returns:
-        bool: does the job can be run in future
-    """
 
     @property
     def isFeasible(self):
+        """
+        Check if job can be executed.
+        Job that dependency will never be satisfied (dependent jobs failed) should never be run.
+
+        Returns:
+            bool: does the job can be run in future
+        """
         return self.__isFeasible
 
-    """
-    Check if job can be scheduled and executed.
-    Jobs with not met dependencies can not be scheduled.
-
-    Returns:
-        bool: is job ready for scheduling and executing
-    """
 
     @property
     def isReady(self):
+        """
+        Check if job can be scheduled and executed.
+        Jobs with not met dependencies can not be scheduled.
+
+        Returns:
+            bool: is job ready for scheduling and executing
+        """
         return len(self.__afterJobs) == 0
 
 
@@ -96,34 +95,41 @@ class JobStateCB:
 
 
 class Manager:
-    """
-    Manager of jobs to execution.
-    The incoming jobs are scheduled and executed.
 
-    Args:
-        resources (Resources): available resources
-    """
+    def __init__(self, config={}, ifaces=[]):
+        """
+        Manager of jobs to execution.
+        The incoming jobs are scheduled and executed.
 
-    def __init__(self, resources, config={}):
-        assert resources != None
+        Args:
+            config - configuration
+        """
+        self.ifaces = ifaces
 
-        self.resources = resources
-        self.__scheduler = Scheduler(self.resources)
         self.__executor = Executor(self, config)
+        self.resources = self.__executor.getResources()
+
+        logging.info('available resources: {}'.format(self.resources))
+
+        self.__scheduler = Scheduler(self.resources)
         self.jobList = JobList()
 
         self.__scheduleQueue = []
 
         self.__jobStatesCbs = {}
 
-    """
-    Do schedule loop.
-    Get jobs from schedule queue, check if they have workflow dependency meet and if yes,
-    try to create allocation. The allocated job's are sent to executor.
 
-    """
+
+    def allJobsFinished(self):
+        return len(self.__scheduleQueue) == 0 and self.__executor.allJobsFinished()
+
 
     def __scheduleLoop(self):
+        """
+        Do schedule loop.
+        Get jobs from schedule queue, check if they have workflow dependency meet and if yes,
+        try to create allocation. The allocated job's are sent to executor.
+        """
         newScheduleQueue = []
 
         logging.info("scheduling loop with %d jobs in queue" % (len(self.__scheduleQueue)))
@@ -165,16 +171,16 @@ class Manager:
 
         self.__scheduleQueue = newScheduleQueue
 
-    """
-    Invoked to change job status.
-    Any notification should be called from this method.
-
-    Args:
-        job (Job): job that changed status
-        status (JobState): target job state
-    """
 
     def __changeJobState(self, job, state, errorMsg=None):
+        """
+        Invoked to change job status.
+        Any notification should be called from this method.
+
+        Args:
+            job (Job): job that changed status
+            status (JobState): target job state
+        """
         job.state = state
 
         if errorMsg is not None:
@@ -182,18 +188,18 @@ class Manager:
 
         self.__fireJobStateNotifies(job.name, state)
 
-    """
-    Invoked to signal job finished.
-    Allocation made for the job should be released.
-
-    Args:
-        job (Job): job that finished
-        allocation (Allocation): allocation created for the job
-        exitCode (int): job exit code
-        errorMsg (str): an optional error message
-    """
 
     def jobFinished(self, job, allocation, exitCode, errorMsg):
+        """
+        Invoked to signal job finished.
+        Allocation made for the job should be released.
+
+        Args:
+            job (Job): job that finished
+            allocation (Allocation): allocation created for the job
+            exitCode (int): job exit code
+            errorMsg (str): an optional error message
+        """
         state = JobState.SUCCEED
 
         if exitCode != 0:
@@ -203,32 +209,32 @@ class Manager:
         self.__scheduler.releaseAllocation(allocation)
         self.__scheduleLoop()
 
-    """
-    Create task with callback functions call registered for job state changes.
-    A new asyncio task is created which call all registered callbacks in not defined order.
-
-    Args:
-        jobId (str): job identifier
-        state (JobState): new job status
-    """
 
     def __fireJobStateNotifies(self, jobId, state):
+        """
+        Create task with callback functions call registered for job state changes.
+        A new asyncio task is created which call all registered callbacks in not defined order.
+
+        Args:
+            jobId (str): job identifier
+            state (JobState): new job status
+        """
         if len(self.__jobStatesCbs) > 0:
             logging.info("notifies callbacks about %s job status change %s" % (jobId, state))
             self.__processTask = asyncio.ensure_future(self.__callCallbacks(
                 jobId, state, self.__jobStatesCbs.values()
             ))
 
-    """
-    Call job state change callback function with given arguments.
-
-    Args:
-        jobId (str): job identifier
-        state (JobState): new job status
-        cbs ([]function): callback functions
-    """
 
     async def __callCallbacks(self, jobId, state, cbs):
+        """
+        Call job state change callback function with given arguments.
+
+        Args:
+            jobId (str): job identifier
+            state (JobState): new job status
+            cbs ([]function): callback functions
+        """
         if cbs is not None:
             for cb in cbs:
                 try:
@@ -236,37 +242,37 @@ class Manager:
                 except Exception as e:
                     logging.exception("Callback function failed: %s" % (str(e)))
 
-    """
-    Unregister callback function for job state changes.
-
-    Args:
-        id (str): the callback function identifier returned by 'registerNotifier' function
-
-    Returns:
-        bool: true if function unregistered successfully, and false if given identifier
-           has not been found
-    """
 
     def unregisterNotifier(self, id):
+        """
+        Unregister callback function for job state changes.
+
+        Args:
+            id (str): the callback function identifier returned by 'registerNotifier' function
+
+        Returns:
+            bool: true if function unregistered successfully, and false if given identifier
+               has not been found
+        """
         if id in self.__jobStatesCbs:
             del self.__jobStatesCbs[id]
             return True
 
         return False
 
-    """
-    Register callback function for job state changes.
-    The registered function will be called for all job state changes.
-
-    Args:
-        jobStateCb (function): should accept two arguments - job name and new state
-
-    Returns:
-        str: identifier of registered callback, which can be used to unregister
-          callback or None if callback function is missing or is invalid
-    """
 
     def registerNotifier(self, jobStateCb, *args):
+        """
+        Register callback function for job state changes.
+        The registered function will be called for all job state changes.
+
+        Args:
+            jobStateCb (function): should accept two arguments - job name and new state
+
+        Returns:
+            str: identifier of registered callback, which can be used to unregister
+              callback or None if callback function is missing or is invalid
+        """
         if jobStateCb is not None:
             id = uuid.uuid4()
             self.__jobStatesCbs[id] = JobStateCB(jobStateCb, *args)
@@ -275,17 +281,17 @@ class Manager:
 
         return None
 
-    """
-    Enqueue job to execution.
-
-    Args:
-        job (Job): job description
-
-    Raises:
-        JobAllreadyExist: when job with the same name was enqued earlier.
-    """
 
     def enqueue(self, jobs):
+        """
+        Enqueue job to execution.
+
+        Args:
+            job (Job): job description
+
+        Raises:
+            JobAllreadyExist: when job with the same name was enqued earlier.
+        """
         if jobs is not None:
             for job in jobs:
                 self.jobList.add(job)
@@ -293,14 +299,11 @@ class Manager:
 
             self.__scheduleLoop()
 
+
     def __appendToScheduleQueue(self, queue, schedJob):
         queue.append(schedJob)
         schedJob.job.setQueuePos(len(queue) - 1)
 
-    async def waitForFinish(self):
-        while len(self.__scheduleQueue) > 0:
-            await asyncio.sleep(1)
-        await self.__executor.waitForUnfinished()
 
     def getExecutor(self):
         return self.__executor

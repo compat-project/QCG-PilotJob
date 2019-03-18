@@ -3,15 +3,10 @@ import logging
 from os.path import exists
 
 from qcg.appscheduler.errors import JobFileNotExist, IllegalJobDescription
+from qcg.appscheduler.config import Config
 
 
 class FileInterface:
-    CONF_FILE_PATH = 'file.path'
-
-    CONF_DEFAULT = {
-        CONF_FILE_PATH: 'jobs.json'
-    }
-
     def __init__(self):
         pass
 
@@ -21,7 +16,7 @@ class FileInterface:
 
     def setup(self, conf):
         self.data = []
-        self.path = str(conf.get(self.CONF_FILE_PATH, self.CONF_DEFAULT[self.CONF_FILE_PATH]))
+        self.path = str(Config.FILE_PATH.get(conf))
 
         if not exists(self.path):
             raise JobFileNotExist(self.path)

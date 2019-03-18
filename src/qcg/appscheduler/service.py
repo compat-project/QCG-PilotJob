@@ -4,16 +4,15 @@ import logging
 import os
 import sys
 import traceback
-from os.path import exists, join
+from os.path import exists, join, isabs
 
 from qcg.appscheduler.errors import InvalidArgument
-from qcg.appscheduler.executor import Executor
 from qcg.appscheduler.fileinterface import FileInterface
 from qcg.appscheduler.manager import Manager
 from qcg.appscheduler.receiver import Receiver
-from qcg.appscheduler.slurmenv import parse_slurm_resources
 from qcg.appscheduler.zmqinterface import ZMQInterface
-
+from qcg.appscheduler.config import Config
+from qcg.appscheduler.reports import getReporter
 
 class QCGPMService:
 
@@ -24,36 +23,51 @@ class QCGPMService:
                             action="store_true")
         parser.add_argument("--net-port",
                             help="port to listen for network interface",
-                            type=int, default=5555)
+                            type=int, default=int(Config.ZMQ_PORT.value['default']))
         parser.add_argument("--file",
                             help="enable file interface",
                             action="store_true")
         parser.add_argument("--file-path",
                             help="path to the request file",
-                            default="qcg_pm_reqs.json")
+                            default=Config.FILE_PATH.value['default'])
         parser.add_argument("--wd",
                             help="working directory for the service",
-                            default=".")
+                            default=Config.EXECUTOR_WD.value['default'])
         parser.add_argument("--exschema",
-                            help="execution schema [slurm|direct] (direct by default)",
-                            default="direct")
+                            help="execution schema [auto|slurm|direct] (auto by default)",
+                            default=Config.EXECUTION_SCHEMA.value['default'])
+        parser.add_argument("--envschema",
+                            help="job environment schema [auto|slurm]",
+                            default="auto")
+        parser.add_argument("--report-format",
+                            help='format of job report file [text|json]',
+                            default=Config.REPORT_FORMAT.value['default'])
+        parser.add_argument("--report-file",
+                            help='name of the job report file',
+                            default=Config.REPORT_FILE.value['default'])
+        parser.add_argument("--nodes",
+                            help="node configuration",
+                            )
         self.__args = parser.parse_args()
 
         if not self.__args.net and not self.__args.file:
             raise InvalidArgument("no interface enabled - finishing")
 
-        self.__wd = self.__args.wd
+        self.__conf = {
+            Config.EXECUTOR_WD: self.__args.wd,
+            Config.EXECUTION_SCHEMA: self.__args.exschema,
+            Config.EXECUTION_NODES: self.__args.nodes,
+            Config.ENVIRONMENT_SCHEMA: self.__args.envschema,
+            Config.FILE_PATH: self.__args.file_path,
+            Config.ZMQ_PORT: self.__args.net_port,
+            Config.REPORT_FORMAT: self.__args.report_format,
+            Config.REPORT_FILE: self.__args.report_file,
+        }
+
+        self.__wd = Config.EXECUTOR_WD.get(self.__conf)
 
         self.__setupLogging()
-        self.__setupReports()
-
-        self.__conf = {
-            Executor.EXECUTOR_WD: self.__args.wd,
-            Executor.EXECUTION_SCHEMA: self.__args.exschema,
-            FileInterface.CONF_FILE_PATH: self.__args.file_path,
-            ZMQInterface.CONF_IP_ADDRESS: "*",
-            ZMQInterface.CONF_PORT: self.__args.net_port
-        }
+        self.__setupReports(self.__conf)
 
         self.__ifaces = []
         if self.__args.file:
@@ -66,15 +80,20 @@ class QCGPMService:
             iface.setup(self.__conf)
             self.__ifaces.append(iface)
 
-        self.__manager = Manager(parse_slurm_resources(), self.__conf)
+        self.__manager = Manager(self.__conf, self.__ifaces)
         self.__notifId = self.__manager.registerNotifier(self.__jobNotify, self.__manager)
         self.__receiver = Receiver(self.__manager, self.__ifaces)
 
-    def __setupReports(self):
-        self.__jobReportFile = join(self.__wd, 'jobs.report')
+
+    def __setupReports(self, config):
+        self.__jobReporter = getReporter(Config.REPORT_FORMAT.get(config))
+
+        jobReportFile = Config.REPORT_FILE.get(config)
+        self.__jobReportFile = jobReportFile if isabs(jobReportFile) else join(Config.EXECUTOR_WD.get(config), jobReportFile)
 
         if exists(self.__jobReportFile):
             os.remove(self.__jobReportFile)
+
 
     def __setupLogging(self):
         self.__logFile = join(self.__wd, 'service.log')
@@ -88,23 +107,22 @@ class QCGPMService:
         rootLogger.addHandler(handler)
         rootLogger.setLevel(logging.DEBUG)
 
+
     async def __stopInterfaces(self, receiver):
         while not receiver.isFinished:
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
         logging.info("stopping receiver ...")
         receiver.stop()
 
+
     def __jobNotify(self, jobId, state, manager):
-        if self.__jobReportFile is not None:
+        if self.__jobReportFile and self.__jobReporter:
             if state.isFinished():
                 with open(self.__jobReportFile, 'a') as f:
                     job = manager.jobList.get(jobId)
-                    f.write("%s (%s)\n\t%s\n\t%s\n" % (jobId, state.name,
-                                                       "\n\t".join(
-                                                           ["%s: %s" % (str(en[1]), en[0].name) for en in job.history]),
-                                                       "\n\t".join(
-                                                           ["%s: %s" % (k, v) for k, v in job.runtime.items()])))
+                    self.__jobReporter.reportJob(job, f)
+
 
     def start(self):
         self.__receiver.run()

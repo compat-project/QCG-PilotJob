@@ -15,6 +15,8 @@ One can argue that there are available job array mechanisms in many systems, how
 
 From the scheduling system perspective, QCG PilotJob Manager is seen as a single job inside a single user allocation. In the other words, the manager controls an execution of a complex experiment consisting of many jobs on resources reserved for the single job allocation. The manager listens to user's requests and executes commands like submit job, cancel job and report resources usage. In order to manage the resources and jobs the system takes into account both resources availability and mutual dependencies between jobs . Two interfaces are defined to communicate with the system: file-based and network-based. The former one is dedicated and more convenient for a static scenarios when a number of jobs is known in advance to the QCG PilotJob Manager start. The network interface is more general and flexible as it allows to dynamically send new requests and track execution of previously submitted jobs during the run-time. 
 
+To allow user's to test their scenarious, the QCG PilotJob Manager supports *local* execution mode, in which all job's are executed on local machine and doesn't require any scheduling system allocation.
+
 ## MODULES
 QCG Pilot Job Manager consists of the following internal functional modules:
  - **Queue** - the queue containing jobs waiting for resources,
@@ -377,6 +379,21 @@ The example finish command request is presented below:
 ```
 
 
+## LOCAL MODE
+The QCG PilotJob Manager supports *local* mode that is suitable for locally testing executiong scenarious. In normal execution mode, where QCG PilotJob Manager is executed in scheduling system allocation, all jobs are launched with the usage of scheduling system. In the *local* mode, the user itself can define the size of available resources and execute it's scenario on such defined resources without the having access to scheduling system. It's worth remembering that QCG PilotJob Manager doesn't verify the physically available resources, also the executed jobs are not launched with any core/processor affinity. Thus the performance of jobs might not be optimal.
+
+The choice between *allocation* (in scheduling system allocation) or *local* mode is made automatically by the QCG PilotJob Manager during the start. If scheduling system environment will be detected, the *allocation* mode will be chosen. In other case, the local mode will be active, and if resources are not defined by the user, the default number of available cores in the system will be taken.
+
+The command line arguments related to the *local* mode are presented below:
+- `--nodes NODES` - the available resources definition; the `NODES` parameter should have format: `[NODE_NAME]:CORES[,[NODE_NAME]:CORES]...`
+- `--envschema ENVSCHEMA` - job execution environment; for each job the QCG PilotJob Manager can create environment similar to the SLURM execution environment
+
+### Examples of resources definition
+* `--nodes 4` - single node with 4 available cores
+* `--nodes n1:2` - single named node with 2 available cores
+* `--nodes 4,2,2` - three unnnamed nodes with 8 total cores
+* `--nodes n1:4, n2:4, n3:4` - three named nodes with 12 total cores
+
 
 ## ADDITIONAL OUTPUT FILES
 QCG PilotJob Manager creates the following files in a working directory:
@@ -384,7 +401,7 @@ QCG PilotJob Manager creates the following files in a working directory:
  execution
 - `jobs.report` - holding information about all finished (with success or
  failure) jobs along with the details on status, scheduled nodes/cores,
- working directory and wall time; the sample content is presented below:
+ working directory and wall time; the format of this file can be selected by the command argument of the QCG PilotJob Manager; currently the *text* and *json* file formats are supported; the sample content of the *text* format is presented below:
 ```
  msleep2 (SUCCEED)
     2018-01-11 16:02:27.740711: QUEUED
