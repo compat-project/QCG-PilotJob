@@ -251,10 +251,13 @@ class Receiver:
         """
         logging.info("Handling submit request from %s iface" % (iface.__class__.__name__))
 
+        current_jobs = set()
         for job in request.jobs:
             # verify job name uniqness
-            if self.__manager.jobList.exist(job.name):
+            if self.__manager.jobList.exist(job.name) or job.name in current_jobs:
                 return Response.Error('Job %s already exist' % (job.name))
+
+            current_jobs.add(job.name)
 
         # enqueue job in the manager
         self.__manager.enqueue(request.jobs)
