@@ -36,7 +36,7 @@ class JsonFileReport:
             'name': job.name,
             'state': job.strState(),
             'history': [ { 'state': e[0].name, 'date': e[1].isoformat() } for e in job.history ],
-            'runtime': [ { k: v } for k, v in job.runtime.items() ],
+            'runtime': { k: v for k, v in job.runtime.items() },
             'execution': job.execution.toDict(),
             'resources': job.resources.toDict()
         }
