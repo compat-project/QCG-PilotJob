@@ -61,4 +61,4 @@ def parse_slurm_resources(config):
 
 
 def in_slurm_allocation():
-    return 'SLURM_NODELIST' in os.environ and 'SLURM_TASKS_PER_NODE' in os.environ
+    return 'SLURM_NODELIST' in os.environ and 'SLURM_JOB_CPUS_PER_NODE' in os.environ
