@@ -9,7 +9,7 @@ setup(
 	author_email="pkopta@man.poznan.pl",
 
 	packages=["qcg.appscheduler", "qcg.appscheduler.api"],
-        package_dir={"qcg.appscheduler": "src/qcg/appscheduler", "qcg.appscheduler.api": "/src/qcg/appscheduler/api"},
+        package_dir={"qcg.appscheduler": "src/qcg/appscheduler", "qcg.appscheduler.api": "src/qcg/appscheduler/api"},
 
 	url="http://github.com/vecma-project/QCG-PilotJob",
 
