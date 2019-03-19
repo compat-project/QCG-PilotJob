@@ -18,17 +18,24 @@ From the scheduling system perspective, QCG PilotJob Manager is seen as a single
 To allow user's to test their scenarious, the QCG PilotJob Manager supports *local* execution mode, in which all job's are executed on local machine and doesn't require any scheduling system allocation.
 
 ## INSTALLATION
-The QCG PilotJob Manager requires Python3.
+The QCG PilotJob Manager requires Python version >= 3.6.
+
+Optionally the latest version of *pip* package manager and *virtualenv* can be insalled in user's directory by following commands:
+```bash
+$ curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+$ python3 get-pip.py --user
+$ pip install --user virtualenv
+```
 
 To create private virtual environment for installed packages, type following commands:
 ```bash
-virtualenv venv
-. venv/bin/activate
+$ virtualenv venv
+$ . venv/bin/activate
 ```
 
 To install QCG PilotJob Manager directly from github.com into virtual environment, type following command:
 ```bash
-pip install --upgrade git+https://github.com/vecma-project/QCG-PilotJob.git
+$ pip install --upgrade git+https://github.com/vecma-project/QCG-PilotJob.git
 ```
 
 ## MODULES
