@@ -125,6 +125,9 @@ class QCGPMService:
 
 
     def start(self):
+        if asyncio.get_event_loop() and asyncio.get_event_loop().is_closed():
+            asyncio.set_event_loop(asyncio.new_event_loop())
+
         self.__receiver.run()
 
         asyncio.get_event_loop().run_until_complete(asyncio.gather(
