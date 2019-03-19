@@ -9,7 +9,7 @@ setup(
 	author_email='pkopta@man.poznan.pl',
 
 	packages=['qcg.appscheduler.api'],
-    package_dir={'qcg.appscheduler.api': 'qcg/appscheduler/api'},
+        package_dir={'qcg.appscheduler.api': 'src/qcg/appscheduler/api'},
 
 	url='http://dokumentacja',
 
