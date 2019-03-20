@@ -348,10 +348,10 @@ def test_local_iter_scheduling_job_large(tmpdir):
     print('tmpdir: {}'.format(str(tmpdir)))
 
     jobName = "sleep-iter_${it}"
-    nits = 100
+    nits = 20
     jobSleepTime = 2
     jobCores = 2
-    availCores = 40
+    availCores = 10
     rounds = nits * jobCores / availCores
     totalExecTime = rounds * jobSleepTime
     jobs = [
@@ -404,8 +404,8 @@ def test_local_iter_scheduling_job_large(tmpdir):
         t = datetime.strptime(job['runtime']['rtime'], "%H:%M:%S.%f")
         rtime = timedelta(hours=t.hour, minutes=t.minute, seconds=t.second, microseconds=t.microsecond)
 
-        assert all((rtime.total_seconds() > jobSleepTime, rtime.total_seconds() < jobSleepTime + 1)), \
-            "job {} runtime exceeded assumed value {}s vs max {}s".format(i, rtime.total_seconds(), jobSleepTime + 1)
+        assert all((rtime.total_seconds() > jobSleepTime, rtime.total_seconds() < jobSleepTime + 2)), \
+            "job {} runtime exceeded assumed value {}s vs max {}s".format(i, rtime.total_seconds(), jobSleepTime + 2)
 
         # find start executing time
         exec_state = list(filter(lambda st_en: st_en['state'] == 'EXECUTING', job['history']))
@@ -428,9 +428,9 @@ def test_local_iter_scheduling_job_large(tmpdir):
     # check if duration from executing first job till the end of last job is about 2 rounds, each with jobSleepTime
     scenario_duration = finish_time - min_start
     assert all((scenario_duration.total_seconds() > totalExecTime,
-                scenario_duration.total_seconds() < totalExecTime + 3)), \
+                scenario_duration.total_seconds() < totalExecTime + 4)), \
             "scenario duration runtime exceeded assumed value {}s vs max {}s".format(scenario_duration.total_seconds(),
-                                                                                     totalExecTime + 3)
+                                                                                     totalExecTime + 4)
 
     rmtree(str(tmpdir))
 
