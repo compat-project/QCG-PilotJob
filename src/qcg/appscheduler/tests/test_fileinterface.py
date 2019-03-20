@@ -8,7 +8,7 @@ from string import Template
 from datetime import datetime, timedelta
 
 from qcg.appscheduler.service import QCGPMService
-from qcg.appscheduler.joblist import Job, JobExecution, JobResources, ResourceSize
+from qcg.appscheduler.joblist import Job, JobExecution, JobResources, ResourceSize, JobDependencies
 from qcg.appscheduler.errors import IllegalJobDescription
 
 from qcg.appscheduler.tests.utils import save_reqs_to_file, check_job_status_in_json
@@ -431,5 +431,127 @@ def test_local_iter_scheduling_job_large(tmpdir):
                 scenario_duration.total_seconds() < totalExecTime + 3)), \
             "scenario duration runtime exceeded assumed value {}s vs max {}s".format(scenario_duration.total_seconds(),
                                                                                      totalExecTime + 3)
+
+    rmtree(str(tmpdir))
+
+
+def test_local_workflows(tmpdir):
+    file_path = tmpdir.join('jobs.json')
+
+    print('tmpdir: {}'.format(str(tmpdir)))
+
+    jobs = [job.toDict() for job in [
+        Job('first',
+            JobExecution(
+                '/usr/bin/sleep',
+                args=['2s'],
+                wd=abspath(tmpdir.join('first.sandbox')),
+                stdout='out',
+                stderr='err'
+            ),
+            JobResources(numCores=ResourceSize(1))
+        ),
+        Job('second',
+            JobExecution(
+                '/usr/bin/sleep',
+                args=['1s'],
+                wd=abspath(tmpdir.join('second.sandbox')),
+                stdout='out',
+                stderr='err'
+            ),
+            JobResources(numCores=ResourceSize(1)),
+            dependencies=JobDependencies({'after': ['first']})
+            ),
+        Job('third',
+            JobExecution(
+                '/usr/bin/date',
+                wd=abspath(tmpdir.join('third.sandbox')),
+                stdout='out',
+                stderr='err'
+            ),
+            JobResources(numCores=ResourceSize(1)),
+            dependencies=JobDependencies({'after': ['first', 'second']})
+            )
+    ] ]
+    reqs = [{'request': 'submit', 'jobs': jobs},
+            {'request': 'control', 'command': 'finishAfterAllTasksDone'}]
+    save_reqs_to_file(reqs, file_path)
+    print('jobs saved to file_path: {}'.format(str(file_path)))
+
+    # the ammount of resources should be enough to theoretically start all three job's at once
+    sys.argv = [ 'QCG-PilotJob', '--file', '--file-path', str(file_path), '--nodes', '4', '--wd', str(tmpdir),
+                 '--report-format', 'json']
+    QCGPMService().start()
+
+    jnames = ['first', 'second', 'third']
+    check_job_status_in_json(jnames, workdir=str(tmpdir), dest_state='SUCCEED')
+    for jname in jnames:
+        assert all((isdir(abspath(tmpdir.join('{}.sandbox'.format(jname)))),
+                   exists(join(abspath(tmpdir.join('{}.sandbox'.format(jname))), 'out')),
+                   exists(join(abspath(tmpdir.join('{}.sandbox'.format(jname))), 'err'))))
+
+    with open(join(str(tmpdir), 'jobs.report'), 'r') as f:
+        job_stats = [json.loads(line) for line in f.readlines() ]
+
+    assert len(job_stats) == len(jnames)
+
+    jstats = {}
+    for i in range(0, len(jnames)):
+        job = job_stats[i]
+
+        print('readed job stats: {}'.format(str(job)))
+        t = datetime.strptime(job['runtime']['rtime'], "%H:%M:%S.%f")
+        rtime = timedelta(hours=t.hour, minutes=t.minute, seconds=t.second, microseconds=t.microsecond)
+
+        # find start executing time
+        exec_state = list(filter(lambda st_en: st_en['state'] == 'EXECUTING', job['history']))
+        assert len(exec_state) == 1
+
+        # find finish executing time
+        finish_state = list(filter(lambda st_en: st_en['state'] == 'SUCCEED', job['history']))
+        assert len(finish_state) == 1
+
+        start_time = datetime.strptime(exec_state[0]['date'], '%Y-%m-%dT%H:%M:%S.%f')
+        finish_time = datetime.strptime(finish_state[0]['date'], '%Y-%m-%dT%H:%M:%S.%f')
+
+        jstats[job['name']] = { 'r_time': rtime, 's_time': start_time, 'f_time': finish_time }
+
+    # assert second job started after the first one
+    assert jstats['second']['s_time'] > jstats['first']['f_time']
+
+    # assert third job started after the first and second ones
+    assert all((jstats['third']['s_time'] > jstats['first']['f_time'],
+                jstats['third']['s_time'] > jstats['second']['f_time']))
+
+    rmtree(str(tmpdir))
+
+
+def test_local_workflows_error(tmpdir):
+    file_path = tmpdir.join('jobs.json')
+
+    print('tmpdir: {}'.format(str(tmpdir)))
+
+    jobs = [job.toDict() for job in [
+        Job('first',
+            JobExecution(
+                '/usr/bin/sleep',
+                args=['2s'],
+                wd=abspath(tmpdir.join('first.sandbox')),
+                stdout='out',
+                stderr='err'
+            ),
+            JobResources(numCores=ResourceSize(1)),
+            dependencies = JobDependencies({'after': ['not-existing']})
+    ) ] ]
+    reqs = [{'request': 'submit', 'jobs': jobs},
+            {'request': 'control', 'command': 'finishAfterAllTasksDone'}]
+    save_reqs_to_file(reqs, file_path)
+    print('jobs saved to file_path: {}'.format(str(file_path)))
+
+    sys.argv = [ 'QCG-PilotJob', '--file', '--file-path', str(file_path), '--nodes', '2', '--wd', str(tmpdir),
+                 '--report-format', 'json']
+    QCGPMService().start()
+
+    assert not exists(abspath(tmpdir.join('first.sandbox')))
 
     rmtree(str(tmpdir))
