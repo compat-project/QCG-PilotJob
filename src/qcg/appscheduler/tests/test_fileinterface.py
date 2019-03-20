@@ -23,7 +23,7 @@ def test_local_simple_job(tmpdir):
     jobs = [job.toDict() for job in [
         Job(jobName,
             JobExecution(
-                '/usr/bin/date',
+                'date',
                 wd = abspath(tmpdir.join('date.sandbox')),
                 stdout = 'date.out',
                 stderr = 'date.err'
@@ -60,7 +60,7 @@ def test_local_error_duplicate_name_job(tmpdir):
     jobs = [job.toDict() for job in [
         Job(jobName,
             JobExecution(
-                '/usr/bin/date',
+                'date',
                 wd = abspath(tmpdir.join('date.sandbox')),
                 stdout = 'date.out',
                 stderr = 'date.err'
@@ -69,7 +69,7 @@ def test_local_error_duplicate_name_job(tmpdir):
         ),
         Job(jobName,
             JobExecution(
-                '/usr/bin/sleep',
+                'sleep',
                 wd=abspath(tmpdir.join('sleep.sandbox') ),
                 stdout='sleep.out',
                 stderr='sleep.err'
@@ -102,7 +102,7 @@ def test_local_error_duplicate_name_job_separate_reqs(tmpdir):
     jobs1 = [job.toDict() for job in [
         Job(jobName,
             JobExecution(
-                '/usr/bin/date',
+                'date',
                 wd = abspath(tmpdir.join('date.sandbox')),
                 stdout = 'date.out',
                 stderr = 'date.err'
@@ -112,7 +112,7 @@ def test_local_error_duplicate_name_job_separate_reqs(tmpdir):
     jobs2 = [job.toDict() for job in [
         Job(jobName,
             JobExecution(
-                '/usr/bin/sleep',
+                'sleep',
                 wd=abspath(tmpdir.join('sleep.sandbox') ),
                 stdout='sleep.out',
                 stderr='sleep.err'
@@ -158,7 +158,7 @@ def test_local_error_job_desc():
     with pytest.raises(IllegalJobDescription):
         Job('error_job',
             JobExecution(
-                '/usr/bin/date',
+                'date',
                 args = 'this should be a list',
                 stdout = 'date.out',
                 stderr = 'date.err'
@@ -170,7 +170,7 @@ def test_local_error_job_desc():
     with pytest.raises(IllegalJobDescription):
         Job('error_job',
             JobExecution(
-                '/usr/bin/date',
+                'date',
                 args = ['arg1'],
                 env = [ 'this shuld be a dict'],
                 stdout = 'date.out',
@@ -190,7 +190,7 @@ def test_local_error_job_desc():
     with pytest.raises(IllegalJobDescription):
         Job('error_job',
             JobExecution(
-                '/usr/bin/date',
+                'date',
                 args = ['arg1'],
                 env = [ 'this shuld be a dict'],
                 stdout = 'date.out',
@@ -443,7 +443,7 @@ def test_local_workflows(tmpdir):
     jobs = [job.toDict() for job in [
         Job('first',
             JobExecution(
-                '/usr/bin/sleep',
+                'sleep',
                 args=['2s'],
                 wd=abspath(tmpdir.join('first.sandbox')),
                 stdout='out',
@@ -453,7 +453,7 @@ def test_local_workflows(tmpdir):
         ),
         Job('second',
             JobExecution(
-                '/usr/bin/sleep',
+                'sleep',
                 args=['1s'],
                 wd=abspath(tmpdir.join('second.sandbox')),
                 stdout='out',
@@ -464,7 +464,7 @@ def test_local_workflows(tmpdir):
             ),
         Job('third',
             JobExecution(
-                '/usr/bin/date',
+                'date',
                 wd=abspath(tmpdir.join('third.sandbox')),
                 stdout='out',
                 stderr='err'
@@ -534,7 +534,7 @@ def test_local_workflows_error(tmpdir):
     jobs = [job.toDict() for job in [
         Job('first',
             JobExecution(
-                '/usr/bin/sleep',
+                'sleep',
                 args=['2s'],
                 wd=abspath(tmpdir.join('first.sandbox')),
                 stdout='out',
