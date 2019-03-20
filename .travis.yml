@@ -5,9 +5,6 @@ matrix:
       python:
         - "3.6"
       install:
-        - pwd
-        - ls
-        - ls -l reqs
-        - pip install reqs/requirements.txt
+        - pip install -r reqs/requirements.txt
       script:
         - python -m pytest --no-print-logs src/
