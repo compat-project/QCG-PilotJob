@@ -260,7 +260,10 @@ class Receiver:
             current_jobs.add(job.name)
 
         # enqueue job in the manager
-        self.__manager.enqueue(request.jobs)
+        try:
+            self.__manager.enqueue(request.jobs)
+        except Exception as e:
+            return Response.Error(str(e))
 
         jobs = len(request.jobs)
         data = {
