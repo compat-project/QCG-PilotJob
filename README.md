@@ -38,6 +38,38 @@ To install QCG PilotJob Manager directly from github.com into virtual environmen
 $ pip install --upgrade git+https://github.com/vecma-project/QCG-PilotJob.git
 ```
 
+## RUN
+The QCG Pilot Job Manager module provides wrapper command for running Manager service:
+```bash
+$ qcg-pm-service --help
+usage: qcg-pm-service [-h] [--net] [--net-port NET_PORT] [--file]
+                      [--file-path FILE_PATH] [--wd WD] [--exschema EXSCHEMA]
+                      [--envschema ENVSCHEMA] [--report-format REPORT_FORMAT]
+                      [--report-file REPORT_FILE] [--nodes NODES]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --net                 enable network interface
+  --net-port NET_PORT   port to listen for network interface
+  --file                enable file interface
+  --file-path FILE_PATH
+                        path to the request file
+  --wd WD               working directory for the service
+  --exschema EXSCHEMA   execution schema [auto|slurm|direct] (auto by default)
+  --envschema ENVSCHEMA
+                        job environment schema [auto|slurm]
+  --report-format REPORT_FORMAT
+                        format of job report file [text|json]
+  --report-file REPORT_FILE
+                        name of the job report file
+  --nodes NODES         node configuration
+```
+
+The same Manager service, can by run directly with the python command:
+```bash
+$ python -m qcg.appscheduler.service --help
+```
+
 ## MODULES
 QCG Pilot Job Manager consists of the following internal functional modules:
  - **Queue** - the queue containing jobs waiting for resources,
