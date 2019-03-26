@@ -1,6 +1,7 @@
 import pytest
 import sys
 import json
+import cProfile
 
 from os.path import abspath, join, isdir, exists
 from shutil import rmtree
@@ -431,6 +432,48 @@ def test_local_iter_scheduling_job_large(tmpdir):
                 scenario_duration.total_seconds() < totalExecTime + 4)), \
             "scenario duration runtime exceeded assumed value {}s vs max {}s".format(scenario_duration.total_seconds(),
                                                                                      totalExecTime + 4)
+
+    rmtree(str(tmpdir))
+
+
+def test_profile_local_iter_scheduling_job_large(tmpdir):
+    file_path = tmpdir.join('jobs.json')
+
+    print('tmpdir: {}'.format(str(tmpdir)))
+
+    jobName = "sleep-iter_${it}"
+    nits = 100
+    jobSleepTime = 2
+    jobCores = 2
+    availCores = 40
+    rounds = nits * jobCores / availCores
+    totalExecTime = rounds * jobSleepTime
+    jobs = [
+        {
+            "name": jobName,
+            "iterate": [0, nits],
+            "execution": {
+                "exec": "/bin/sleep",
+                "args": ["{}s".format(str(jobSleepTime))],
+                "wd": abspath(tmpdir.join(jobName)),
+                "stdout": "sleep-iter.stdout",
+                "stderr": "sleep-iter.stderr"
+            },
+            "resources": {
+                "numCores": {
+                    "exact": jobCores,
+                }
+            }
+        }
+    ]
+    reqs = [ { 'request': 'submit', 'jobs': jobs },
+            { 'request': 'control', 'command': 'finishAfterAllTasksDone' } ]
+    save_reqs_to_file(reqs, file_path)
+    print('jobs saved to file_path: {}'.format(str(file_path)))
+
+    sys.argv = [ 'QCG-PilotJob', '--file', '--file-path', str(file_path), '--nodes', str(availCores), '--wd', str(tmpdir),
+                 '--report-format', 'json']
+    QCGPMService().start()
 
     rmtree(str(tmpdir))
 
