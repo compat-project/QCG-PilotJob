@@ -824,6 +824,25 @@ The QCG instance available at the Eagle cluster contains registered application 
 
 In this case, the program from the file `api_ex.py` will be executed in a QCG PilotJob Manager environment.
 
+## Profiling
+To profile execution of sample pilot jobs, the *gcc* compiler has to be installed in the system:
+```bash
+$ sudo yum install gcc
+```
+
+From our experience, the *line_profiler* is quite usefull profiler as it has a line resolution:
+```bash
+$ pip install line_profiler
+```
+
+To run profiling, use the *kernprof* tool distributed with the *line_profiler* package:
+```bash
+$ cd src
+$ export PYTHONPATH=.
+$ kernprof -v -l qcg/appscheduler/tests/profile_local_sleep.py
+```
+With the *-v* argument the statistics will be printed directly to standard output.
+
 ## Dictionary
 * **Scheduling system** - a service that controls and schedules access to the fixed set of computational resources (aka. queuing system, workload manager, resource management system). The current implementation of QCG Pilot Job supports SLURM cluster management and job scheduling system.
 * **Job** - a sequential or parallel program with defined resource requirements
