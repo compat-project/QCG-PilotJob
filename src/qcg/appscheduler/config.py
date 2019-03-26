@@ -58,6 +58,11 @@ class Config(Enum):
         'default': 'jobs.report'
     }
 
+    LOG_LEVEL = {
+        'name': 'log.level',
+        'default': 'info'
+    }
+
     def get(self, config):
         if 'get' in self.value:
             return self.value['get'](config)
