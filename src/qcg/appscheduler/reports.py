@@ -50,7 +50,12 @@ class JsonFileReport:
         ostream.write(json.dumps(data, separators=(',', ': ')) + '\n')
 
 
+def none_reporter():
+    return None
+
+
 _available_formats = {
+    'none': none_reporter,
     TextFileReport.NAME: TextFileReport,
     JsonFileReport.NAME: JsonFileReport
 }

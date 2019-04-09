@@ -12,6 +12,7 @@ from qcg.appscheduler.joblist import JobExecution
 from qcg.appscheduler.zmqinterface import ZMQInterface
 from qcg.appscheduler.config import Config
 from qcg.appscheduler.environment import getEnvironment
+import qcg.appscheduler.profile
 
 
 class ExecutorFinish:
@@ -20,6 +21,7 @@ class ExecutorFinish:
 
 class ExecutorJob:
 
+    @profile
     def __init__(self, executor, schema, envs, allocation, job):
         assert allocation is not None
         assert job is not None
@@ -124,6 +126,7 @@ class ExecutorJob:
         self.__schema.preprocess(self)
 
 
+    @profile
     async def __launch(self):
         je = self.jobExecution
         stdoutP = asyncio.subprocess.DEVNULL
@@ -177,6 +180,7 @@ class ExecutorJob:
 
         self.__postprocess(exitCode)
 
+
     def __postprocess(self, exitCode):
         self.exitCode = exitCode
         logging.info("Postprocessing job %s with exit code %d" % (self.job.name, self.exitCode))
@@ -190,6 +194,7 @@ class ExecutorJob:
         self.__processTask = None
 
         self.__executor.taskFinished(self)
+
 
     def run(self):
         try:
@@ -243,7 +248,7 @@ class Executor:
         return self.schema.parseResources()
 
 
-
+    @profile
     def execute(self, allocation, job):
         """
         Asynchronusly execute job inside allocation.

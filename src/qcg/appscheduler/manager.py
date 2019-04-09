@@ -6,6 +6,7 @@ from qcg.appscheduler.errors import NotSufficientResources, InvalidResourceSpec,
 from qcg.appscheduler.executor import Executor
 from qcg.appscheduler.joblist import JobList, JobState
 from qcg.appscheduler.scheduler import Scheduler
+import qcg.appscheduler.profile
 
 
 class SchedulingJob:
@@ -124,6 +125,7 @@ class Manager:
         return len(self.__scheduleQueue) == 0 and self.__executor.allJobsFinished()
 
 
+    @profile
     def __scheduleLoop(self):
         """
         Do schedule loop.
@@ -134,7 +136,11 @@ class Manager:
 
         logging.info("scheduling loop with %d jobs in queue" % (len(self.__scheduleQueue)))
 
-        for schedJob in self.__scheduleQueue:
+        for idx, schedJob in enumerate(self.__scheduleQueue):
+            if not self.resources.freeCores:
+                newScheduleQueue.extend(self.__scheduleQueue[idx:])
+                break
+
             schedJob.checkDependencies()
 
             if not schedJob.isFeasible:

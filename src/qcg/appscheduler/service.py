@@ -13,6 +13,9 @@ from qcg.appscheduler.receiver import Receiver
 from qcg.appscheduler.zmqinterface import ZMQInterface
 from qcg.appscheduler.config import Config
 from qcg.appscheduler.reports import getReporter
+import qcg.appscheduler.profile
+
+
 
 class QCGPMService:
 
@@ -48,6 +51,9 @@ class QCGPMService:
         parser.add_argument("--nodes",
                             help="node configuration",
                             )
+        parser.add_argument("--log",
+                            help="log level",
+                            default=Config.LOG_LEVEL.value['default'])
         self.__args = parser.parse_args()
 
         if not self.__args.net and not self.__args.file:
@@ -62,11 +68,12 @@ class QCGPMService:
             Config.ZMQ_PORT: self.__args.net_port,
             Config.REPORT_FORMAT: self.__args.report_format,
             Config.REPORT_FILE: self.__args.report_file,
+            Config.LOG_LEVEL: self.__args.log,
         }
 
         self.__wd = Config.EXECUTOR_WD.get(self.__conf)
 
-        self.__setupLogging()
+        self.__setupLogging(self.__conf)
         self.__setupReports(self.__conf)
 
         self.__ifaces = []
@@ -95,7 +102,7 @@ class QCGPMService:
             os.remove(self.__jobReportFile)
 
 
-    def __setupLogging(self):
+    def __setupLogging(self, config):
         self.__logFile = join(self.__wd, 'service.log')
 
         if exists(self.__logFile):
@@ -105,9 +112,12 @@ class QCGPMService:
         handler = logging.FileHandler(filename=self.__logFile, mode='a', delay=False)
         handler.setFormatter(logging.Formatter('%(asctime)-15s: %(message)s'))
         rootLogger.addHandler(handler)
-        rootLogger.setLevel(logging.DEBUG)
+        rootLogger.setLevel(logging._nameToLevel.get(Config.LOG_LEVEL.get(config).upper()))
+
+        print('log level set to: {}'.format(Config.LOG_LEVEL.get(config).upper()))
 
 
+    @profile
     async def __stopInterfaces(self, receiver):
         while not receiver.isFinished:
             await asyncio.sleep(0.5)
@@ -116,6 +126,7 @@ class QCGPMService:
         receiver.stop()
 
 
+    @profile
     def __jobNotify(self, jobId, state, manager):
         if self.__jobReportFile and self.__jobReporter:
             if state.isFinished():
@@ -123,16 +134,14 @@ class QCGPMService:
                     job = manager.jobList.get(jobId)
                     self.__jobReporter.reportJob(job, f)
 
-
+    @profile
     def start(self):
         if asyncio.get_event_loop() and asyncio.get_event_loop().is_closed():
             asyncio.set_event_loop(asyncio.new_event_loop())
 
         self.__receiver.run()
 
-        asyncio.get_event_loop().run_until_complete(asyncio.gather(
-            self.__stopInterfaces(self.__receiver)
-        ))
+        asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(self.__stopInterfaces(self.__receiver)))
 
         asyncio.get_event_loop().close()
 
