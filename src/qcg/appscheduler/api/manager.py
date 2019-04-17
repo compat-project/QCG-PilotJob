@@ -455,7 +455,7 @@ class Manager:
         This method waits until all specified jobs finish its execution (successfully or not).
         See 'wait4'.
         """
-        self.wait4(self.list().names())
+        self.wait4(self.list().keys())
 
 
     def isStatusFinished(self, status):
