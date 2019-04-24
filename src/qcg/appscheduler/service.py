@@ -6,6 +6,9 @@ import sys
 import traceback
 from os.path import exists, join, isabs
 
+from multiprocessing import Process, Queue
+
+
 from qcg.appscheduler.errors import InvalidArgument
 from qcg.appscheduler.fileinterface import FileInterface
 from qcg.appscheduler.manager import Manager
@@ -17,9 +20,17 @@ import qcg.appscheduler.profile
 
 
 
+
 class QCGPMService:
 
-    def __init__(self):
+    def __init__(self, args=None):
+        """
+        QCG Pilot Job Manager.
+
+        Args:
+            args (str[]) - command line arguments, if None the command line arguments are parsed
+        """
+
         parser = argparse.ArgumentParser()
         parser.add_argument("--net",
                             help="enable network interface",
@@ -54,7 +65,7 @@ class QCGPMService:
         parser.add_argument("--log",
                             help="log level",
                             default=Config.LOG_LEVEL.value['default'])
-        self.__args = parser.parse_args()
+        self.__args = parser.parse_args(args)
 
         if not self.__args.net and not self.__args.file:
             raise InvalidArgument("no interface enabled - finishing")
@@ -75,6 +86,7 @@ class QCGPMService:
 
         self.__setupLogging(self.__conf)
         self.__setupReports(self.__conf)
+        self.__setupEventLoop()
 
         self.__ifaces = []
         if self.__args.file:
@@ -116,6 +128,10 @@ class QCGPMService:
 
         print('log level set to: {}'.format(Config.LOG_LEVEL.get(config).upper()))
 
+    def __setupEventLoop(self):
+        if asyncio.get_event_loop() and asyncio.get_event_loop().is_closed():
+            asyncio.set_event_loop(asyncio.new_event_loop())
+
 
     @profile
     async def __stopInterfaces(self, receiver):
@@ -134,16 +150,64 @@ class QCGPMService:
                     job = manager.jobList.get(jobId)
                     self.__jobReporter.reportJob(job, f)
 
+                    
+    def getIfaces(self, iface_class=None):
+        """
+        Return list of configured interaces.
+
+        Args:
+            iface_class - class of interface, if not defined all configured interfaces are returned.
+        """
+        if iface_class:
+            return [iface for iface in self.__ifaces if isinstance(iface, iface_class)]
+        else:
+            return self.__ifaces
+
+
     @profile
     def start(self):
-        if asyncio.get_event_loop() and asyncio.get_event_loop().is_closed():
-            asyncio.set_event_loop(asyncio.new_event_loop())
-
         self.__receiver.run()
 
         asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(self.__stopInterfaces(self.__receiver)))
 
         asyncio.get_event_loop().close()
+
+
+class QCGPMServiceProcess(Process):
+
+    def __init__(self, args=[], queue=None):
+        """
+        Start QCGPM Service as a separate process.
+
+        Args:
+            args (str[]) - command line arguments
+            queue (Queue) - the communication queue
+        """
+        super(QCGPMServiceProcess, self).__init__()
+
+        self.args = args
+        self.queue = queue
+
+
+    def run(self):
+        try:
+            print('starting qcgpm service ...')
+            self.service = QCGPMService(self.args)
+
+            if self.queue:
+                print('communication queue defined ...')
+                zmq_ifaces = self.service.getIfaces(ZMQInterface)
+                print('sending configuration through communication queue ...')
+                self.queue.put({'zmq_addresses': [str(iface.real_address) for iface in zmq_ifaces]})
+            else:
+                print('communication queue not defined')
+
+            print('starting qcgpm service inside process ....')
+            self.service.start()
+        except Exception as e:
+            print('Error: %s\n' % (str(e)))
+            traceback.print_exc()
+            exit(1)
 
 
 if __name__ == "__main__":

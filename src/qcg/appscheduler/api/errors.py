@@ -24,3 +24,7 @@ class WrongArgumentsError(QCGPJMAError):
 
 class FileError(QCGPJMAError):
     pass
+
+
+class ServiceError(QCGPJMAError):
+    pass

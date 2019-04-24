@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 
 import zmq
 from zmq.asyncio import Context
@@ -32,7 +33,7 @@ class ZMQInterface:
         pass
 
     async def receive(self):
-        logging.info("ZMQ interface listening for requests ...")
+        logging.info("ZMQ interface listening for requests with pid {}...".format(os.getpid()))
 
         req = await self.socket.recv()
 

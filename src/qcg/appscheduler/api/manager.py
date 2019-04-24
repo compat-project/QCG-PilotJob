@@ -5,18 +5,15 @@ import os
 import time
 import sys
 import logging
+import queue
 from os.path import exists
+
+import multiprocessing as mp
 
 from qcg.appscheduler.api import errors
 
 
 class Manager:
-    """
-    Manages a single QCG-PJM connection.
-
-    Attributes:
-        address (str) - address of the QCG-PJM in form of: proto://host[:port]
-    """
     DEFAULT_ADDRESS_ENV = "QCG_PM_ZMQ_ADDRESS"
     DEFAULT_ADDRESS = "tcp://127.0.0.1:5555"
     DEFAULT_PROTO = "tcp"
@@ -28,6 +25,8 @@ class Manager:
     def __init__(self, address = None, cfg = { }):
         """
         Create Manager object.
+
+        Manages a single QCG-PJM connection.
 
         Args:
             address (str) - the address of the PJM manager to connect to in the form:
@@ -92,24 +91,23 @@ class Manager:
         Args:
             cfg (dict) - see constructor.
         """
-        self.__logFile = 'api.log'
-        if 'log_file' in cfg:
-            self.__logFile = cfg['log_file']
+        self.__logFile = cfg.get('log_file', 'api.log')
+        print('log file set to {}'.format(self.__logFile))
 
         if exists(self.__logFile):
             os.remove(self.__logFile)
 
-        rootLogger = logging.getLogger()
-        handler = logging.FileHandler(filename=self.__logFile, mode='a', delay=False)
-        handler.setFormatter(logging.Formatter('%(asctime)-15s: %(message)s'))
-        rootLogger.addHandler(handler)
+        self.__rootLogger = logging.getLogger()
+        self.__logHandler = logging.FileHandler(filename=self.__logFile, mode='a', delay=False)
+        self.__logHandler.setFormatter(logging.Formatter('%(asctime)-15s: %(message)s'))
+        self.__rootLogger.addHandler(self.__logHandler)
 
         level = logging.INFO
         if 'log_level' in cfg:
             if cfg['log_level'].lower() == 'debug':
                 level = logging.DEBUG
 
-        rootLogger.setLevel(level)
+        self.__rootLogger.setLevel(level)
 
 
     def __disconnect(self):
@@ -203,8 +201,9 @@ class Manager:
         self.__assureConnected()
 
         msg = str.encode(json.dumps( data ))
-        logging.debug("snding: %s" % msg)
+        logging.debug("sending (in process {}): {}".format(os.getpid(), msg))
         self.__zmqSock.send(msg)
+        logging.debug("data send, waiting for response")
 
         reply = bytes.decode(self.__zmqSock.recv())
 
@@ -394,6 +393,15 @@ class Manager:
         self.__disconnect()
 
 
+    def cleanup(self):
+        """
+        Clean up.
+        """
+        if self.__logHandler:
+            self.__logHandler.close()
+            self.__rootLogger.removeHandler(self.__logHandler)
+
+
     def wait4(self, names):
         """
         Wait for finish of specific jobs.
@@ -455,7 +463,7 @@ class Manager:
         This method waits until all specified jobs finish its execution (successfully or not).
         See 'wait4'.
         """
-        self.wait4(self.list().names())
+        self.wait4(self.list().keys())
 
 
     def isStatusFinished(self, status):
@@ -469,3 +477,51 @@ class Manager:
             bool - true if a given status is a terminal status, false elsewhere.
         """
         return status in [ 'SUCCEED', 'FAILED', 'CANCELED', 'OMITTED' ]
+
+
+
+class LocalManager(Manager):
+
+    def __init__(self, server_args = [], cfg = {}):
+        if not mp.get_context():
+            mp.set_start_method('fork')
+
+        try:
+            from qcg.appscheduler.service import QCGPMServiceProcess
+        except ImportError:
+            raise errors.ServiceError('qcg.appscheduler library is not available')
+
+        if not server_args:
+            server_args = ['--net']
+        elif not '--net' in server_args:
+            server_args.append('--net')
+
+        self.qcgpm_queue = mp.Queue()
+        self.qcgpm_process = QCGPMServiceProcess(server_args, self.qcgpm_queue)
+        print('manager process created')
+
+        self.qcgpm_process.start()
+        print('manager process started')
+
+        try:
+            self.qcgpm_conf = self.qcgpm_queue.get(block=True, timeout=2)
+        except queue.Empty:
+            raise errors.ServiceError('Service not started')
+
+        print('got manager configuration: {}'.format(str(self.qcgpm_conf)))
+        if not self.qcgpm_conf.get('zmq_addresses', None):
+            raise errors.ConnectionError('Missing QCGPM network interface address')
+
+        zmq_iface_address = self.qcgpm_conf['zmq_addresses'][0]
+        print('manager zmq iface address: {}'.format(zmq_iface_address))
+
+        super(LocalManager, self).__init__(zmq_iface_address, cfg)
+
+
+    def wait4ManagerFinish(self):
+        self.qcgpm_process.join()
+
+
+    def stopManager(self):
+        self.qcgpm_process.terminate()
+
