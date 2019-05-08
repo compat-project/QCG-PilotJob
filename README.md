@@ -70,6 +70,46 @@ The same Manager service, can by run directly with the python command:
 $ python -m qcg.appscheduler.service --help
 ```
 
+### EXAMPLE
+
+```bash
+$ mkdir tmpdir
+$ cd tmpdir
+$ cat <<EOF > jobs.json
+[
+{
+    "request": "submit",
+    "jobs": [  {
+        "name": "date1",
+        "execution": {
+          "exec": "/bin/date",
+          "stdout": "${jname}.stdout",
+          "stderr": "${jname}.stderr"
+        },
+        "resources": {
+          "numCores": {
+                "exact": 1
+          }
+        }
+    } ]
+},
+{
+    "request": "control",
+    "command": "finishAfterAllTasksDone"
+}
+]
+EOF
+$ qcg-pm-service --file --file-path jobs.json
+```
+In the current directory there should be created a bunch of files, where the most important are:
+* `service.log` - with the manager logs
+* `jobs.report` - the report from job execution
+
+The number of available resources discovered by the QCG PJM can be checked with:
+```bash
+$ grep 'available resources' service.log
+```
+
 ## MODULES
 QCG Pilot Job Manager consists of the following internal functional modules:
  - **Queue** - the queue containing jobs waiting for resources,
