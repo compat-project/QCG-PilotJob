@@ -83,3 +83,42 @@ def test_local_manager_submit_simple(tmpdir):
     m.cleanup()
 
 
+def test_local_manager_wait4all(tmpdir):
+    cores = 4
+
+    client_conf = { 'log_file': tmpdir.join('api.log') }
+
+    # switch on debugging (by default in api.log file)
+    m = LocalManager(['--wd', str(tmpdir), '--nodes', str(cores)], client_conf)
+
+    res = m.resources()
+
+    assert all(('totalNodes' in res, 'totalCores' in res, res['totalNodes'] == 1, res['totalCores'] == cores))
+
+    ids = m.submit(Jobs().
+        add(name='host', exec='/bin/hostname', args=[ '--fqdn' ], stdout='host.stdout').
+        add(name='date', exec='/bin/date', stdout='date.stdout', numCores={ 'exact': 2 })
+        )
+
+    assert len(m.list()) == 2
+
+    m.wait4all()
+
+    jinfos = m.info(ids)
+
+    assert all(('jobs' in jinfos,
+                len(jinfos['jobs'].keys()) == 2,
+                'host' in jinfos['jobs'],
+                'date' in jinfos['jobs'],
+                jinfos['jobs']['host'].get('data', {}).get('status', '') == 'SUCCEED',
+                jinfos['jobs']['date'].get('data', {}).get('status', '') == 'SUCCEED'))
+
+    assert all((exists(tmpdir.join('api.log')),
+                exists(tmpdir.join('service.log')),
+                exists(tmpdir.join('host.stdout')),
+                exists(tmpdir.join('date.stdout'))))
+
+    m.finish()
+    m.stopManager()
+    m.cleanup()
+

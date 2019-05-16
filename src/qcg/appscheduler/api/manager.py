@@ -72,11 +72,11 @@ class Manager:
             address (str) - the address to validate; if address is not in the complete form, it will be
               extended with the default values (protocol, port)
         """
-        if not re.match('\w*://', address):
+        if not re.match(r'\w*://', address):
             # append default protocol
             address = "%s://%s" % (Manager.DEFAULT_PROTO, address)
 
-        if not re.match('.*:\d+', address):
+        if not re.match(r'.*:\d+', address):
             # append default port
             address = "%s:%s" % (address, Manager.DEFAULT_PORT)
 
