@@ -58,10 +58,10 @@ class SchedulerAlgorithm:
         for node in self.resources.nodes:
             nodeCores = node.allocate(max_cores - allocatedCores)
 
-            if nodeCores > 0:
+            if len(nodeCores) > 0:
                 allocation.addNode(NodeAllocation(node, nodeCores))
 
-                allocatedCores += nodeCores
+                allocatedCores += len(nodeCores)
 
                 if allocatedCores == max_cores:
                     break
@@ -91,16 +91,16 @@ class SchedulerAlgorithm:
         for node in self.resources.nodes:
             if node.used == 0:
                 #				print("trying to allocate %d cores on on node %s" % (node.total, node.name))
-                ncores = node.allocate(node.total)
+                cores = node.allocate(node.total)
                 #				print("allocated %d cores" % (ncores))
-                if ncores == node.total:
-                    allocation.addNode(NodeAllocation(node, ncores))
+                if len(cores) == node.total:
+                    allocation.addNode(NodeAllocation(node, cores))
 
                     #					print("already allocated %d nodes from %d maximum" % (len(allocation.nodeAllocations), max_nodes))
                     if len(allocation.nodeAllocations) == max_nodes:
                         break
                 else:
-                    node.release(ncores)
+                    node.release(cores)
 
         if len(allocation.nodeAllocations) >= min_nodes:
             return allocation
@@ -130,18 +130,18 @@ class SchedulerAlgorithm:
         #				(min_nodes, max_nodes, min_cores, max_cores))
 
         for node in self.resources.nodes:
-            ncores = node.allocate(max_cores)
+            cores = node.allocate(max_cores)
 
             #			logging.info("allocated %d cores on a single node" % (ncores))
 
-            if ncores >= min_cores:
-                allocation.addNode(NodeAllocation(node, ncores))
+            if len(cores) >= min_cores:
+                allocation.addNode(NodeAllocation(node, cores))
 
                 if len(allocation.nodeAllocations) == max_nodes:
                     #					logging.info("already allocated enough %d nodes" % (len(allocation.nodeAllocations)))
                     break
             else:
-                node.release(ncores)
+                node.release(cores)
 
         if len(allocation.nodeAllocations) >= min_nodes:
             logging.info("allocation contains %d nodes which meets requirements (%d min)" %

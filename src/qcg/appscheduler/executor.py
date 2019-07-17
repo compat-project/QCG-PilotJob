@@ -47,9 +47,11 @@ class ExecutorJob:
         self.env = os.environ.copy()
 
         self.nnodes = len(self.allocation.nodeAllocations)
-        self.ncores = sum([node.cores for node in self.allocation.nodeAllocations])
+        self.ncores = sum([node.ncores for node in self.allocation.nodeAllocations])
         self.nlist = ','.join([node.node.name for node in self.allocation.nodeAllocations])
-        self.tasks_per_node = ','.join([str(node.cores) for node in self.allocation.nodeAllocations])
+        self.tasks_per_node = ','.join([str(node.ncores) for node in self.allocation.nodeAllocations])
+
+        #logging.info("job resource's initialized {}, {}, {}, {}".format(self.nnodes, self.ncores, self.nlist, self.tasks_per_node))
 
         self.__setupJobVariables()
 

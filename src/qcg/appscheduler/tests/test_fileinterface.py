@@ -598,3 +598,4 @@ def test_local_workflows_error(tmpdir):
     assert not exists(abspath(tmpdir.join('first.sandbox')))
 
     rmtree(str(tmpdir))
+
