@@ -32,7 +32,7 @@ class Ctx:
 
     async def waitForFinish(self):
         while not self.finish:
-            asyncio.sleep(1)
+            await asyncio.sleep(1)
 
 
 StatusSortValues = {
