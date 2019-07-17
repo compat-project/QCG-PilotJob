@@ -1,0 +1,10 @@
+matrix:
+  include:
+    - stage: testing
+      language: python
+      python:
+        - "3.6"
+      install:
+        - pip install -r reqs/requirements.txt
+      script:
+        - python -m pytest --no-print-logs src/

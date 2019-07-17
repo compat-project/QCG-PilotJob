@@ -3,13 +3,13 @@ from distutils.core import setup
 setup(
 	name='QCGPilotManagerAPI',
 
-	version='0.1',
+	version='0.4.1',
 
 	author='Piotr Kopta',
 	author_email='pkopta@man.poznan.pl',
 
 	packages=['qcg.appscheduler.api'],
-    package_dir={'qcg.appscheduler.api': 'qcg/appscheduler/api'},
+        package_dir={'qcg.appscheduler.api': 'src/qcg/appscheduler/api'},
 
 	url='http://dokumentacja',
 
