@@ -52,9 +52,11 @@ def parse_slurm_resources(config):
 
     nodes = []
     for i in range(0, len(node_names)):
+        used = 1 if i == 0 else 0
+
         nname = bytes.decode(node_names[i])
         logging.debug("%s x %d" % (nname, cores_num[i]))
-        nodes.append(Node(nname, cores_num[i], 0))
+        nodes.append(Node(nname, cores_num[i], used))
 
     logging.debug("generated %d nodes" % len(nodes))
     return Resources(nodes)
