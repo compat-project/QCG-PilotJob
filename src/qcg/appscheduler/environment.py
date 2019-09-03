@@ -115,7 +115,7 @@ class SlurmEnvironment(Environment):
         hostfile = os.path.join(job.wdPath, ".%s.hostfile" % job.job.name)
         with open(hostfile, 'w') as f:
             for node in job.allocation.nodeAllocations:
-                for i in range(0, node.cores):
+                for i in range(0, node.ncores):
                     f.write("%s\n" % node.node.name)
 
         job.env.update({
