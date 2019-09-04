@@ -65,6 +65,9 @@ class QCGPMService:
         parser.add_argument("--log",
                             help="log level",
                             default=Config.LOG_LEVEL.value['default'])
+        parser.add_argument("--system-core",
+                            help="reserve one of the core for the QCG-PJM",
+                            default=False, action="store_true")
         self.__args = parser.parse_args(args)
 
         if not self.__args.net and not self.__args.file:
@@ -80,6 +83,7 @@ class QCGPMService:
             Config.REPORT_FORMAT: self.__args.report_format,
             Config.REPORT_FILE: self.__args.report_file,
             Config.LOG_LEVEL: self.__args.log,
+            Config.SYSTEM_CORE: self.__args.system_core,
         }
 
         self.__wd = Config.EXECUTOR_WD.get(self.__conf)

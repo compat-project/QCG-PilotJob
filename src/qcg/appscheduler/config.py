@@ -63,6 +63,12 @@ class Config(Enum):
         'default': 'info'
     }
 
+    SYSTEM_CORE = {
+        'name': 'system.core',
+        'default': False
+    }
+
+
     def get(self, config):
         if 'get' in self.value:
             return self.value['get'](config)
