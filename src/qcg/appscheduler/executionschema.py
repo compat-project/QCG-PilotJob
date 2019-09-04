@@ -60,12 +60,15 @@ class SlurmExecution(ExecutionSchema):
 
         if exJob.jobExecution.stdin:
             exJob.jobExecution.args.extend(["-i", os.path.join(exJob.wdPath, exJob.jobExecution.stdin)])
+            exJob.jobExecution.stdin = None
 
         if exJob.jobExecution.stdout:
             exJob.jobExecution.args.extend(["-o", os.path.join(exJob.wdPath, exJob.jobExecution.stdout)])
+            exJob.jobExecution.stdout = None
 
         if exJob.jobExecution.stderr:
             exJob.jobExecution.args.extend(["-e", os.path.join(exJob.wdPath, exJob.jobExecution.stderr)])
+            exJob.jobExecution.stderr = None
 
         if exJob.job.resources.wt:
             exJob.jobExecution.args.extend(["--time", "0:{}".format(int(exJob.job.resources.wt.total_seconds()))])
