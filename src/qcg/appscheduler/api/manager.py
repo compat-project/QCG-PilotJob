@@ -6,7 +6,7 @@ import time
 import sys
 import logging
 import queue
-from os.path import exists
+from os.path import exists, join, dirname, abspath
 
 import multiprocessing as mp
 
@@ -91,10 +91,12 @@ class Manager:
         Args:
             cfg (dict) - see constructor.
         """
-        self.__logFile = cfg.get('log_file', 'api.log')
+        self.__logFile = cfg.get('log_file', join('.qcgpjm', 'api.log'))
         print('log file set to {}'.format(self.__logFile))
 
-        if exists(self.__logFile):
+        if not exists(dirname(abspath(self.__logFile))):
+            os.makedirs(dirname(abspath(self.__logFile)))
+        elif exists(self.__logFile):
             os.remove(self.__logFile)
 
         self.__rootLogger = logging.getLogger()
