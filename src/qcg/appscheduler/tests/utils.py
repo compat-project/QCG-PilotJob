@@ -23,7 +23,7 @@ def save_reqs_to_file(reqs, file_path):
 def check_job_status_in_json(jobs, workdir='.', dest_state='SUCCEED'):
     to_check = set(jobs)
 
-    report_path = os.path.join(workdir, 'jobs.report')
+    report_path = os.path.join(workdir, '.qcgpjm', 'jobs.report')
     with open(report_path, 'r') as report_f:
         for line, entry in enumerate(report_f, 1):
             try:
