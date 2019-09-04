@@ -13,7 +13,7 @@ class Environment:
         """
         Update job environment.
 
-        :param job (ExecutorJob): job data
+        :param job (ExecutionJob): job data
         :param env (dict): environment to update
         """
         raise NotImplementedError()
@@ -27,7 +27,7 @@ class CommonEnvironment(Environment):
         logging.info('initializing COMMON environment')
 
     def updateEnv(self, job, env):
-        logging.info('updating common environment')
+        logging.debug('updating common environment')
 
         env.update({
             'QCG_PM_NNODES': str(job.nnodes),
@@ -117,7 +117,6 @@ class SlurmEnvironment(Environment):
             for node in job.allocation.nodeAllocations:
                 for i in range(0, node.ncores):
                     f.write("%s\n" % node.node.name)
-
         job.env.update({
             'SLURM_HOSTFILE': hostfile
         })

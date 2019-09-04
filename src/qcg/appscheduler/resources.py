@@ -186,6 +186,9 @@ class Resources:
         #		print "initializing %d nodes" % len(nodes)
         self.__computeCores()
 
+        self.__systemAllocationNode = None
+        self.__systemAllocation = None
+
     def __computeCores(self):
         total, used = 0, 0
         for node in self.__nodes:
@@ -207,6 +210,19 @@ class Resources:
     def __getFreeCores(self):
         return self.__totalCores - self.__usedCores
 
+    def allocate4System(self):
+        if self.__systemAllocation and self.__systemAllocationNode:
+            self.__systemAllocationNode.release(self.__systemAllocation)
+
+            self.__systemAllocation = None
+            self.__systemAllocationNode = None
+
+        for node in self.__nodes:
+            self.__systemAllocation = node.allocate(1)
+
+            if self.__systemAllocation:
+                self.__systemAllocationNode = node
+                break
 
     def nodeCoresAllocated(self, cores):
         """

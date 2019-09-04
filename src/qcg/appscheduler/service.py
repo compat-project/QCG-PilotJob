@@ -84,6 +84,7 @@ class QCGPMService:
 
         self.__wd = Config.EXECUTOR_WD.get(self.__conf)
 
+        self.__setupAuxDir(self.__conf)
         self.__setupLogging(self.__conf)
         self.__setupReports(self.__conf)
         self.__setupEventLoop()
@@ -108,14 +109,26 @@ class QCGPMService:
         self.__jobReporter = getReporter(Config.REPORT_FORMAT.get(config))
 
         jobReportFile = Config.REPORT_FILE.get(config)
-        self.__jobReportFile = jobReportFile if isabs(jobReportFile) else join(Config.EXECUTOR_WD.get(config), jobReportFile)
+        self.__jobReportFile = jobReportFile if isabs(jobReportFile) else join(self.auxDir, jobReportFile)
 
         if exists(self.__jobReportFile):
             os.remove(self.__jobReportFile)
 
 
+    def __setupAuxDir(self, config):
+        """
+        This method should be called before all other '__setup' methods, as it sets the destination for the
+        auxiliary files directory.
+        """
+        wdir = Config.EXECUTOR_WD.get(self.__conf)
+
+        self.auxDir = join(wdir, '.qcgpjm')
+        if not os.path.exists(self.auxDir):
+            os.makedirs(self.auxDir)
+
+
     def __setupLogging(self, config):
-        self.__logFile = join(self.__wd, 'service.log')
+        self.__logFile = join(self.auxDir, 'service.log')
 
         if exists(self.__logFile):
             os.remove(self.__logFile)
@@ -169,6 +182,9 @@ class QCGPMService:
         self.__receiver.run()
 
         asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(self.__stopInterfaces(self.__receiver)))
+
+        if self.__manager:
+            self.__manager.stop()
 
         asyncio.get_event_loop().close()
 

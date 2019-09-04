@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from os.path import exists
@@ -8,6 +9,7 @@ from qcg.appscheduler.config import Config
 
 class FileInterface:
     def __init__(self):
+        self.cnt = 0
         pass
 
     @classmethod
@@ -36,6 +38,11 @@ class FileInterface:
 
     async def receive(self):
         if len(self.data) > 0:
+            self.cnt = self.cnt + 1
+            if self.cnt == 50:
+                self.cnt = 0
+                await asyncio.sleep(0.05)
+
             return self.data.pop(0)
 
         return None

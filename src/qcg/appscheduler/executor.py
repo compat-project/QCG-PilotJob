@@ -12,204 +12,12 @@ from qcg.appscheduler.joblist import JobExecution
 from qcg.appscheduler.zmqinterface import ZMQInterface
 from qcg.appscheduler.config import Config
 from qcg.appscheduler.environment import getEnvironment
+from qcg.appscheduler.slurmenv import parse_slurm_resources, in_slurm_allocation
+from qcg.appscheduler.localenv import parse_local_resources
+from qcg.appscheduler.executionjob import LocalSchemaExecutionJob, LauncherExecutionJob
 import qcg.appscheduler.profile
 
 
-class ExecutorFinish:
-    pass
-
-
-class ExecutorJob:
-
-    @profile
-    def __init__(self, executor, schema, envs, allocation, job):
-        assert allocation is not None
-        assert job is not None
-        assert schema is not None
-
-        self.allocation = allocation
-        self.job = job
-        self.__schema = schema
-        self.__envs = envs
-        self.id = uuid.uuid4()
-        self.__processTask = None
-        self.__stdinF = None
-        self.__stdoutF = None
-        self.__stderrF = None
-        self.exitCode = None
-        self.__executor = executor
-        self.errorMessage = None
-
-        # temporary
-        self.wdPath = '.'
-
-        # inherit environment variables from parent process
-        self.env = os.environ.copy()
-
-        self.nnodes = len(self.allocation.nodeAllocations)
-        self.ncores = sum([node.ncores for node in self.allocation.nodeAllocations])
-        self.nlist = ','.join([node.node.name for node in self.allocation.nodeAllocations])
-        self.tasks_per_node = ','.join([str(node.ncores) for node in self.allocation.nodeAllocations])
-
-        #logging.info("job resource's initialized {}, {}, {}, {}".format(self.nnodes, self.ncores, self.nlist, self.tasks_per_node))
-
-        self.__setupJobVariables()
-
-        # job execution description with variables replaced
-        self.jobExecution = JobExecution(
-            **json.loads(
-                self.__substituteJobVariables(self.job.execution.toJSON())
-            ))
-
-    def __setupJobVariables(self):
-        self.__jobVars = {
-            'root_wd': self.__executor.base_wd,
-            'ncores': str(self.ncores),
-            'nnodes': str(self.nnodes),
-            'nlist': self.nlist
-        }
-
-    def __substituteJobVariables(self, data):
-        if isinstance(data, str):
-            return Template(data).safe_substitute(self.__jobVars)
-        else:
-            return json.loads(Template(json.dumps(data)).safe_substitute(self.__jobVars))
-
-
-    def __setupSandbox(self):
-        """
-        Set a job's working directory based on execution description and root working directory of executor.
-        An attribute 'wdPath' is set as an output of this method and directory is created
-        """
-        if self.jobExecution.wd is None:
-            self.wdPath = self.__executor.base_wd
-        else:
-            self.wdPath = self.jobExecution.wd
-
-            if not os.path.isabs(self.wdPath):
-                self.wdPath = os.path.join(self.__executor.base_wd, self.wdPath)
-
-        logging.info("preparing job %s sanbox at %s" % (self.job.name, self.wdPath))
-        if not os.path.exists(self.wdPath):
-            logging.info("creating directory for job %s at %s" % (self.job.name, self.wdPath))
-            os.makedirs(self.wdPath)
-
-
-    def __prepareEnv(self):
-        """
-        Setup an execution environment.
-        Mostly environment variables are set
-        """
-        if self.jobExecution.env is not None:
-            self.env.update(self.jobExecution.env)
-
-        if hasattr(self.__executor, 'zmq_address'):
-            self.env.update({
-                'QCG_PM_ZMQ_ADDRESS': self.__executor.zmq_address
-            })
-
-        logging.info('updating job\'s environment from {} objects'.format(str(self.__envs)))
-        if self.__envs:
-            for env in self.__envs:
-                env.updateEnv(self, self.env)
-
-        logging.info('environment after update: {}'.format(str(self.env)))
-
-
-    def preprocess(self):
-        """
-        Prepare environment for job execution.
-        Setup sandbox, environment variables and modification of exec according to the execution schema
-        is made
-        """
-        self.__setupSandbox()
-        self.__prepareEnv()
-
-        self.__schema.preprocess(self)
-
-
-    @profile
-    async def __launch(self):
-        je = self.jobExecution
-        stdoutP = asyncio.subprocess.DEVNULL
-        stderrP = asyncio.subprocess.DEVNULL
-        stdinP = asyncio.subprocess.DEVNULL
-        startedDt = datetime.now()
-
-        exitCode = -1
-
-        try:
-            if je.stdin is not None:
-                stdinP = self.__stdinF = open(je.stdin, 'r')
-
-            if je.stdout is not None:
-                stdoutP = self.__stdoutF = open(os.path.join(self.wdPath, je.stdout), 'w')
-
-            if je.stderr is not None:
-                stderrP = self.__stderrF = open(os.path.join(self.wdPath, je.stderr), 'w')
-
-            logging.info("creating process for job %s" % (self.job.name))
-            logging.info("with args %s" % (str([je.exec, *je.args])))
-
-            self.job.appendRuntime({'wd': self.wdPath})
-
-            process = await asyncio.create_subprocess_exec(
-                je.exec, *je.args,
-                stdin=stdinP,
-                stdout=stdoutP,
-                stderr=stderrP,
-                cwd=self.wdPath,
-                env=self.env
-            )
-
-            logging.info("job %s launched" % (self.job.name))
-
-            await process.wait()
-
-#            await asyncio.sleep(1)
-
-            exitCode = process.returncode
-        except Exception as e:
-            logging.exception("Process for job %s terminated" % (self.job.name))
-            self.errorMessage = str(e)
-            exitCode = -1
-
-        try:
-            runTime = datetime.now() - startedDt
-            self.job.appendRuntime({'rtime': str(runTime)})
-        except Exception as e:
-            logging.exception("Failed to set runtime for job %s" % (self.job.name))
-
-        self.__postprocess(exitCode)
-
-
-    def __postprocess(self, exitCode):
-        self.exitCode = exitCode
-        logging.info("Postprocessing job %s with exit code %d" % (self.job.name, self.exitCode))
-
-        for f in [self.__stdinF, self.__stdoutF, self.__stderrF]:
-            if f is not None:
-                f.close()
-
-        self.__stdinF = self.__stdoutF = self.__stderrF = None
-
-        self.__processTask = None
-
-        self.__executor.taskFinished(self)
-
-
-    def run(self):
-        try:
-            logging.info("launching job %s" % (self.job.name))
-
-            self.preprocess()
-
-            self.__processTask = asyncio.get_event_loop().create_task(self.__launch())
-        except Exception as ex:
-            logging.exception("failed to start job %s" % (self.job.name))
-            self.errorMessage = str(ex)
-            self.exitCode = -1
-            self.__executor.taskFinished(self)
 
 
 class Executor:
@@ -243,15 +51,42 @@ class Executor:
                 self.zmq_address = zmqiface.real_address
 
 
+        self.resources = self.__parseResources()
+
+        self.__is_node_launcher = False
+
+        if in_slurm_allocation():
+            try:
+                LauncherExecutionJob.StartAgents(self.resources.nodes)
+                self.__is_node_launcher = True
+            except Exception as e:
+                logging.error('failed to initialize node launcher agents: {}'.format(str(e)))
+    
+
+    def __parseResources(self):
+        """
+        Return available resources according to environment.
+        """
+        if in_slurm_allocation():
+            return parse_slurm_resources(self.__config)
+        else:
+            return parse_local_resources(self.__config)
+
+
     def getResources(self):
-        """
-        Return available resources according to chosen execution schema.
-        """
-        return self.schema.parseResources()
+        return self.resources
 
 
+    def stop(self):
+        if self.__is_node_launcher:
+            try:
+                LauncherExecutionJob.StopAgents()
+                self.__is_node_launcher = False
+            except Exception as e:
+                logging.error('failed to stop node launcher agents: {}'.format(str(e)))
+ 
     @profile
-    def execute(self, allocation, job):
+    async def execute(self, allocation, job):
         """
         Asynchronusly execute job inside allocation.
         After successfull prepared environment, a new task will be created
@@ -261,14 +96,18 @@ class Executor:
             allocation (Allocation): allocation of resources for job
             job (Job): job execution details
         """
-        logging.info("executing job %s" % (job.name))
+#        logging.info("executing job %s" % (job.name))
 
         job.appendRuntime({'allocation': allocation.description()})
 
         try:
-            execTask = ExecutorJob(self, self.schema, self.jobEnvs, allocation, job)
+            if all((self.__is_node_launcher, len(allocation.nodeAllocations) == 1, allocation.nodeAllocations[0].ncores == 1)):
+                execTask = LauncherExecutionJob(self, self.jobEnvs, allocation, job)
+            else:
+                execTask = LocalSchemaExecutionJob(self, self.jobEnvs, allocation, job, self.schema)
+
             self.__notFinished[execTask.id] = execTask
-            execTask.run()
+            await execTask.run()
         except Exception as e:
             logging.exception("Failed to launch job %s" % (job.name))
             self.__manager.jobFinished(job, allocation, -1, str(e))
@@ -276,6 +115,11 @@ class Executor:
 
     def allJobsFinished(self):
         return len(self.__notFinished) == 0
+
+
+    def taskExecuting(self, task):
+        if self.__manager is not None:
+            self.__manager.jobExecuting(task.job)
 
 
     def taskFinished(self, task):

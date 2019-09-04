@@ -2,8 +2,7 @@ import os
 import logging
 
 from qcg.appscheduler.errors import *
-from qcg.appscheduler.slurmenv import parse_slurm_resources, in_slurm_allocation
-from qcg.appscheduler.localenv import parse_local_resources
+from qcg.appscheduler.slurmenv import in_slurm_allocation
 
 
 class ExecutionSchema:
@@ -20,9 +19,6 @@ class ExecutionSchema:
     def __init__(self, config):
         self.config = config
 
-    def parseResources(self):
-        raise NotImplementedError()
-
     def preprocess(self, exJob):
         pass
 
@@ -32,9 +28,6 @@ class SlurmExecution(ExecutionSchema):
 
     def __init__(self, config):
         super(SlurmExecution, self).__init__(config)
-
-    def parseResources(self):
-        return parse_slurm_resources(self.config)
 
     def preprocess(self, exJob):
         job_exec = exJob.jobExecution.exec
@@ -60,7 +53,19 @@ class SlurmExecution(ExecutionSchema):
             "-n", str(exJob.ncores),
             "-m", "arbitrary",
             "--mem-per-cpu=0",
+#            "--cpu-bind=verbose,map_cpu:{}".format(','.join([cores for node in exJob.allocation.nodeAllocations]))
+            "--cpu-bind=verbose,map_cpu:{}".format(','.join([str(core) for core in exJob.allocation.nodeAllocations[0].cores])),
+#            "--cpu-bind=verbose,cores",
             "--multi-prog" ]
+
+        if exJob.jobExecution.stdin:
+            exJob.jobExecution.args.extend(["-i", os.path.join(exJob.wdPath, exJob.jobExecution.stdin)])
+
+        if exJob.jobExecution.stdout:
+            exJob.jobExecution.args.extend(["-o", os.path.join(exJob.wdPath, exJob.jobExecution.stdout)])
+
+        if exJob.jobExecution.stderr:
+            exJob.jobExecution.args.extend(["-e", os.path.join(exJob.wdPath, exJob.jobExecution.stderr)])
 
         if exJob.job.resources.wt:
             exJob.jobExecution.args.extend(["--time", "0:{}".format(int(exJob.job.resources.wt.total_seconds()))])
@@ -73,9 +78,6 @@ class DirectExecution(ExecutionSchema):
 
     def __init__(self, config):
         super(DirectExecution, self).__init__(config)
-
-    def parseResources(self):
-        return parse_local_resources(self.config)
 
     def preprocess(self, exJob):
         pass
