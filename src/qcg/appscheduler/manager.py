@@ -62,7 +62,7 @@ class SchedulingJob:
             self.__afterJobs -= finished
 
             logging.debug("#{} dependency ({} feasible) jobs after update of job {}".format(
-		len(self.__afterJobs), str(self.__isFeasible), self.job.name))
+                len(self.__afterJobs), str(self.__isFeasible), self.job.name))
 
 
     @property
