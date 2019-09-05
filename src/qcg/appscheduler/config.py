@@ -37,15 +37,25 @@ class Config(Enum):
 
     ZMQ_PORT = {
         'name': 'zmq.port',
-        'default': '5555'
+        'default': None
     }
+
+    ZMQ_PORT_MIN_RANGE = {
+        'name': 'zmq.port.min',
+        'default': 2222,
+    }            
+
+    ZMQ_PORT_MAX_RANGE = {
+        'name': 'zmq.port.max',
+        'default': 9999,
+    }            
 
     ZMQ_IFACE_ADDRESS = {
         'name': 'zmq.address',
-        'get': lambda conf: 'tcp://%s:%s' % (
+        'get': lambda conf: 'tcp://{}:{}'.format(
             str(Config.ZMQ_IP_ADDRESS.get(conf)),
-            str(Config.ZMQ_PORT.get(conf)))
-
+            str(Config.ZMQ_PORT.get(conf))) if Config.ZMQ_PORT.get(conf) else \
+            'tcp://{}'.format(str(Config.ZMQ_IP_ADDRESS.get(conf)))
     }
 
     REPORT_FORMAT = {

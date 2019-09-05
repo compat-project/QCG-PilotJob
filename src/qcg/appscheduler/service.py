@@ -38,6 +38,12 @@ class QCGPMService:
         parser.add_argument("--net-port",
                             help="port to listen for network interface",
                             type=int, default=int(Config.ZMQ_PORT.value['default']))
+        parser.add_argument("--net-port-min",
+                            help="minimum port range to listen for network interface if exact port number is not defined",
+                            type=int, default=int(Config.ZMQ_PORT_MIN_RANGE.value['default']))
+        parser.add_argument("--net-port-max",
+                            help="maximum port range to listen for network interface if exact port number is not defined",
+                            type=int, default=int(Config.ZMQ_PORT_MAX_RANGE.value['default']))
         parser.add_argument("--file",
                             help="enable file interface",
                             action="store_true")
@@ -80,6 +86,8 @@ class QCGPMService:
             Config.ENVIRONMENT_SCHEMA: self.__args.envschema,
             Config.FILE_PATH: self.__args.file_path,
             Config.ZMQ_PORT: self.__args.net_port,
+            Config.ZMQ_PORT_MIN_RANGE: self.__args.net_port_min,
+            Config.ZMQ_PORT_MAX_RANGE: self.__args.net_port_max,
             Config.REPORT_FORMAT: self.__args.report_format,
             Config.REPORT_FILE: self.__args.report_file,
             Config.LOG_LEVEL: self.__args.log,
