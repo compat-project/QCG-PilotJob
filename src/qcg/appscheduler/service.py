@@ -37,7 +37,7 @@ class QCGPMService:
                             action="store_true")
         parser.add_argument("--net-port",
                             help="port to listen for network interface",
-                            type=int, default=int(Config.ZMQ_PORT.value['default']))
+                            type=int, default=int(Config.ZMQ_PORT.value['default']) if Config.ZMQ_PORT.value['default'] else None)
         parser.add_argument("--net-port-min",
                             help="minimum port range to listen for network interface if exact port number is not defined",
                             type=int, default=int(Config.ZMQ_PORT_MIN_RANGE.value['default']))

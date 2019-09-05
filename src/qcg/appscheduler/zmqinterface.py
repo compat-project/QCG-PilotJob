@@ -26,7 +26,7 @@ class ZMQInterface:
         if Config.ZMQ_PORT.get(conf):
             self.socket.bind(self.address)
         else:
-            self.local_port = self.in_socket.bind_to_random_port(self.address,
+            self.local_port = self.socket.bind_to_random_port(self.address,
                     min_port=int(Config.ZMQ_PORT_MIN_RANGE.get(conf)),
                     max_port=int(Config.ZMQ_PORT_MAX_RANGE.get(conf)))
 
