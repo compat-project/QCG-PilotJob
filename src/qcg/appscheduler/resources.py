@@ -2,7 +2,7 @@ from qcg.appscheduler.errors import *
 
 
 class NodeAny:
-    def __init__(self, name=None, totalCores=0, used=0):
+    def __init__(self, name=None, totalCores=0, used=0, coreIds=None):
         """
         Node resources.
         This class stores and allocates cores. There is no core identification.
@@ -10,6 +10,7 @@ class NodeAny:
         :param name: name of the node
         :param totalCores: total number of available cores
         :param used: initial number of used cores
+        :param coreIds: optional core identifiers (UNUSED)
         """
         self.__name = name
         self.__totalCores = totalCores
@@ -88,7 +89,7 @@ class NodeAny:
 
 class NodeCores:
 
-    def __init__(self, name=None, totalCores=0, used=0):
+    def __init__(self, name=None, totalCores=0, used=0, coreIds=None):
         """
         Node resources.
         This class stores and allocates specific cores. Each core is identified by the number.
@@ -96,10 +97,15 @@ class NodeCores:
         :param name: name of the node
         :param totalCores: total number of available cores
         :param used: initial number of used cores
+        :param coreIds: optional core identifiers (the list must have at least 'totalCores' elements)
         """
         self.__name = name
         self.__totalCores = totalCores
-        self.__freeCores = list(range(0, self.__totalCores))
+
+        if coreIds:
+            self.__freeCores = list(coreIds[used:totalCores])
+        else:
+            self.__freeCores = list(range(used, self.__totalCores))
 
 
     def __getName(self):
