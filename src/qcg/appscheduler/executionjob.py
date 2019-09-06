@@ -197,14 +197,14 @@ class LocalSchemaExecutionJob(ExecutionJob):
             self.__stdoutF = asyncio.subprocess.DEVNULL
             self.__stderrF = asyncio.subprocess.DEVNULL
 
-            #if je.stdin is not None:
-            #    stdinP = self.__stdinF = open(je.stdin, 'r')
+            if je.stdin is not None:
+                self.__stdinF = open(je.stdin, 'r')
 
-            #if je.stdout is not None:
-            #    stdoutP = self.__stdoutF = open(os.path.join(self.wdPath, je.stdout), 'w')
+            if je.stdout is not None:
+                self.__stdoutF = open(os.path.join(self.wdPath, je.stdout), 'w')
 
-            #if je.stderr is not None:
-            #    stderrP = self.__stderrF = open(os.path.join(self.wdPath, je.stderr), 'w')
+            if je.stderr is not None:
+                self.__stderrF = open(os.path.join(self.wdPath, je.stderr), 'w')
 
             process = await asyncio.create_subprocess_exec(
                 je.exec, *je.args,
@@ -232,7 +232,7 @@ class LocalSchemaExecutionJob(ExecutionJob):
 
     @profile
     async def launch(self):
-        self.__exec_task = asyncio.create_task(self.__executeLocalProcess())
+        self.__exec_task = asyncio.ensure_future(self.__executeLocalProcess())
 
 
     def postprocess(self, exitCode, errorMessage=None):

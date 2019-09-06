@@ -37,7 +37,13 @@ class QCGPMService:
                             action="store_true")
         parser.add_argument("--net-port",
                             help="port to listen for network interface",
-                            type=int, default=int(Config.ZMQ_PORT.value['default']))
+                            type=int, default=int(Config.ZMQ_PORT.value['default']) if Config.ZMQ_PORT.value['default'] else None)
+        parser.add_argument("--net-port-min",
+                            help="minimum port range to listen for network interface if exact port number is not defined",
+                            type=int, default=int(Config.ZMQ_PORT_MIN_RANGE.value['default']))
+        parser.add_argument("--net-port-max",
+                            help="maximum port range to listen for network interface if exact port number is not defined",
+                            type=int, default=int(Config.ZMQ_PORT_MAX_RANGE.value['default']))
         parser.add_argument("--file",
                             help="enable file interface",
                             action="store_true")
@@ -65,6 +71,9 @@ class QCGPMService:
         parser.add_argument("--log",
                             help="log level",
                             default=Config.LOG_LEVEL.value['default'])
+        parser.add_argument("--system-core",
+                            help="reserve one of the core for the QCG-PJM",
+                            default=False, action="store_true")
         self.__args = parser.parse_args(args)
 
         if not self.__args.net and not self.__args.file:
@@ -77,9 +86,12 @@ class QCGPMService:
             Config.ENVIRONMENT_SCHEMA: self.__args.envschema,
             Config.FILE_PATH: self.__args.file_path,
             Config.ZMQ_PORT: self.__args.net_port,
+            Config.ZMQ_PORT_MIN_RANGE: self.__args.net_port_min,
+            Config.ZMQ_PORT_MAX_RANGE: self.__args.net_port_max,
             Config.REPORT_FORMAT: self.__args.report_format,
             Config.REPORT_FILE: self.__args.report_file,
             Config.LOG_LEVEL: self.__args.log,
+            Config.SYSTEM_CORE: self.__args.system_core,
         }
 
         self.__wd = Config.EXECUTOR_WD.get(self.__conf)
