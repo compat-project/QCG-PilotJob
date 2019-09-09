@@ -8,6 +8,7 @@ from qcg.appscheduler.joblist import JobList, JobState
 from qcg.appscheduler.scheduler import Scheduler
 import qcg.appscheduler.profile
 from qcg.appscheduler.config import Config
+from qcg.appscheduler.parseres import get_resources
 
 
 class SchedulingJob:
@@ -108,14 +109,14 @@ class Manager:
         """
         self.ifaces = ifaces
 
-        self.__executor = Executor(self, config)
-        self.resources = self.__executor.getResources()
+        self.resources = get_resources(config)
 
         if Config.SYSTEM_CORE.get(config):
             self.resources.allocate4System()
 
         logging.info('available resources: {}'.format(self.resources))
 
+        self.__executor = Executor(self, config, self.resources)
         self.__scheduler = Scheduler(self.resources)
         self.jobList = JobList()
 

@@ -2,7 +2,7 @@ import os
 import logging
 import types
 
-from qcg.appscheduler.slurmenv import in_slurm_allocation
+from qcg.appscheduler.slurmres import in_slurm_allocation
 
 
 class Environment:

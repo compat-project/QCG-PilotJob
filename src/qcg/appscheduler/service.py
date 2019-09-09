@@ -59,6 +59,9 @@ class QCGPMService:
         parser.add_argument("--envschema",
                             help="job environment schema [auto|slurm]",
                             default="auto")
+        parser.add_argument("--resources",
+                            help="source of information about available resources [auto|slurm|local]",
+                            default=Config.RESOURCES.value["default"])
         parser.add_argument("--report-format",
                             help='format of job report file [text|json]',
                             default=Config.REPORT_FORMAT.value['default'])

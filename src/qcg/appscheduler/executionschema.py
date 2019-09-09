@@ -2,7 +2,7 @@ import os
 import logging
 
 from qcg.appscheduler.errors import *
-from qcg.appscheduler.slurmenv import in_slurm_allocation
+from qcg.appscheduler.slurmres import in_slurm_allocation
 
 
 class ExecutionSchema:

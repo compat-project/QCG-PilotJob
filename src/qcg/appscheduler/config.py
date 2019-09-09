@@ -25,6 +25,11 @@ class Config(Enum):
         'default': 'auto'
     }
 
+    RESOURCES = {
+        'name': 'resources',
+        'default': 'auto'
+    }
+
     FILE_PATH = {
         'name': 'file',
         'default': 'qcg_pm_reqs.json'

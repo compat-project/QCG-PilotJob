@@ -12,8 +12,7 @@ from qcg.appscheduler.joblist import JobExecution
 from qcg.appscheduler.zmqinterface import ZMQInterface
 from qcg.appscheduler.config import Config
 from qcg.appscheduler.environment import getEnvironment
-from qcg.appscheduler.slurmenv import parse_slurm_resources, in_slurm_allocation
-from qcg.appscheduler.localenv import parse_local_resources
+from qcg.appscheduler.slurmres import in_slurm_allocation
 from qcg.appscheduler.executionjob import LocalSchemaExecutionJob, LauncherExecutionJob
 import qcg.appscheduler.profile
 
@@ -21,7 +20,7 @@ import qcg.appscheduler.profile
 
 
 class Executor:
-    def __init__(self, manager, config):
+    def __init__(self, manager, config, resources):
         """
         Execute jobs inside allocations.
         """
@@ -51,31 +50,17 @@ class Executor:
                 self.zmq_address = zmqiface.real_address
 
 
-        self.resources = self.__parseResources()
+        self.__resources = resources
 
         self.__is_node_launcher = False
 
         if in_slurm_allocation():
             try:
-                LauncherExecutionJob.StartAgents(self.resources.nodes)
+                LauncherExecutionJob.StartAgents(self.__resources.nodes)
                 self.__is_node_launcher = True
             except Exception as e:
                 logging.error('failed to initialize node launcher agents: {}'.format(str(e)))
     
-
-    def __parseResources(self):
-        """
-        Return available resources according to environment.
-        """
-        if in_slurm_allocation():
-            return parse_slurm_resources(self.__config)
-        else:
-            return parse_local_resources(self.__config)
-
-
-    def getResources(self):
-        return self.resources
-
 
     def stop(self):
         if self.__is_node_launcher:
