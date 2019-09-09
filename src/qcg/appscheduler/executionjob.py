@@ -250,12 +250,12 @@ class LauncherExecutionJob(ExecutionJob):
     launcher = None
 
     @classmethod
-    def StartAgents(cls, nodes):
+    def StartAgents(cls, wdir, nodes):
         if cls.launcher:
             raise Exception('launcher agents already ininitialized')
 
         agents = [ { 'agent_id': node.name, 'slurm': { 'node': node.name } } for node in nodes ]
-        cls.launcher = Launcher()
+        cls.launcher = Launcher(wdir)
 
         asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(cls.launcher.start(agents)))
 

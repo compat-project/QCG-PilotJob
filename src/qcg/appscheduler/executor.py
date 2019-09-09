@@ -12,8 +12,8 @@ from qcg.appscheduler.joblist import JobExecution
 from qcg.appscheduler.zmqinterface import ZMQInterface
 from qcg.appscheduler.config import Config
 from qcg.appscheduler.environment import getEnvironment
-from qcg.appscheduler.slurmres import in_slurm_allocation
 from qcg.appscheduler.executionjob import LocalSchemaExecutionJob, LauncherExecutionJob
+from qcg.appscheduler.resources import ResourcesType
 import qcg.appscheduler.profile
 
 
@@ -29,11 +29,10 @@ class Executor:
         self.__config = config
 
         self.base_wd = abspath(Config.EXECUTOR_WD.get(config))
-        self.schemaName = Config.EXECUTION_SCHEMA.get(config)
 
         logging.info("executor base working directory set to %s" % (self.base_wd))
 
-        self.schema = ExecutionSchema.GetSchema(self.schemaName, config)
+        self.schema = ExecutionSchema.GetSchema(resources, config)
 
         envsSet = set([getEnvironment('common')])
         for envName in set([env.lower() for env in Config.ENVIRONMENT_SCHEMA.get(config).split(',') ]):
@@ -54,12 +53,14 @@ class Executor:
 
         self.__is_node_launcher = False
 
-        if in_slurm_allocation():
+        if self.__resources.rtype == ResourcesType.SLURM:
             try:
-                LauncherExecutionJob.StartAgents(self.__resources.nodes)
+                LauncherExecutionJob.StartAgents(self.base_wd, self.__resources.nodes)
                 self.__is_node_launcher = True
+                logging.info('node launcher succesfully initialized')
             except Exception as e:
                 logging.error('failed to initialize node launcher agents: {}'.format(str(e)))
+                raise e
     
 
     def stop(self):

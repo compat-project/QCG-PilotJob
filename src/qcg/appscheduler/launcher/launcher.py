@@ -17,7 +17,10 @@ class Launcher:
     MAX_PORT_RANGE = 40000
     START_TIMEOUT_SECS = 20
 
-    def __init__(self):
+    def __init__(self, wdir):
+        # working directory
+        self.work_dir = wdir
+
         # local context
         self.zmq_ctx = {}
 
@@ -37,7 +40,7 @@ class Launcher:
         self.app_finished = 0
 
         self.node_local_agent_cmd = [ sys.executable, '-m', 'qcg.appscheduler.launcher.agent' ]
-        self.node_ssh_agent_cmd = [ 'cd {}; {} -m qcg.appscheduler.launcher.agent'.format(os.getcwd(), sys.executable) ]
+        self.node_ssh_agent_cmd = [ 'cd {}; {} -m qcg.appscheduler.launcher.agent'.format(self.work_dir, sys.executable) ]
 
 
     def set_job_finish_callback(self, jobs_finish_cb, *jobs_finish_cb_args):
@@ -295,11 +298,18 @@ class Launcher:
         if not 'node' in slurm_data:
             raise ValueError('missing slurm node name')
 
-        slurm_args = [ '-w', slurm_data['node'], '-N', '1', '-n', '1', '-D', os.getcwd() ]
+        slurm_args = [ '-w', slurm_data['node'], '-N', '1', '-n', '1', '-D', self.work_dir ]
         slurm_args.extend(slurm_data.get('args', []))
 
+        stdoutP = asyncio.subprocess.DEVNULL
+        stderrP = asyncio.subprocess.DEVNULL
+
+        if logging.root.level == logging.DEBUG:
+            stdoutP = open(os.path.join(self.work_dir, '.qcgpjm', 'nl-start-agent-stdout.log'), 'w')
+            stderrP = open(os.path.join(self.work_dir, '.qcgpjm', 'nl-start-agent-stderr.log'), 'w')
+
         return await asyncio.create_subprocess_exec(shutil.which('srun'), *slurm_args,
-                *self.node_local_agent_cmd, *args)
+                *self.node_local_agent_cmd, *args, stdout=stdoutP, stderr=stderrP)
 
 
     async def __fire_local_agent(self, local_data, args):
