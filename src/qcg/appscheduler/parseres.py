@@ -2,7 +2,7 @@ import logging
 
 from qcg.appscheduler.config import Config
 from qcg.appscheduler.localres import parse_local_resources
-from qcg.appscheduler.slurmres import parse_slurm_resources
+from qcg.appscheduler.slurmres import parse_slurm_resources, in_slurm_allocation
 
 
 def __detect_resources(config):
