@@ -5,7 +5,7 @@ import subprocess
 from math import log2
 
 from qcg.appscheduler.errors import *
-from qcg.appscheduler.resources import Node, Resources
+from qcg.appscheduler.resources import Node, Resources, ResourcesType
 
 
 def parse_nodelist(nodespec):
@@ -81,7 +81,7 @@ def parse_slurm_resources(config):
         nodes.append(Node(nname, cores_num[i], 0, coreIds=core_ids))
 
     logging.debug("generated %d nodes" % len(nodes))
-    return Resources(nodes)
+    return Resources(ResourcesType.SLURM, nodes)
 
 
 def in_slurm_allocation():

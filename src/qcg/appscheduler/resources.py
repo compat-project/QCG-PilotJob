@@ -1,3 +1,5 @@
+from enum import Enum
+
 from qcg.appscheduler.errors import *
 
 
@@ -169,16 +171,23 @@ class NodeCores:
 Node = NodeCores
 
 
+class ResourcesType(Enum):
+    LOCAL = 1
+    SLURM = 2
+
 
 class Resources:
 
-    def __init__(self, nodes=None):
+    def __init__(self, rtype, nodes=None):
         """
         Available resources set.
         The set stores and tracks nodes with possible different number of available cores.
 
+        :param type: type of resources (ResourcesType)
         :param nodes: list of available nodes
         """
+        self.__type = rtype
+
         self.__nodes = nodes
         if self.__nodes is None:
             self.__nodes = []
@@ -203,6 +212,9 @@ class Resources:
 
         self.__totalCores = total
         self.__usedCores = used
+
+    def __getRType(self):
+        return self.__type
 
     def __getNodes(self):
         return self.__nodes
@@ -279,6 +291,7 @@ class Resources:
     def nNodes(self):
         return len(self.__nodes)
 
+    rtype = property(__getRType, None, None, "type of resources")
     nodes = property(__getNodes, None, None, "list of a nodes")
     totalNodes = property(nNodes, None, None, "total number of nodes")
     totalCores = property(__getTotalCores, None, None, "total number of cores")
