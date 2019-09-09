@@ -48,14 +48,11 @@ class QCGPMService:
                             help="enable file interface",
                             action="store_true")
         parser.add_argument("--file-path",
-                            help="path to the request file",
-                            default=Config.FILE_PATH.value['default'])
+                            help="path to the request file (implies --file)",
+                            default=None)
         parser.add_argument("--wd",
                             help="working directory for the service",
                             default=Config.EXECUTOR_WD.value['default'])
-        parser.add_argument("--exschema",
-                            help="execution schema [auto|slurm|direct] (auto by default)",
-                            default=Config.EXECUTION_SCHEMA.value['default'])
         parser.add_argument("--envschema",
                             help="job environment schema [auto|slurm]",
                             default="auto")
@@ -69,22 +66,30 @@ class QCGPMService:
                             help='name of the job report file',
                             default=Config.REPORT_FILE.value['default'])
         parser.add_argument("--nodes",
-                            help="node configuration",
+                            help="configuration of available resources (implies --resources local)",
                             )
         parser.add_argument("--log",
                             help="log level",
+                            choices=[ 'critical', 'error', 'warning', 'info', 'debug', 'notset' ],
                             default=Config.LOG_LEVEL.value['default'])
         parser.add_argument("--system-core",
                             help="reserve one of the core for the QCG-PJM",
                             default=False, action="store_true")
         self.__args = parser.parse_args(args)
 
+        if self.__args.file and not self.__args.file_path:
+            # set default file path if interface has been enabled but path not defined
+            self.__args.file_path = Config.FILE_PATH.value['default']
+
+        if self.__args.file_path:
+            # enable file interface if path has been defined
+            self.__args.file = True
+
         if not self.__args.net and not self.__args.file:
             raise InvalidArgument("no interface enabled - finishing")
 
         self.__conf = {
             Config.EXECUTOR_WD: self.__args.wd,
-            Config.EXECUTION_SCHEMA: self.__args.exschema,
             Config.EXECUTION_NODES: self.__args.nodes,
             Config.ENVIRONMENT_SCHEMA: self.__args.envschema,
             Config.FILE_PATH: self.__args.file_path,
@@ -140,6 +145,8 @@ class QCGPMService:
         self.auxDir = join(wdir, '.qcgpjm')
         if not os.path.exists(self.auxDir):
             os.makedirs(self.auxDir)
+
+        self.__conf[Config.AUX_DIR] = self.auxDir
 
 
     def __setupLogging(self, config):
