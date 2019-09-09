@@ -10,9 +10,9 @@ class Config(Enum):
         'default': '.'
     }
 
-    EXECUTION_SCHEMA = {
-        'name': 'schema',
-        'default': 'auto'
+    AUX_DIR = {
+        'name': 'aux.dir',
+        'default': '.qcgpjm'
     }
 
     EXECUTION_NODES = {
