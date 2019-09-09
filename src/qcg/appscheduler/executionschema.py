@@ -2,19 +2,17 @@ import os
 import logging
 
 from qcg.appscheduler.errors import *
-from qcg.appscheduler.slurmres import in_slurm_allocation
+from qcg.appscheduler.resources import ResourcesType
 
 
 class ExecutionSchema:
 
     @classmethod
-    def GetSchema(cls, name, config):
-        if name not in __SCHEMAS__:
-            raise InternalError('Invalid execution schema name: %s' % name)
+    def GetSchema(cls, resources, config):
+        if resources.rtype not in __SCHEMAS__:
+            raise InternalError('Unknown resources type: %s' % name)
 
-        logging.info('execution schema {}'.format(name))
-
-        return __SCHEMAS__[name](config)
+        return __SCHEMAS__[resources.rtype](config)
 
     def __init__(self, config):
         self.config = config
@@ -86,19 +84,7 @@ class DirectExecution(ExecutionSchema):
         pass
 
 
-def __detect_execution_schema(config):
-    logging.info('determining execution schema ...')
-
-    if in_slurm_allocation():
-        logging.info('selected slurm execution schema ...')
-        return SlurmExecution(config)
-    else:
-        logging.info('selected direct execution schema ...')
-        return DirectExecution(config)
-    
-
 __SCHEMAS__ = {
-    'auto': __detect_execution_schema,
-    SlurmExecution.EXEC_NAME: SlurmExecution,
-    DirectExecution.EXEC_NAME: DirectExecution
+    ResourcesType.SLURM: SlurmExecution,
+    ResourcesType.LOCAL: DirectExecution
 }
