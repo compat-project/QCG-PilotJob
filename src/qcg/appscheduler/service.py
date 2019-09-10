@@ -36,14 +36,14 @@ class QCGPMService:
                             help="enable network interface",
                             action="store_true")
         parser.add_argument("--net-port",
-                            help="port to listen for network interface",
-                            type=int, default=int(Config.ZMQ_PORT.value['default']) if Config.ZMQ_PORT.value['default'] else None)
+                            help="port to listen for network interface (implies --net)",
+                            type=int, default=None)
         parser.add_argument("--net-port-min",
-                            help="minimum port range to listen for network interface if exact port number is not defined",
-                            type=int, default=int(Config.ZMQ_PORT_MIN_RANGE.value['default']))
+                            help="minimum port range to listen for network interface if exact port number is not defined (implies --net)",
+                            type=int, default=None)
         parser.add_argument("--net-port-max",
-                            help="maximum port range to listen for network interface if exact port number is not defined",
-                            type=int, default=int(Config.ZMQ_PORT_MAX_RANGE.value['default']))
+                            help="maximum port range to listen for network interface if exact port number is not defined (implies --net)",
+                            type=int, default=None)
         parser.add_argument("--file",
                             help="enable file interface",
                             action="store_true")
@@ -57,7 +57,7 @@ class QCGPMService:
                             help="job environment schema [auto|slurm]",
                             default="auto")
         parser.add_argument("--resources",
-                            help="source of information about available resources [auto|slurm|local]",
+                            help="source of information about available resources [auto|slurm|local] as well as a method of job execution (through local processes or as a Slurm sub jobs)",
                             default=Config.RESOURCES.value["default"])
         parser.add_argument("--report-format",
                             help='format of job report file [text|json]',
@@ -76,6 +76,24 @@ class QCGPMService:
                             help="reserve one of the core for the QCG-PJM",
                             default=False, action="store_true")
         self.__args = parser.parse_args(args)
+
+        if self.__args.net:
+            # set default values for port min & max if '--net' has been defined
+            if not self.__args.net_port_min:
+                self.__args.net_port_min = int(Config.ZMQ_PORT_MIN_RANGE.value['default'])
+
+            if not self.__args.net_port_max:
+                self.__args.net_port_max = int(Config.ZMQ_PORT_MAX_RANGE.value['default'])
+
+        if self.__args.net_port or self.__args.net_port_min or self.__args.net_port_max:
+            # imply '--net' if port or one of the range has been defined
+            self.__args.net = True    
+        
+            if not self.__args.net_port_min:
+                self.__args.net_port_min = int(Config.ZMQ_PORT_MIN_RANGE.value['default'])
+
+            if not self.__args.net_port_max:
+                self.__args.net_port_max = int(Config.ZMQ_PORT_MAX_RANGE.value['default'])
 
         if self.__args.file and not self.__args.file_path:
             # set default file path if interface has been enabled but path not defined
