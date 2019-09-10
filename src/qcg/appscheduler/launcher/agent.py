@@ -195,10 +195,12 @@ class Agent:
 
             if stdout and stderr and stdout == stderr:
                 stdoutP = stderrP = open(stdout, 'w')
-            elif stdout:
-                stdoutP = open(stdout, 'w')
-            elif stderr:
-                stderrP = open(stderr, 'w')
+            else:
+                 if stdout:
+                     stdoutP = open(stdout, 'w')
+
+                 if stderr:
+                     stderrP = open(stderr, 'w')
 
             process = await asyncio.create_subprocess_exec(app_exec, *app_args,
                     stdin=stdinP, stdout=stdoutP, stderr=stderrP, cwd=wdir, env=env)
