@@ -506,9 +506,11 @@ class LocalManager(Manager):
         print('manager process started')
 
         try:
-            self.qcgpm_conf = self.qcgpm_queue.get(block=True, timeout=5)
+            self.qcgpm_conf = self.qcgpm_queue.get(block=True, timeout=10)
         except queue.Empty:
-            raise errors.ServiceError('Service not started')
+            raise errors.ServiceError('Service not started - timeout')
+        except Exception as e:
+            raise errors.ServiceError('Service not started: {}'.format(str(e)))
 
         print('got manager configuration: {}'.format(str(self.qcgpm_conf)))
         if not self.qcgpm_conf.get('zmq_addresses', None):
