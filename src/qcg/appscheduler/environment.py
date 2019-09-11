@@ -9,12 +9,13 @@ class Environment:
     def __init__(self):
         pass
 
-    def updateEnv(self, job, env):
+    def updateEnv(self, job, env, opts={}):
         """
         Update job environment.
 
         :param job (ExecutionJob): job data
         :param env (dict): environment to update
+        :param opts (dict): optional preferences for generating environment
         """
         raise NotImplementedError()
 
@@ -26,7 +27,7 @@ class CommonEnvironment(Environment):
         super(CommonEnvironment, self).__init__()
         logging.info('initializing COMMON environment')
 
-    def updateEnv(self, job, env):
+    def updateEnv(self, job, env, opts={}):
         logging.debug('updating common environment')
 
         env.update({
@@ -89,7 +90,7 @@ class SlurmEnvironment(Environment):
         return same
 
 
-    def updateEnv(self, job, env):
+    def updateEnv(self, job, env, opts={}):
         merged_tasks_per_node = self.__mergePerNodeSpec(job.tasks_per_node)
 
         job.env.update({
@@ -111,15 +112,16 @@ class SlurmEnvironment(Environment):
         if same_cores is not None:
             job.env.update({ 'SLURM_NTASKS_PER_NODE': same_cores })
 
-        # create host file
-        hostfile = os.path.join(job.wdPath, ".%s.hostfile" % job.job.name)
-        with open(hostfile, 'w') as f:
-            for node in job.allocation.nodeAllocations:
-                for i in range(0, node.ncores):
-                    f.write("%s\n" % node.node.name)
-        job.env.update({
-            'SLURM_HOSTFILE': hostfile
-        })
+        if not opts.get('nohostfile', False):
+            # create host file
+            hostfile = os.path.join(job.wdPath, ".%s.hostfile" % job.job.name)
+            with open(hostfile, 'w') as f:
+                for node in job.allocation.nodeAllocations:
+                    for i in range(0, node.ncores):
+                        f.write("%s\n" % node.node.name)
+            job.env.update({
+                'SLURM_HOSTFILE': hostfile
+            })
 
 
 def __select_auto_environment():

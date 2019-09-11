@@ -20,6 +20,9 @@ class ExecutionSchema:
     def preprocess(self, exJob):
         pass
 
+    def getEnvOpts(self):
+        return { }
+
 
 class SlurmExecution(ExecutionSchema):
     EXEC_NAME = 'slurm'
@@ -82,6 +85,9 @@ class DirectExecution(ExecutionSchema):
 
     def preprocess(self, exJob):
         pass
+
+    def getEnvOpts(self):
+        return { 'nohostfile': True }
 
 
 __SCHEMAS__ = {

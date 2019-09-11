@@ -27,6 +27,7 @@ class ExecutionJob:
         self.exitCode = None
         self.__executor = executor
         self.errorMessage = None
+        self.__envOpts = { }
 
         # temporary
         self.wdPath = '.'
@@ -106,7 +107,7 @@ class ExecutionJob:
 #        logging.info('updating job\'s environment from {} objects'.format(str(self.__envs)))
         if self.__envs:
             for env in self.__envs:
-                env.updateEnv(self, self.env)
+                env.updateEnv(self, self.env, self.__envOpts)
 
 #        logging.info('environment after update: {}'.format(str(self.env)))
 
@@ -179,6 +180,9 @@ class LocalSchemaExecutionJob(ExecutionJob):
         self.__stdinF = None
         self.__stdoutF = None
         self.__stderrF = None
+
+        if schema:
+            self.__envOpts = schema.getEnvOpts()
 
 
     def preprocess(self):
@@ -272,6 +276,7 @@ class LauncherExecutionJob(ExecutionJob):
         Run application through the node launcher service.
         """
         super().__init__(executor, envs, allocation, job)
+        self.__envOpts = { 'nohostfile': True }
 
 
     @profile
