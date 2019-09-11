@@ -937,6 +937,10 @@ $ kernprof -v -l qcg/appscheduler/tests/profile_local_sleep.py
 ```
 With the *-v* argument the statistics will be printed directly to standard output.
 
+## Performance issues
+ * It's recommended to use `--system-core` parameter for workflows that contains many small jobs or bigger allocations (>256 cores). This will reserve a single core in allocation for QCG PilogJob Manager service.
+ * The logging level *debug* may cause decrease in performance due to the have usage of file system. 
+
 ## Dictionary
 * **Scheduling system** - a service that controls and schedules access to the fixed set of computational resources (aka. queuing system, workload manager, resource management system). The current implementation of QCG Pilot Job supports SLURM cluster management and job scheduling system.
 * **Job** - a sequential or parallel program with defined resource requirements
