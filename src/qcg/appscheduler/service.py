@@ -263,7 +263,7 @@ class QCGPMServiceProcess(Process):
         except Exception as e:
             print('Error: %s\n' % (str(e)))
             traceback.print_exc()
-            exit(1)
+            sys.exit(1)
 
 
 if __name__ == "__main__":
@@ -272,4 +272,4 @@ if __name__ == "__main__":
     except Exception as e:
         sys.stderr.write('Error: %s\n' % (str(e)))
         traceback.print_exc()
-        exit(1)
+        sys.exit(1)
