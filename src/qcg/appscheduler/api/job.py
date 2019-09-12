@@ -12,6 +12,8 @@ JOB_TOP_ATTRS = {
     "stdout":  { 'req': False, 'types': [ str ]       },
     "stderr":  { 'req': False, 'types': [ str ]       },
     "wd":      { 'req': False, 'types': [ str ]       },
+    "modules": { 'req': False, 'types': [ list, str ] },
+    "venv":    { 'req': False, 'types': [ str ]       },
     "numNodes":{ 'req': False, 'types': [ dict ]      },
     "numCores":{ 'req': False, 'types': [ dict ]      },
     "wt":      { 'req': False, 'types': [ str ]       },
@@ -139,7 +141,7 @@ class Jobs:
             'exec': smplJob['exec']
         }
 
-        for key in [ 'args', 'stdin', 'stdout', 'stderr', 'wd' ]:
+        for key in [ 'args', 'stdin', 'stdout', 'stderr', 'wd', 'modules', 'venv' ]:
             if key in smplJob:
                 stdJob['execution'][key] = smplJob[key]
 
@@ -183,7 +185,7 @@ class Jobs:
             if key in stdJob:
                 smplJob[key] = stdJob[key]
 
-        for eKey in [ 'exec', 'args', 'stdin', 'stdout', 'stderr', 'wd' ]:
+        for eKey in [ 'exec', 'args', 'stdin', 'stdout', 'stderr', 'wd', 'modules', 'venv' ]:
             if eKey in stdJob['execution']:
                 smplJob[eKey] = stdJob['execution'][eKey]
 

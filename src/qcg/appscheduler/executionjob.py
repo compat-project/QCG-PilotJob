@@ -36,6 +36,9 @@ class ExecutionJob:
         self.env = os.environ.copy()
 #        self.env = {}
 
+        self.__jobStartTime = None
+        self.__jobStopTime = None
+
         self.nnodes = len(self.allocation.nodeAllocations)
         self.ncores = sum([node.ncores for node in self.allocation.nodeAllocations])
         self.nlist = ','.join([node.node.name for node in self.allocation.nodeAllocations])
@@ -115,10 +118,34 @@ class ExecutionJob:
     def preprocess(self):
         """
         Prepare environment for job execution.
-        Setup sandbox and environment variables.
+        Setup sandbox and environment variables. Resolve module loading and virtual environment activation.
         """
         self.__setupSandbox()
         self.__prepareEnv()
+        self.__resolveModsVenv()
+
+
+    def __resolveModsVenv(self):
+        # in case of modules or virtualenv we have to run bash first with proper application
+        # after the modules and virtualenv activation.
+        if self.jobExecution.modules is not None or self.jobExecution.venv is not None:
+            job_exec = self.jobExecution.exec
+            job_args = self.jobExecution.args
+
+            self.jobExecution.exec = 'bash'
+
+            bash_cmd = ''
+            if self.jobExecution.modules:
+                bash_cmd += ' '.join(['module load {};'.format(mod) for mod in self.jobExecution.modules])
+
+            if self.jobExecution.venv:
+                bash_cmd += 'source {}/bin/activate;'.format(self.jobExecution.venv)
+        
+            bash_cmd += 'exec {} {}'.format(
+                job_exec,
+                ' '.join([str(arg).replace(" ", "\ ") for arg in job_args]))
+        
+            self.jobExecution.args = [ '-c', bash_cmd ]
 
 
     def preStart(self):
@@ -143,7 +170,11 @@ class ExecutionJob:
         Update job statistics (runtime), set the exit code and optionally error message and notify executor about job finish.
         """
         self.__jobStopTime = datetime.now()
-        self.__jobRunTime = self.__jobStopTime - self.__jobStartTime
+        if self.__jobStartTime:
+            self.__jobRunTime = self.__jobStopTime - self.__jobStartTime
+        else:
+            self.__jobRunTime = 0
+
         self.job.appendRuntime({'rtime': str(self.__jobRunTime)})
 
         self.exitCode = exitCode
@@ -217,10 +248,12 @@ class LocalSchemaExecutionJob(ExecutionJob):
                 stderr=self.__stderrF,
                 cwd=self.wdPath,
     #            env={ **os.environ, **self.env }
-                env=self.env
+                env=self.env,
+                shell=False,
             )
 
-#            logging.info("job %s launched" % (self.job.name))
+            logging.debug("launching job {}: {} {}".format(self.job.name, je.exec, str(je.args)))
+
             logging.info("local process for job {} launched".format(self.job.name))
 
             await process.wait()
