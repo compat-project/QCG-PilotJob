@@ -22,7 +22,13 @@ class ZMQInterface:
         self.address = Config.ZMQ_IFACE_ADDRESS.get(conf)
 
         self.socket = self.zmqCtx.socket(zmq.REP)
-        self.socket.bind(self.address)
+
+        if Config.ZMQ_PORT.get(conf):
+            self.socket.bind(self.address)
+        else:
+            self.local_port = self.socket.bind_to_random_port(self.address,
+                    min_port=int(Config.ZMQ_PORT_MIN_RANGE.get(conf)),
+                    max_port=int(Config.ZMQ_PORT_MAX_RANGE.get(conf)))
 
         self.real_address = str(bytes.decode(self.socket.getsockopt(zmq.LAST_ENDPOINT)))
 

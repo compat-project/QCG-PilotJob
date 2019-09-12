@@ -7,6 +7,8 @@ from qcg.appscheduler.executor import Executor
 from qcg.appscheduler.joblist import JobList, JobState
 from qcg.appscheduler.scheduler import Scheduler
 import qcg.appscheduler.profile
+from qcg.appscheduler.config import Config
+from qcg.appscheduler.parseres import get_resources
 
 
 class SchedulingJob:
@@ -38,7 +40,7 @@ class SchedulingJob:
         Update dependency state.
         Check all dependent jobs and update job's ready (and possible feasible) status.
         """
-        logging.info("updating dependencies of job %s ..." % self.job.name)
+#        logging.info("updating dependencies of job %s ..." % self.job.name)
 
         if not self.isReady:
             finished = set()
@@ -60,8 +62,8 @@ class SchedulingJob:
 
             self.__afterJobs -= finished
 
-            logging.info("#%d dependency (%s feasible) jobs after update of job %s" % (
-            len(self.__afterJobs), str(self.__isFeasible), self.job.name))
+            logging.debug("#{} dependency ({} feasible) jobs after update of job {}".format(
+                len(self.__afterJobs), str(self.__isFeasible), self.job.name))
 
 
     @property
@@ -107,11 +109,14 @@ class Manager:
         """
         self.ifaces = ifaces
 
-        self.__executor = Executor(self, config)
-        self.resources = self.__executor.getResources()
+        self.resources = get_resources(config)
+
+        if Config.SYSTEM_CORE.get(config):
+            self.resources.allocate4System()
 
         logging.info('available resources: {}'.format(self.resources))
 
+        self.__executor = Executor(self, config, self.resources)
         self.__scheduler = Scheduler(self.resources)
         self.jobList = JobList()
 
@@ -119,6 +124,10 @@ class Manager:
 
         self.__jobStatesCbs = {}
 
+
+    def stop(self):
+        if self.__executor:
+            self.__executor.stop()
 
 
     def allJobsFinished(self):
@@ -134,7 +143,7 @@ class Manager:
         """
         newScheduleQueue = []
 
-        logging.info("scheduling loop with %d jobs in queue" % (len(self.__scheduleQueue)))
+        logging.debug("scheduling loop with %d jobs in queue" % (len(self.__scheduleQueue)))
 
         for idx, schedJob in enumerate(self.__scheduleQueue):
             if not self.resources.freeCores:
@@ -145,12 +154,12 @@ class Manager:
 
             if not schedJob.isFeasible:
                 # job will never be ready
-                logging.info("job %s not feasible - omitting" % (schedJob.job.name))
+                logging.debug("job %s not feasible - omitting" % (schedJob.job.name))
                 self.__changeJobState(schedJob.job, JobState.OMITTED)
                 schedJob.job.clearQueuePos()
             else:
                 if schedJob.isReady:
-                    logging.info("job %s is ready" % (schedJob.job.name))
+                    logging.debug("job %s is ready" % (schedJob.job.name))
                     # job is ready - try to find resources
                     try:
                         allocation = self.__scheduler.allocateJob(schedJob.job.resources)
@@ -158,13 +167,14 @@ class Manager:
                         if allocation is not None:
                             schedJob.job.clearQueuePos()
 
-                            logging.info("found resources for job %s" % (schedJob.job.name))
+                            logging.debug("found resources for job %s" % (schedJob.job.name))
 
                             # allocation has been created - execute job
-                            self.__changeJobState(schedJob.job, JobState.EXECUTING)
-                            self.__executor.execute(allocation, schedJob.job)
+                            self.__changeJobState(schedJob.job, JobState.SCHEDULED)
+
+                            asyncio.ensure_future(self.__executor.execute(allocation, schedJob.job))
                         else:
-                            logging.info("missing resources for job %s" % (schedJob.job.name))
+                            logging.debug("missing resources for job %s" % (schedJob.job.name))
                             # missing resources
                             self.__appendToScheduleQueue(newScheduleQueue, schedJob)
                     except (NotSufficientResources, InvalidResourceSpec) as e:
@@ -193,6 +203,16 @@ class Manager:
             job.appendMessage(errorMsg)
 
         self.__fireJobStateNotifies(job.name, state)
+
+
+    def jobExecuting(self, job):
+        """
+        Invoked to signal starting job execution.
+
+        Args:
+            job (Job): job that started executing
+        """
+        self.__changeJobState(job, JobState.EXECUTING)
 
 
     def jobFinished(self, job, allocation, exitCode, errorMsg):
@@ -226,7 +246,7 @@ class Manager:
             state (JobState): new job status
         """
         if len(self.__jobStatesCbs) > 0:
-            logging.info("notifies callbacks about %s job status change %s" % (jobId, state))
+            logging.debug("notifies callbacks about %s job status change %s" % (jobId, state))
             self.__processTask = asyncio.ensure_future(self.__callCallbacks(
                 jobId, state, self.__jobStatesCbs.values()
             ))

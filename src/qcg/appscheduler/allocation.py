@@ -3,18 +3,18 @@ class NodeAllocation:
     def __init__(self, node, cores):
         """
         Resource allocation on a single node, contains information about a node,
-        along with the number of cores allocated.
+        along with the cores allocated.
 
         Args:
             node (Node): a node definition
-            cores (int): number of allocated cores from this node
+            cores ([]int): allocated cores on this node
 
         Attributes:
             __node: a node definition
-            __cores: number of allocated cores
+            __cores: allocated cores
         """
         assert node
-        assert cores > 0
+        assert len(cores) > 0
 
         self.__node = node
         self.__cores = cores
@@ -22,12 +22,22 @@ class NodeAllocation:
 
     def __getCores(self):
         """
+        Return allocated cores on a node.
+
+        Returns:
+            []int: list of cores
+        """
+        return self.__cores
+
+
+    def __getNCores(self):
+        """
         Return number of allocated cores on a node.
 
         Returns:
-            int: number of cores
+            int: list of cores
         """
-        return self.__cores
+        return len(self.__cores)
 
 
     def __getNode(self):
@@ -47,9 +57,10 @@ class NodeAllocation:
         Returns:
             string: a human readable description
         """
-        return "%d @ %s" % (self.__cores, self.__node.name)
+        return "{} @ {}".format(str(self.__cores), self.__node.name)
 
-    cores = property(__getCores, None, None, "number of cores @ the node")
+    cores = property(__getCores, None, None, "cores @ the node")
+    ncores = property(__getNCores, None, None, "number of cores @ the node")
     node = property(__getNode, None, None, "node")
 
 
@@ -63,7 +74,7 @@ class Allocation:
 
         Attributes:
             __nodes (NodeAllocation[]): list of a single node allocation
-            __cores (int): total number of cores on all allocations
+            __cores (int): total number of cores on all nodes
         """
         self.__nodes = []
         self.__cores = 0
@@ -80,7 +91,7 @@ class Allocation:
         assert nodeAllocation
 
         self.__nodes.append(nodeAllocation)
-        self.__cores += nodeAllocation.cores
+        self.__cores += nodeAllocation.ncores
 
 
     def __updateCores(self):
@@ -89,7 +100,7 @@ class Allocation:
         """
         cores = 0
         for node in self.__nodes:
-            cores += node.cores
+            cores += node.ncores
         self.__cores = cores
 
 
@@ -131,7 +142,11 @@ class Allocation:
         Returns:
             str: a single line description of allocation
         """
-        return ','.join(["%s:%d" % (node.node.name, node.cores) for node in self.__nodes])
+        #print('allocation contains {} nodes'.format(len(self.__nodes)))
+        #for node in self.__nodes:
+        #    print('node: {}, # cores {}, cores type {}, cores {}, list cores {}'.format(node.node.name, len(node.cores), type(node.cores), str(node.cores), str(list(node.cores))))
+        return ','.join(["{}[{}]".format(node.node.name, ','.join(str(e) for e in list(node.cores))) for node in self.__nodes])
+
 
     cores = property(__getCores, None, None, "number of cores")
     nodeAllocations = property(__getNodeAllocations, None, None, "nodes")

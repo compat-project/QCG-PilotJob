@@ -3,13 +3,17 @@ from distutils.core import setup
 setup(
 	name="QCGPilotManager",
 
-	version="0.4.1",
+	version="0.5.0",
 
 	author="Piotr Kopta",
 	author_email="pkopta@man.poznan.pl",
 
-	packages=["qcg.appscheduler", "qcg.appscheduler.api"],
-        package_dir={"qcg.appscheduler": "src/qcg/appscheduler", "qcg.appscheduler.api": "src/qcg/appscheduler/api"},
+	packages=["qcg.appscheduler", "qcg.appscheduler.api", "qcg.appscheduler.launcher"],
+	package_dir={
+		"qcg.appscheduler": "src/qcg/appscheduler",
+		"qcg.appscheduler.api": "src/qcg/appscheduler/api",
+		"qcg.appscheduler.launcher": "src/qcg/appscheduler/launcher",
+	},
 
 	url="http://github.com/vecma-project/QCG-PilotJob",
 

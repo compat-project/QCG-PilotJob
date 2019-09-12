@@ -6,7 +6,7 @@ import time
 import sys
 import logging
 import queue
-from os.path import exists
+from os.path import exists, join, dirname, abspath
 
 import multiprocessing as mp
 
@@ -91,10 +91,12 @@ class Manager:
         Args:
             cfg (dict) - see constructor.
         """
-        self.__logFile = cfg.get('log_file', 'api.log')
+        self.__logFile = cfg.get('log_file', join('.qcgpjm', 'api.log'))
         print('log file set to {}'.format(self.__logFile))
 
-        if exists(self.__logFile):
+        if not exists(dirname(abspath(self.__logFile))):
+            os.makedirs(dirname(abspath(self.__logFile)))
+        elif exists(self.__logFile):
             os.remove(self.__logFile)
 
         self.__rootLogger = logging.getLogger()
@@ -504,9 +506,11 @@ class LocalManager(Manager):
         print('manager process started')
 
         try:
-            self.qcgpm_conf = self.qcgpm_queue.get(block=True, timeout=2)
+            self.qcgpm_conf = self.qcgpm_queue.get(block=True, timeout=10)
         except queue.Empty:
-            raise errors.ServiceError('Service not started')
+            raise errors.ServiceError('Service not started - timeout')
+        except Exception as e:
+            raise errors.ServiceError('Service not started: {}'.format(str(e)))
 
         print('got manager configuration: {}'.format(str(self.qcgpm_conf)))
         if not self.qcgpm_conf.get('zmq_addresses', None):

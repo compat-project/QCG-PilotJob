@@ -1,8 +1,19 @@
+from enum import Enum
+
 from qcg.appscheduler.errors import *
 
 
-class Node:
-    def __init__(self, name=None, totalCores=0, used=0):
+class NodeAny:
+    def __init__(self, name=None, totalCores=0, used=0, coreIds=None):
+        """
+        Node resources.
+        This class stores and allocates cores. There is no core identification.
+
+        :param name: name of the node
+        :param totalCores: total number of available cores
+        :param used: initial number of used cores
+        :param coreIds: optional core identifiers (UNUSED)
+        """
         self.__name = name
         self.__totalCores = totalCores
         self.__usedCores = used
@@ -48,7 +59,7 @@ class Node:
         if self.resources is not None:
             self.resources.nodeCoresAllocated(allocated)
 
-        return allocated
+        return range(allocated)
 
 
     def release(self, cores):
@@ -56,19 +67,21 @@ class Node:
         Release specified number of cores on a node.
 
         Args:
-            cores (int): number of cores to release
+            cores ([]int): list of cores to release
 
         Raises:
             InvalidResourceSpec: when number of cores to release exceeds number of of
               used cores.
         """
-        if cores > self.__usedCores:
+        ncores = len(cores)
+
+        if ncores > self.__usedCores:
             raise InvalidResourceSpec()
 
-        self.__usedCores -= cores
+        self.__usedCores -= ncores
 
         if self.resources is not None:
-            self.resources.nodeCoresReleased(cores)
+            self.resources.nodeCoresReleased(ncores)
 
     name = property(__getName, None, None, "name of the node")
     total = property(__getTotalCores, __setTotalCores, None, "total number of cores")
@@ -76,9 +89,105 @@ class Node:
     free = property(__getFreeCores, None, None, "number of available cores")
 
 
+class NodeCores:
+
+    def __init__(self, name=None, totalCores=0, used=0, coreIds=None):
+        """
+        Node resources.
+        This class stores and allocates specific cores. Each core is identified by the number.
+
+        :param name: name of the node
+        :param totalCores: total number of available cores
+        :param used: initial number of used cores
+        :param coreIds: optional core identifiers (the list must have at least 'totalCores' elements)
+        """
+        self.__name = name
+        self.__totalCores = totalCores
+
+        if coreIds:
+            self.__freeCores = list(coreIds[used:totalCores])
+        else:
+            self.__freeCores = list(range(used, self.__totalCores))
+
+
+    def __getName(self):
+        return self.__name
+
+    def __getTotalCores(self):
+        return self.__totalCores
+
+    def __getUsedCores(self):
+        return self.__totalCores - len(self.__freeCores)
+
+    def __getFreeCores(self):
+        return len(self.__freeCores)
+
+    def __str__(self):
+        return "{} {} ({} used)".format(self.__name, self.__totalCores, self.__getUsedCores())
+
+
+    def allocate(self, cores):
+        """
+        Allocate maximum number of cores on a node.
+
+        Args:
+            cores(int): maximum number of cores to allocate
+
+        Returns:
+            [](int): allocated cores
+        """
+        nallocated = min(cores, self.__getFreeCores())
+        allocation = self.__freeCores[0:nallocated]
+        self.__freeCores = self.__freeCores[nallocated:]
+
+        if self.resources is not None:
+            self.resources.nodeCoresAllocated(len(allocation))
+
+        return allocation
+
+
+    def release(self, allocation):
+        """
+        Release allocation on a node.
+
+        Args:
+            allocation ([]int): cores allocated
+        """
+        if len(allocation) > self.__getUsedCores():
+            raise ValueError()
+
+        self.__freeCores = sorted(self.__freeCores + allocation)
+
+        if self.resources is not None:
+            self.resources.nodeCoresReleased(len(allocation))
+
+
+    name = property(__getName, None, None, "name of the node")
+    total = property(__getTotalCores, None, None, "total number of cores")
+    used = property(__getUsedCores, None, None, "number of used cores")
+    free = property(__getFreeCores, None, None, "number of free cores")
+
+
+Node = NodeCores
+
+
+class ResourcesType(Enum):
+    LOCAL = 1
+    SLURM = 2
+
+
 class Resources:
 
-    def __init__(self, nodes=None):
+    def __init__(self, rtype, nodes=None):
+        """
+        Available resources set.
+        The set stores and tracks nodes with possible different number of available cores.
+
+        :param type: type of resources (ResourcesType)
+        :param nodes: list of available nodes
+        """
+        self.__type = rtype
+
         self.__nodes = nodes
         if self.__nodes is None:
             self.__nodes = []
@@ -92,6 +201,9 @@ class Resources:
         #		print "initializing %d nodes" % len(nodes)
         self.__computeCores()
 
+        self.__systemAllocationNode = None
+        self.__systemAllocation = None
+
     def __computeCores(self):
         total, used = 0, 0
         for node in self.__nodes:
@@ -100,6 +212,9 @@ class Resources:
 
         self.__totalCores = total
         self.__usedCores = used
+
+    def __getRType(self):
+        return self.__type
 
     def __getNodes(self):
         return self.__nodes
@@ -113,6 +228,19 @@ class Resources:
     def __getFreeCores(self):
         return self.__totalCores - self.__usedCores
 
+    def allocate4System(self):
+        if self.__systemAllocation and self.__systemAllocationNode:
+            self.__systemAllocationNode.release(self.__systemAllocation)
+
+            self.__systemAllocation = None
+            self.__systemAllocationNode = None
+
+        for node in self.__nodes:
+            self.__systemAllocation = node.allocate(1)
+
+            if self.__systemAllocation:
+                self.__systemAllocationNode = node
+                break
 
     def nodeCoresAllocated(self, cores):
         """
@@ -163,6 +291,7 @@ class Resources:
     def nNodes(self):
         return len(self.__nodes)
 
+    rtype = property(__getRType, None, None, "type of resources")
     nodes = property(__getNodes, None, None, "list of a nodes")
     totalNodes = property(nNodes, None, None, "total number of nodes")
     totalCores = property(__getTotalCores, None, None, "total number of cores")

@@ -250,7 +250,7 @@ def test_local_simple_iter_job(tmpdir):
     rmtree(str(tmpdir))
 
 
-def test_local_iter_scheduling_job(tmpdir):
+def test_local_iter_scheduling_job_small(tmpdir):
     file_path = tmpdir.join('jobs.json')
 
     print('tmpdir: {}'.format(str(tmpdir)))
@@ -298,7 +298,7 @@ def test_local_iter_scheduling_job(tmpdir):
                    exists(join(abspath(tmpdir.join(jname)), 'sleep-iter.stdout')),
                    exists(join(abspath(tmpdir.join(jname)), 'sleep-iter.stderr'))))
 
-    with open(join(str(tmpdir), 'jobs.report'), 'r') as f:
+    with open(join(str(tmpdir), '.qcgpjm', 'jobs.report'), 'r') as f:
         job_stats = [json.loads(line) for line in f.readlines() ]
 
     assert len(job_stats) == nits
@@ -391,7 +391,7 @@ def test_local_iter_scheduling_job_large(tmpdir):
                    exists(join(abspath(tmpdir.join(jname)), 'sleep-iter.stdout')),
                    exists(join(abspath(tmpdir.join(jname)), 'sleep-iter.stderr'))))
 
-    with open(join(str(tmpdir), 'jobs.report'), 'r') as f:
+    with open(join(str(tmpdir), '.qcgpjm', 'jobs.report'), 'r') as f:
         job_stats = [json.loads(line) for line in f.readlines() ]
 
     assert len(job_stats) == nits
@@ -533,7 +533,7 @@ def test_local_workflows(tmpdir):
                    exists(join(abspath(tmpdir.join('{}.sandbox'.format(jname))), 'out')),
                    exists(join(abspath(tmpdir.join('{}.sandbox'.format(jname))), 'err'))))
 
-    with open(join(str(tmpdir), 'jobs.report'), 'r') as f:
+    with open(join(str(tmpdir), '.qcgpjm', 'jobs.report'), 'r') as f:
         job_stats = [json.loads(line) for line in f.readlines() ]
 
     assert len(job_stats) == len(jnames)
@@ -598,3 +598,4 @@ def test_local_workflows_error(tmpdir):
     assert not exists(abspath(tmpdir.join('first.sandbox')))
 
     rmtree(str(tmpdir))
+

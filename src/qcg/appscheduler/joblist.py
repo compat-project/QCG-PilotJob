@@ -9,11 +9,12 @@ from qcg.appscheduler.errors import JobAlreadyExist, IllegalResourceRequirements
 
 class JobState(Enum):
     QUEUED = 1
-    EXECUTING = 2
-    SUCCEED = 3
-    FAILED = 4
-    CANCELED = 5
-    OMITTED = 6
+    SCHEDULED = 2
+    EXECUTING = 3
+    SUCCEED = 4
+    FAILED = 5
+    CANCELED = 6
+    OMITTED = 7
 
     def isFinished(self):
         return self in [JobState.SUCCEED, JobState.FAILED, JobState.CANCELED,

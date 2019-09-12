@@ -10,9 +10,9 @@ class Config(Enum):
         'default': '.'
     }
 
-    EXECUTION_SCHEMA = {
-        'name': 'schema',
-        'default': 'auto'
+    AUX_DIR = {
+        'name': 'aux.dir',
+        'default': '.qcgpjm'
     }
 
     EXECUTION_NODES = {
@@ -22,6 +22,11 @@ class Config(Enum):
 
     ENVIRONMENT_SCHEMA = {
         'name': 'envs',
+        'default': 'auto'
+    }
+
+    RESOURCES = {
+        'name': 'resources',
         'default': 'auto'
     }
 
@@ -37,15 +42,25 @@ class Config(Enum):
 
     ZMQ_PORT = {
         'name': 'zmq.port',
-        'default': '5555'
+        'default': None
     }
+
+    ZMQ_PORT_MIN_RANGE = {
+        'name': 'zmq.port.min',
+        'default': 2222,
+    }            
+
+    ZMQ_PORT_MAX_RANGE = {
+        'name': 'zmq.port.max',
+        'default': 9999,
+    }            
 
     ZMQ_IFACE_ADDRESS = {
         'name': 'zmq.address',
-        'get': lambda conf: 'tcp://%s:%s' % (
+        'get': lambda conf: 'tcp://{}:{}'.format(
             str(Config.ZMQ_IP_ADDRESS.get(conf)),
-            str(Config.ZMQ_PORT.get(conf)))
-
+            str(Config.ZMQ_PORT.get(conf))) if Config.ZMQ_PORT.get(conf) else \
+            'tcp://{}'.format(str(Config.ZMQ_IP_ADDRESS.get(conf)))
     }
 
     REPORT_FORMAT = {
@@ -62,6 +77,12 @@ class Config(Enum):
         'name': 'log.level',
         'default': 'info'
     }
+
+    SYSTEM_CORE = {
+        'name': 'system.core',
+        'default': False
+    }
+
 
     def get(self, config):
         if 'get' in self.value:

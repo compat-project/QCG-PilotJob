@@ -2,8 +2,10 @@ import logging
 import os
 import subprocess
 
+from math import log2
+
 from qcg.appscheduler.errors import *
-from qcg.appscheduler.resources import Node, Resources
+from qcg.appscheduler.resources import Node, Resources, ResourcesType
 
 
 def parse_nodelist(nodespec):
@@ -14,6 +16,17 @@ def parse_nodelist(nodespec):
         raise SlurmEnvError("scontrol command failed: %s" % stderr)
 
     return stdout.splitlines()
+
+
+def parse_slurm_cpu_binding(cpu_bind_list):
+    cores = []
+    for hex_mask in cpu_bind_list.split(','):
+        mask = int(hex_mask, 0)
+
+        cores.extend([i for i in range(int(log2(mask)) + 1) if mask & (1 << i)])
+
+    # sort uniq values
+    return sorted(list(set(cores)))
 
 
 def parse_slurm_job_cpus(cpus):
@@ -50,14 +63,25 @@ def parse_slurm_resources(config):
             "failed to parse slurm env: number of nodes (%d) mismatch number of cores (%d)" % (len(node_names),
                                                                                                len(cores_num)))
 
+    core_ids = None
+
+    if 'SLURM_CPU_BIND_LIST' in os.environ and \
+            'SLURM_CPU_BIND_TYPE' in os.environ and \
+            os.environ['SLURM_CPU_BIND_TYPE'].startswith('mask_cpu'):
+        core_ids = parse_slurm_cpu_binding(os.environ['SLURM_CPU_BIND_LIST'])
+
+        if len(core_ids) < max(cores_num):
+            raise SlurmEnvError("failed to parse cpu binding: the core list ({}) mismatch the cores per node ({})".format(
+                str(core_ids), str(cores_num)))
+
     nodes = []
     for i in range(0, len(node_names)):
         nname = bytes.decode(node_names[i])
         logging.debug("%s x %d" % (nname, cores_num[i]))
-        nodes.append(Node(nname, cores_num[i], 0))
+        nodes.append(Node(nname, cores_num[i], 0, coreIds=core_ids))
 
     logging.debug("generated %d nodes" % len(nodes))
-    return Resources(nodes)
+    return Resources(ResourcesType.SLURM, nodes)
 
 
 def in_slurm_allocation():

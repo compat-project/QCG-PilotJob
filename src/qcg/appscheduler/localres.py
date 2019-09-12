@@ -1,7 +1,7 @@
 import multiprocessing as mp
 import socket
 
-from qcg.appscheduler.resources import Node, Resources
+from qcg.appscheduler.resources import Node, Resources, ResourcesType
 from qcg.appscheduler.config import Config
 
 
@@ -25,4 +25,4 @@ def parse_local_resources(config):
     if not nodes:
         raise ValueError('no node available')
 
-    return Resources(nodes)
+    return Resources(ResourcesType.LOCAL, nodes)

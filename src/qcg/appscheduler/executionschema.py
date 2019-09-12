@@ -2,29 +2,26 @@ import os
 import logging
 
 from qcg.appscheduler.errors import *
-from qcg.appscheduler.slurmenv import parse_slurm_resources, in_slurm_allocation
-from qcg.appscheduler.localenv import parse_local_resources
+from qcg.appscheduler.resources import ResourcesType
 
 
 class ExecutionSchema:
 
     @classmethod
-    def GetSchema(cls, name, config):
-        if name not in __SCHEMAS__:
-            raise InternalError('Invalid execution schema name: %s' % name)
+    def GetSchema(cls, resources, config):
+        if resources.rtype not in __SCHEMAS__:
+            raise InternalError('Unknown resources type: %s' % name)
 
-        logging.info('execution schema {}'.format(name))
-
-        return __SCHEMAS__[name](config)
+        return __SCHEMAS__[resources.rtype](config)
 
     def __init__(self, config):
         self.config = config
 
-    def parseResources(self):
-        raise NotImplementedError()
-
     def preprocess(self, exJob):
         pass
+
+    def getEnvOpts(self):
+        return { }
 
 
 class SlurmExecution(ExecutionSchema):
@@ -32,9 +29,6 @@ class SlurmExecution(ExecutionSchema):
 
     def __init__(self, config):
         super(SlurmExecution, self).__init__(config)
-
-    def parseResources(self):
-        return parse_slurm_resources(self.config)
 
     def preprocess(self, exJob):
         job_exec = exJob.jobExecution.exec
@@ -60,7 +54,22 @@ class SlurmExecution(ExecutionSchema):
             "-n", str(exJob.ncores),
             "-m", "arbitrary",
             "--mem-per-cpu=0",
+#            "--cpu-bind=verbose,map_cpu:{}".format(','.join([cores for node in exJob.allocation.nodeAllocations]))
+            "--cpu-bind=verbose,map_cpu:{}".format(','.join([str(core) for core in exJob.allocation.nodeAllocations[0].cores])),
+#            "--cpu-bind=verbose,cores",
             "--multi-prog" ]
+
+        if exJob.jobExecution.stdin:
+            exJob.jobExecution.args.extend(["-i", os.path.join(exJob.wdPath, exJob.jobExecution.stdin)])
+            exJob.jobExecution.stdin = None
+
+        if exJob.jobExecution.stdout:
+            exJob.jobExecution.args.extend(["-o", os.path.join(exJob.wdPath, exJob.jobExecution.stdout)])
+            exJob.jobExecution.stdout = None
+
+        if exJob.jobExecution.stderr:
+            exJob.jobExecution.args.extend(["-e", os.path.join(exJob.wdPath, exJob.jobExecution.stderr)])
+            exJob.jobExecution.stderr = None
 
         if exJob.job.resources.wt:
             exJob.jobExecution.args.extend(["--time", "0:{}".format(int(exJob.job.resources.wt.total_seconds()))])
@@ -74,26 +83,14 @@ class DirectExecution(ExecutionSchema):
     def __init__(self, config):
         super(DirectExecution, self).__init__(config)
 
-    def parseResources(self):
-        return parse_local_resources(self.config)
-
     def preprocess(self, exJob):
         pass
 
+    def getEnvOpts(self):
+        return { 'nohostfile': True }
 
-def __detect_execution_schema(config):
-    logging.info('determining execution schema ...')
-
-    if in_slurm_allocation():
-        logging.info('selected slurm execution schema ...')
-        return SlurmExecution(config)
-    else:
-        logging.info('selected direct execution schema ...')
-        return DirectExecution(config)
-    
 
 __SCHEMAS__ = {
-    'auto': __detect_execution_schema,
-    SlurmExecution.EXEC_NAME: SlurmExecution,
-    DirectExecution.EXEC_NAME: DirectExecution
+    ResourcesType.SLURM: SlurmExecution,
+    ResourcesType.LOCAL: DirectExecution
 }
