@@ -1,7 +1,7 @@
 # QCG-PilotJob
 The QCG Pilot Job service for execution of many computing tasks inside one allocation
 =======
-# The QCG Pilot Manager v 0.3
+# The QCG Pilot Manager v 0.5.0
 
 
 Author: Piotr Kopta <pkopta@man.poznan.pl>, Tomasz Piontek <piontek@man.poznan.pl>, Bartosz Bosak <bbosak@man.poznan.pl>
@@ -14,6 +14,119 @@ The QCG PilotJob Manager system is designed to schedule and execute many small j
 One can argue that there are available job array mechanisms in many systems, however the traditional job array mechanism allows to run only bunch of jobs having the same resource requirements while jobs being parts of a multiscale simulation by nature vary in requirements and therefore need more flexible solutions.
 
 From the scheduling system perspective, QCG PilotJob Manager is seen as a single job inside a single user allocation. In the other words, the manager controls an execution of a complex experiment consisting of many jobs on resources reserved for the single job allocation. The manager listens to user's requests and executes commands like submit job, cancel job and report resources usage. In order to manage the resources and jobs the system takes into account both resources availability and mutual dependencies between jobs . Two interfaces are defined to communicate with the system: file-based and network-based. The former one is dedicated and more convenient for a static scenarios when a number of jobs is known in advance to the QCG PilotJob Manager start. The network interface is more general and flexible as it allows to dynamically send new requests and track execution of previously submitted jobs during the run-time. 
+
+To allow user's to test their scenarious, the QCG PilotJob Manager supports *local* execution mode, in which all job's are executed on local machine and doesn't require any scheduling system allocation.
+
+## INSTALLATION
+The QCG PilotJob Manager requires Python version >= 3.6.
+
+Optionally the latest version of *pip* package manager and *virtualenv* can be insalled in user's directory by following commands:
+```bash
+$ curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+$ python3 get-pip.py --user
+$ pip install --user virtualenv
+```
+
+To create private virtual environment for installed packages, type following commands:
+```bash
+$ virtualenv venv
+$ . venv/bin/activate
+```
+
+To install QCG PilotJob Manager directly from github.com into virtual environment, type following command:
+```bash
+$ pip install --upgrade git+https://github.com/vecma-project/QCG-PilotJob.git
+```
+
+## RUN
+The QCG Pilot Job Manager module provides wrapper command for running Manager service:
+```bash
+$ qcg-pm-service --help
+usage: qcg-pm-service [-h] [--net] [--net-port NET_PORT]
+                  [--net-port-min NET_PORT_MIN] [--net-port-max NET_PORT_MAX]
+                  [--file] [--file-path FILE_PATH] [--wd WD]
+                  [--envschema ENVSCHEMA] [--resources RESOURCES]
+                  [--report-format REPORT_FORMAT] [--report-file REPORT_FILE]
+                  [--nodes NODES]
+                  [--log {critical,error,warning,info,debug,notset}]
+                  [--system-core]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --net                 enable network interface
+  --net-port NET_PORT   port to listen for network interface (implies --net)
+  --net-port-min NET_PORT_MIN
+                        minimum port range to listen for network interface if
+                        exact port number is not defined (implies --net)
+  --net-port-max NET_PORT_MAX
+                        maximum port range to listen for network interface if
+                        exact port number is not defined (implies --net)
+  --file                enable file interface
+  --file-path FILE_PATH
+                        path to the request file (implies --file)
+  --wd WD               working directory for the service
+  --envschema ENVSCHEMA
+                        job environment schema [auto|slurm]
+  --resources RESOURCES
+                        source of information about available resources
+                        [auto|slurm|local] as well as a method of job
+                        execution (through local processes or as a Slurm sub
+                        jobs)
+  --report-format REPORT_FORMAT
+                        format of job report file [text|json]
+  --report-file REPORT_FILE
+                        name of the job report file
+  --nodes NODES         configuration of available resources (implies
+                        --resources local)
+  --log {critical,error,warning,info,debug,notset}
+                        log level
+  --system-core         reserve one of the core for the QCG-PJM
+```
+
+The same Manager service, can by run directly with the python command:
+```bash
+$ python -m qcg.appscheduler.service --help
+```
+
+### EXAMPLE
+
+```bash
+$ mkdir tmpdir
+$ cd tmpdir
+$ cat <<EOF > jobs.json
+[
+{
+    "request": "submit",
+    "jobs": [  {
+        "name": "date1",
+        "execution": {
+          "exec": "/bin/date",
+          "stdout": "${jname}.stdout",
+          "stderr": "${jname}.stderr"
+        },
+        "resources": {
+          "numCores": {
+                "exact": 1
+          }
+        }
+    } ]
+},
+{
+    "request": "control",
+    "command": "finishAfterAllTasksDone"
+}
+]
+EOF
+$ qcg-pm-service --file --file-path jobs.json
+```
+In the current directory there should be created a subdirectory '.qcgpjm' with a bunch of files, where the most important are:
+* `service.log` - with the manager logs
+* `jobs.report` - the report from job execution
+
+The number of available resources discovered by the QCG PJM can be checked with:
+```bash
+$ grep 'available resources' .qcgpjm/service.log
+```
 
 ## MODULES
 QCG Pilot Job Manager consists of the following internal functional modules:
@@ -34,7 +147,11 @@ All the jobs submitted to the QCG PilotJob Manger system are placed in the queue
 
 
 ## EXECUTOR
-The QCG PilotJob Manager module named Executor is responsible for execution and control of jobs by interacting with the cluster resource management system. The current implementation is integrated with the SLURM system, but the modular approach allows for relatively easy integration also with other queuing systems. The PilotJob Manager and all the jobs controlled by it are executed in a single allocation. To hide this fact from the individual job and to give it an impression that it is executed directly by the queuing system a set of environment variables, typically set by the queuing system, is overwritten and passed to the job. These variables give the application all typical information about a job it can be interested in, e.g. the amount of assigned resources. In case of parallel application an appropriate machine file is created with a list of resources for each job.
+The QCG PilotJob Manager module named Executor is responsible for execution and control of jobs by interacting with the cluster resource management system. The current implementation contains three different methods of executing jobs:
+ - as a local process - this method is used when QCG PilotJob Manager either has been run outside a Slurm allocation or when parameter '--resources local' has been defined,
+ - through internal distributed launcher service - currently used only in Slurm allocation for single core jobs,
+ - as a Slurm sub job - the job is submitted to the Slurm to be run in current allocation on scheduled resoureces.
+The modular approach allows for relatively easy integration also with other queuing systems. The PilotJob Manager and all the jobs controlled by it are executed in a single allocation. To hide this fact from the individual job and to give it an impression that it is executed directly by the queuing system a set of environment variables, typically set by the queuing system, is overwritten and passed to the job. These variables give the application all typical information about a job it can be interested in, e.g. the amount of assigned resources. In case of parallel application an appropriate machine file is created with a list of resources for each job.
 
 ### SLURM EXECUTION ENVIRONMENT
 For the SLURM scheduling system, an execution environment for a single job contains the following set of variables:
@@ -377,6 +494,21 @@ The example finish command request is presented below:
 ```
 
 
+## LOCAL MODE
+The QCG PilotJob Manager supports *local* mode that is suitable for locally testing executiong scenarious. In normal execution mode, where QCG PilotJob Manager is executed in scheduling system allocation, all jobs are launched with the usage of scheduling system. In the *local* mode, the user itself can define the size of available resources and execute it's scenario on such defined resources without the having access to scheduling system. It's worth remembering that QCG PilotJob Manager doesn't verify the physically available resources, also the executed jobs are not launched with any core/processor affinity. Thus the performance of jobs might not be optimal.
+
+The choice between *allocation* (in scheduling system allocation) or *local* mode is made automatically by the QCG PilotJob Manager during the start. If scheduling system environment will be detected, the *allocation* mode will be chosen. In other case, the local mode will be active, and if resources are not defined by the user, the default number of available cores in the system will be taken.
+
+The command line arguments related to the *local* mode are presented below:
+- `--nodes NODES` - the available resources definition; the `NODES` parameter should have format: `[NODE_NAME]:CORES[,[NODE_NAME]:CORES]...`
+- `--envschema ENVSCHEMA` - job execution environment; for each job the QCG PilotJob Manager can create environment similar to the SLURM execution environment
+
+### Examples of resources definition
+* `--nodes 4` - single node with 4 available cores
+* `--nodes n1:2` - single named node with 2 available cores
+* `--nodes 4,2,2` - three unnnamed nodes with 8 total cores
+* `--nodes n1:4, n2:4, n3:4` - three named nodes with 12 total cores
+
 
 ## ADDITIONAL OUTPUT FILES
 QCG PilotJob Manager creates the following files in a working directory:
@@ -384,7 +516,7 @@ QCG PilotJob Manager creates the following files in a working directory:
  execution
 - `jobs.report` - holding information about all finished (with success or
  failure) jobs along with the details on status, scheduled nodes/cores,
- working directory and wall time; the sample content is presented below:
+ working directory and wall time; the format of this file can be selected by the command argument of the QCG PilotJob Manager; currently the *text* and *json* file formats are supported; the sample content of the *text* format is presented below:
 ```
  msleep2 (SUCCEED)
     2018-01-11 16:02:27.740711: QUEUED
@@ -785,6 +917,29 @@ The QCG instance available at the Eagle cluster contains registered application 
 ```
 
 In this case, the program from the file `api_ex.py` will be executed in a QCG PilotJob Manager environment.
+
+## Profiling
+To profile execution of sample pilot jobs, the *gcc* compiler has to be installed in the system:
+```bash
+$ sudo yum install gcc
+```
+
+From our experience, the *line_profiler* is quite usefull profiler as it has a line resolution:
+```bash
+$ pip install line_profiler
+```
+
+To run profiling, use the *kernprof* tool distributed with the *line_profiler* package:
+```bash
+$ cd src
+$ export PYTHONPATH=.
+$ kernprof -v -l qcg/appscheduler/tests/profile_local_sleep.py
+```
+With the *-v* argument the statistics will be printed directly to standard output.
+
+## Performance issues
+ * It's recommended to use `--system-core` parameter for workflows that contains many small jobs or bigger allocations (>256 cores). This will reserve a single core in allocation for QCG PilogJob Manager service.
+ * The logging level *debug* may cause decrease in performance due to the have usage of file system. 
 
 ## Dictionary
 * **Scheduling system** - a service that controls and schedules access to the fixed set of computational resources (aka. queuing system, workload manager, resource management system). The current implementation of QCG Pilot Job supports SLURM cluster management and job scheduling system.
