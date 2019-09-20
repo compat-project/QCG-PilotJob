@@ -9,6 +9,7 @@ from qcg.appscheduler.scheduler import Scheduler
 import qcg.appscheduler.profile
 from qcg.appscheduler.config import Config
 from qcg.appscheduler.parseres import get_resources
+from qcg.appscheduler.zmqinterface import ZMQInterface
 
 
 class SchedulingJob:
@@ -108,6 +109,12 @@ class Manager:
             config - configuration
         """
         self.ifaces = ifaces
+
+        if self.ifaces:
+            zmqiface = next((iface for iface in self.ifaces if isinstance(iface, ZMQInterface)), None)
+
+            if zmqiface:
+                self.zmq_address = zmqiface.real_address
 
         self.resources = get_resources(config)
 
