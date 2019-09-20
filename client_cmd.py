@@ -1,5 +1,4 @@
 import click
-import python
 import logging
 import re
 import traceback
@@ -37,57 +36,73 @@ def get_address_from_arg(address):
 
 
 @click.group()
-@click.option('-d', '--dir', envvar='QCG_PJM_DIR', help="path to the QCG-PJM working directory")
+@click.option('-p', '--path', envvar='QCG_PJM_DIR', help="path to the QCG-PJM working directory")
 @click.option('-a', '--address', envvar='QCG_PJM_ADDRESS', help="address of the QCG-PJM network interface")
 @click.option('-d', '--debug', envvar='QCG_CLIENT_DEBUG', is_flag=True, default=False, help="enable debugging - all messages will be written to the local qcgclient.log file")
 @click.pass_context
-def qcgpjm(ctx, dir, address, debug):
+def qcgpjm(ctx, path, address, debug):
     """QCG PJM command line client."""
     try:
         setup_logging(debug)
 
         if address:
             pjm_address = get_address_from_arg(address)
-        elif dir:
-            pjm_address = get_address_from_directory(dir)
+        elif path:
+            pjm_address = get_address_from_directory(path)
         else:
             pjm_address = get_address_from_directory('.')
 
         if not pjm_address:
-            raise Exception('unable to find QCG PJM network interface address (use \'-d\' or \'-a\' argument)')
+            raise Exception('unable to find QCG PJM network interface address (use \'-p\' or \'-a\' argument)')
 
-        ctx.address = pjm_address
+        ctx.ensure_object(dict)
+        ctx.obj['address'] = pjm_address
 
-        logging.debug('qcg pjm network interface address: {}'.format(str(ctx.address)))
+        logging.debug('qcg pjm network interface address: {}'.format(str(ctx.obj['address'])))
 
-        ctx.zmqCtx = zmq.Context.instance()
-        ctx.zmqSock = ctx.zmqCtx.socket(zmq.REQ)
-        ctx.zmqSock.connect(ctx.address)
+        ctx.obj['zmqCtx'] = zmq.Context.instance()
+        ctx.obj['zmqSock'] = ctx.obj['zmqCtx'].socket(zmq.REQ)
+        ctx.obj['zmqSock'].setsockopt(zmq.LINGER, 0)
+        ctx.obj['zmqSock'].connect(ctx.obj['address'])
+
+        logging.debug('prepared context: {}'.format(str(ctx)))
     except Exception as e:
         click.echo('error: {}'.format(str(e)), err=True)
         logging.error(traceback.format_exc())
 
 
 @qcgpjm.command()
-@click.pass_obj
+@click.pass_context
 def list(ctx):
     """Show service status."""
     try:
+        logging.debug('got context: {}'.format(str(ctx)))
+
         path = 'jobs/'
 
-        ctx.zmqSock.send(str.encode(json.dumps({
+        ctx.obj['zmqSock'].send(str.encode(json.dumps({
             "request": "status"
         })))
 
         logging.debug('\'status\' request send - waiting for reponse')
 
-        reply = bytes.decode(ctx.zmqSock.reccv())
+        poller = zmq.Poller()
+        poller.register(ctx.obj['zmqSock'], zmq.POLLIN)
+        if poller.poll(5*1000): # 10s timeout in milliseconds
+            d = ctx.obj['zmqSock'].recv_json()
+        else:
+            raise Exception('Timeout processing status request')
 
-        logging.debug('got reply: {}'.format(str(reply)))
+        logging.debug('got reply: {}'.format(str(d)))
 
-        d = json.loads(reply)
+        if d['code'] != 0:
+            raise Exception('Status request failed: {}'.format(d.get('message', 'error')))
 
-        print('current status: {}'.format(str(reply)))
+        status = d.get('data', {})
+        for secname, secdata in status.items():
+            print('[{}]'.format(secname))
+            for key, value in secdata.items():
+                print('{}={}'.format(key, value))
     except Exception as e:
         click.echo('error: {}'.format(str(e)), err=True)
         logging.error(traceback.format_exc())
@@ -99,9 +114,9 @@ def setup_logging(debug):
     logging.basicConfig(level=level,
                         format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
                         datefmt='%m-%d %H:%M',
-                        filename='qcgclient.log',
+                        filename='qcgpjmclient.log',
                         filemode='w')
 
 
 if __name__ == '__main__':
-    qcgpjm()
+    qcgpjm(obj={})
