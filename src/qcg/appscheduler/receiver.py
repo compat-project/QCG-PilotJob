@@ -1,6 +1,9 @@
 import asyncio
 import logging
 import socket
+import os
+import sys
+import getpass
 from asyncio import CancelledError
 from enum import Enum
 from datetime import datetime
@@ -11,6 +14,7 @@ from qcg.appscheduler.request import ListJobsReq, ResourcesInfoReq, FinishReq
 from qcg.appscheduler.request import RemoveJobReq, ControlReq, StatusReq
 from qcg.appscheduler.request import Request, SubmitReq, JobStatusReq, JobInfoReq, CancelJobReq
 from qcg.appscheduler.response import Response, ResponseCode
+from qcg.appscheduler.joblist import JobState
 
 
 class ResponseStatus(Enum):
@@ -465,8 +469,8 @@ class Receiver:
             job = self.__manager.jobList.get(jobName)
 
             if job is None:
-                logger.warning('missing job\'s {} data '.format(jobName))
-
+                logging.warning('missing job\'s {} data '.format(jobName))
+            else:
                 if job.state in [ JobState.QUEUED, JobState.SCHEDULED ]:
                     nSchedulingJobs += 1
                 elif job.state in [ JobState.EXECUTING ]:
@@ -479,13 +483,13 @@ class Receiver:
         resources = self.__manager.resources
         return Response.Ok(data={
             'system': {
-                'uptime': str(datetime.now() - self.startTime()),
+                'uptime': str(datetime.now() - self.startTime),
                 'zmqaddress': self.__manager.zmq_address,
                 'ifaces': [ iface.name() for iface in self.__ifaces ],
                 'host': socket.gethostname(),
-                'account': os.getusername(),
+                'account': getpass.getuser(),
                 'wd': os.getcwd(),
-                'python-version': sys.version().replace('\n', ' '),
+                'python-version': sys.version.replace('\n', ' '),
                 'python': sys.executable,
                 'platform': sys.platform,
             },
