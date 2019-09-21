@@ -73,7 +73,7 @@ def qcgpjm(ctx, path, address, debug):
 
 @qcgpjm.command()
 @click.pass_context
-def list(ctx):
+def status(ctx):
     """Show service status."""
     try:
         logging.debug('got context: {}'.format(str(ctx)))
@@ -111,10 +111,16 @@ def list(ctx):
 
 def setup_logging(debug):
     level=logging.DEBUG if debug else logging.WARNING
+
+    if exists('.qcgpjm'):
+        logfile = '.qcgpjm/qcgpjmclient.log'
+    else:
+        logfile = 'qcgpjmclient.log'
+
     logging.basicConfig(level=level,
                         format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
                         datefmt='%m-%d %H:%M',
-                        filename='qcgpjmclient.log',
+                        filename=logfile,
                         filemode='w')
 
 
