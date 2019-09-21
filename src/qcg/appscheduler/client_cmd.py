@@ -4,6 +4,7 @@ import re
 import traceback
 import json
 import zmq
+import sys
 
 from os.path import exists, join
 
@@ -69,6 +70,7 @@ def qcgpjm(ctx, path, address, debug):
     except Exception as e:
         click.echo('error: {}'.format(str(e)), err=True)
         logging.error(traceback.format_exc())
+        sys.exit(1)
 
 
 @qcgpjm.command()

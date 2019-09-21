@@ -26,6 +26,6 @@ setup(
 		],
 
     entry_points = {
-        'console_scripts': ['qcg-pm-service=qcg.appscheduler.command_line:service','qcg-pm=client_cmd.py:qcgpjm'],
+        'console_scripts': ['qcg-pm-service=qcg.appscheduler.command_line:service','qcg-pm=qcg.appscheduler.client_cmd:qcgpjm'],
     },
 )
