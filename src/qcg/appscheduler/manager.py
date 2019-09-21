@@ -110,6 +110,7 @@ class Manager:
         """
         self.ifaces = ifaces
 
+        self.zmq_address = None
         if self.ifaces:
             zmqiface = next((iface for iface in self.ifaces if isinstance(iface, ZMQInterface)), None)
 
