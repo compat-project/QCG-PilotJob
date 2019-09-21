@@ -102,7 +102,7 @@ class ExecutionJob:
         if self.jobExecution.env is not None:
             self.env.update(self.jobExecution.env)
 
-        if hasattr(self.__executor, 'zmq_address'):
+        if hasattr(self.__executor, 'zmq_address') and self.__executor.zmq_address:
             self.env.update({
                 'QCG_PM_ZMQ_ADDRESS': self.__executor.zmq_address
             })
