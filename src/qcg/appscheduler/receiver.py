@@ -482,29 +482,29 @@ class Receiver:
 
         resources = self.__manager.resources
         return Response.Ok(data={
-            'system': {
-                'uptime': str(datetime.now() - self.startTime),
-                'zmqaddress': self.__manager.zmq_address,
-                'ifaces': [ iface.name() for iface in self.__ifaces ],
-                'host': socket.gethostname(),
-                'account': getpass.getuser(),
-                'wd': os.getcwd(),
-                'python-version': sys.version.replace('\n', ' '),
-                'python': sys.executable,
-                'platform': sys.platform,
+            'System': {
+                'Uptime': str(datetime.now() - self.startTime),
+                'Zmqaddress': self.__manager.zmq_address,
+                'Ifaces': [ iface.name() for iface in self.__ifaces ],
+                'Host': socket.gethostname(),
+                'Account': getpass.getuser(),
+                'Wd': os.getcwd(),
+                'PythonVersion': sys.version.replace('\n', ' '),
+                'Python': sys.executable,
+                'Platform': sys.platform,
             },
-            'resources': {
-                'totalNodes': len(resources.nodes),
-                'totalCores': resources.totalCores,
-                'usedCores': resources.usedCores,
-                'freeCores': resources.freeCores,
+            'Resources': {
+                'TotalNodes': len(resources.nodes),
+                'TotalCores': resources.totalCores,
+                'UsedCores': resources.usedCores,
+                'FreeCores': resources.freeCores,
             },
-            'jobStats': { 
-                'totalJobs': len(jobNames),
-                'inScheduleJobs': nSchedulingJobs,
-                'failedJobs': nFailedJobs,
-                'finishedJobs': nFinishedJobs,
-                'executingJobs': nExecutingJobs,
+            'JobStats': { 
+                'TotalJobs': len(jobNames),
+                'InScheduleJobs': nSchedulingJobs,
+                'FailedJobs': nFailedJobs,
+                'FinishedJobs': nFinishedJobs,
+                'ExecutingJobs': nExecutingJobs,
             }
         })
 
