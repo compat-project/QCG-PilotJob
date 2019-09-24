@@ -478,7 +478,7 @@ class Receiver:
                 elif job.state in [ JobState.FAILED, JobState.OMITTED ]:
                     nFailedJobs += 1
                 elif job.state in [ JobState.CANCELED, JobState.SUCCEED ]:
-                    nFinishedJobs + 1
+                    nFinishedJobs += 1
 
         resources = self.__manager.resources
         return Response.Ok(data={
