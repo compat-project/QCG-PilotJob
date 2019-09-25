@@ -88,6 +88,11 @@ class Config(Enum):
         'default': 'address'
     }
 
+    FINAL_STATUS_FILE = {
+        'name': 'final.status.file',
+        'default': 'final_status'
+    }
+
     def get(self, config):
         if 'get' in self.value:
             return self.value['get'](config)

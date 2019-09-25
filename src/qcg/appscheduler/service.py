@@ -208,6 +208,20 @@ class QCGPMService:
         while not receiver.isFinished:
             await asyncio.sleep(0.5)
 
+        try:
+            response = await receiver.generateStatusResponse()
+
+            statusFile = Config.FINAL_STATUS_FILE.get(self.__conf)
+            statusFile = statusFile if isabs(statusFile) else join(self.auxDir, statusFile)
+
+            if exists(statusFile):
+                os.remove(statusFile)
+
+            with open(statusFile, 'w') as f:
+                f.write(response.toJSON())
+        except Exception as e:
+            logging.warning("failed to write final status: {}".format(str(e)))
+
         logging.info("stopping receiver ...")
         receiver.stop()
 

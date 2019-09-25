@@ -460,9 +460,8 @@ class Receiver:
             'when': '%ds' % delay,
         })
 
-    async def __handleStatusReq(self, iface, request):
-        logging.info("Handling service status info from %s iface" % (iface.__class__.__name__))
 
+    async def generateStatusResponse(self):
         nSchedulingJobs = nFailedJobs = nFinishedJobs = nExecutingJobs = 0
         jobNames = self.__manager.jobList.jobs()
         for jobName in jobNames:
@@ -507,6 +506,11 @@ class Receiver:
                 'ExecutingJobs': nExecutingJobs,
             }
         })
+
+
+    async def __handleStatusReq(self, iface, request):
+        logging.info("Handling service status info from %s iface" % (iface.__class__.__name__))
+        return await self.generateStatusResponse()
 
     async def __waitForAllJobs(self):
         logging.info("waiting for all jobs to finish (the new method)")

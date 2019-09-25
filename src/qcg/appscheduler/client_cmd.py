@@ -12,6 +12,13 @@ DEFAULT_PROTO = 'tcp'
 DEFAULT_PORT = '21000'
 
 
+class TimeoutError(Exception):
+    pass
+
+class ResponseError(Exception):
+    pass
+
+
 def get_address_from_directory(path):
     wdir = join(path, '.qcgpjm')
     if exists(wdir) and exists(join(wdir, 'address')):
@@ -35,6 +42,42 @@ def get_address_from_arg(address):
     return result
 
 
+def zmq_connect(pjm_ctx):
+    logging.debug('qcg pjm network interface address: {}'.format(str(pjm_ctx['address'])))
+
+    zmq_ctx = {}
+    zmq_ctx['ctx'] = zmq.Context.instance()
+    zmq_ctx['sock'] = zmq_ctx['ctx'].socket(zmq.REQ)
+    zmq_ctx['sock'].setsockopt(zmq.LINGER, 0)
+    zmq_ctx['sock'].connect(pjm_ctx['address'])
+
+    logging.debug('zmq connection created for service @ {}'.format(str(pjm_ctx['address'])))
+    return zmq_ctx
+
+
+def zmq_request(zmq_ctx, request, timeout_secs):
+    zmq_ctx['sock'].send(str.encode(json.dumps({
+        "request": request
+    })))
+
+    logging.debug('\'{}\' request send - waiting for reponse'.format(request))
+
+    poller = zmq.Poller()
+    poller.register(zmq_ctx['sock'], zmq.POLLIN)
+    if poller.poll(timeout_secs*1000): # 10s timeout in milliseconds
+        response = zmq_ctx['sock'].recv_json()
+    else:
+        raise TimeoutError('Timeout processing status request')
+
+    return response
+
+
+def validate_response(response):
+    if response['code'] != 0:
+        raise ResponseError('Request failed: {}'.format(response.get('message', 'error')))
+
+    return response.get('data', {})
+
 
 @click.group()
 @click.option('-p', '--path', envvar='QCG_PJM_DIR', help="path to the QCG-PJM working directory")
@@ -46,27 +89,25 @@ def qcgpjm(ctx, path, address, debug):
     try:
         setup_logging(debug)
 
+        pjm_path = None
+
         if address:
             pjm_address = get_address_from_arg(address)
         elif path:
+            pjm_path = join(path, '.qcgpjm')
             pjm_address = get_address_from_directory(path)
         else:
+            pjm_path = join('.', '.qcgpjm')
             pjm_address = get_address_from_directory('.')
 
         if not pjm_address:
             raise Exception('unable to find QCG PJM network interface address (use \'-p\' or \'-a\' argument)')
 
+        pjm_ctx = { 'path': pjm_path, 'address': pjm_address }
+        logging.debug('qcg pjm network interface address: {}'.format(str(pjm_ctx['address'])))
+
         ctx.ensure_object(dict)
-        ctx.obj['address'] = pjm_address
-
-        logging.debug('qcg pjm network interface address: {}'.format(str(ctx.obj['address'])))
-
-        ctx.obj['zmqCtx'] = zmq.Context.instance()
-        ctx.obj['zmqSock'] = ctx.obj['zmqCtx'].socket(zmq.REQ)
-        ctx.obj['zmqSock'].setsockopt(zmq.LINGER, 0)
-        ctx.obj['zmqSock'].connect(ctx.obj['address'])
-
-        logging.debug('prepared context: {}'.format(str(ctx)))
+        ctx.obj['pjm'] = pjm_ctx
     except Exception as e:
         click.echo('error: {}'.format(str(e)), err=True)
         logging.error(traceback.format_exc())
@@ -78,29 +119,24 @@ def qcgpjm(ctx, path, address, debug):
 def status(ctx):
     """Show service status."""
     try:
-        logging.debug('got context: {}'.format(str(ctx)))
+        pjm_ctx = ctx.obj['pjm']
 
-        path = 'jobs/'
+        zmq_ctx = zmq_connect(pjm_ctx)
 
-        ctx.obj['zmqSock'].send(str.encode(json.dumps({
-            "request": "status"
-        })))
+        try:
+            response = zmq_request(zmq_ctx, 'status', 5)
+        except TimeoutError:
+            # try to read final status - if exists
+            if pjm_ctx.get('path') and exists(join(pjm_ctx['path'], 'final_status')):
+                logging.debug('reading final status from file {}'.format(join(pjm_ctx['path'], 'final_status')))
+                with open(join(pjm_ctx['path'], 'final_status')) as f:
+                    response = json.loads(f.read())
+            else:
+                logging.info('failed to find the final status file in path {}'.format(pjm_ctx.get('path')))
+                raise
 
-        logging.debug('\'status\' request send - waiting for reponse')
-
-        poller = zmq.Poller()
-        poller.register(ctx.obj['zmqSock'], zmq.POLLIN)
-        if poller.poll(5*1000): # 10s timeout in milliseconds
-            d = ctx.obj['zmqSock'].recv_json()
-        else:
-            raise Exception('Timeout processing status request')
-
-        logging.debug('got reply: {}'.format(str(d)))
-
-        if d['code'] != 0:
-            raise Exception('Status request failed: {}'.format(d.get('message', 'error')))
-
-        status = d.get('data', {})
+        status = validate_response(response)
+        
         for secname, secdata in status.items():
             print('[{}]'.format(secname))
             for key, value in secdata.items():
