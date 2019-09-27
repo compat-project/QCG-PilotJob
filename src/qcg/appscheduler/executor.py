@@ -48,7 +48,7 @@ class Executor:
 
         if self.__resources.rtype == ResourcesType.SLURM:
             try:
-                LauncherExecutionJob.StartAgents(self.base_wd, self.__resources.nodes)
+                LauncherExecutionJob.StartAgents(self.base_wd, self.__resources.nodes, self.__resources.binding)
                 self.__is_node_launcher = True
                 logging.info('node launcher succesfully initialized')
             except Exception as e:

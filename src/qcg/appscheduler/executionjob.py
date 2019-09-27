@@ -208,9 +208,6 @@ class LocalSchemaExecutionJob(ExecutionJob):
         
         self.__schema = schema
         self.__processTask = None
-        self.__stdinF = None
-        self.__stdoutF = None
-        self.__stderrF = None
 
         if schema:
             self.envOpts = schema.getEnvOpts()
@@ -228,24 +225,32 @@ class LocalSchemaExecutionJob(ExecutionJob):
     async def __executeLocalProcess(self):
         try:
             je = self.jobExecution
-            self.__stdinF = None
-            self.__stdoutF = asyncio.subprocess.DEVNULL
-            self.__stderrF = asyncio.subprocess.DEVNULL
+            stdinP = None
+            stdoutP = asyncio.subprocess.DEVNULL
+            stderrP = asyncio.subprocess.DEVNULL
 
-            if je.stdin is not None:
-                self.__stdinF = open(je.stdin, 'r')
 
-            if je.stdout is not None:
-                self.__stdoutF = open(os.path.join(self.wdPath, je.stdout), 'w')
+            if je.stdin:
+                stdin_path = je.stdin if os.path.isabs(je.stdin) else os.path.join(self.wdPath, je.stdin)
+                stdinP = open(stdin_path, 'r')
 
-            if je.stderr is not None:
-                self.__stderrF = open(os.path.join(self.wdPath, je.stderr), 'w')
+            if je.stdout and je.stderr and je.stdout == je.stderr:
+                stdout_path = je.stdout if os.path.isabs(je.stdout) else os.path.join(self.wdPath, je.stdout)
+                stdoutP = stderrP = open(stdout_path, 'w')
+            else:
+                if je.stdout:
+                    stdout_path = je.stdout if os.path.isabs(je.stdout) else os.path.join(self.wdPath, je.stdout)
+                    stdoutP = open(stdout_path, 'w')
+
+                if je.stderr:
+                    stderr_path = je.stderr if os.path.isabs(je.stderr) else os.path.join(self.wdPath, je.stderr)
+                    stderrP = open(stderr_path, 'w')
 
             process = await asyncio.create_subprocess_exec(
                 je.exec, *je.args,
-                stdin=self.__stdinF,
-                stdout=self.__stdoutF,
-                stderr=self.__stderrF,
+                stdin=stdinP,
+                stdout=stdoutP,
+                stderr=stderrP,
                 cwd=self.wdPath,
     #            env={ **os.environ, **self.env }
                 env=self.env,
@@ -264,7 +269,18 @@ class LocalSchemaExecutionJob(ExecutionJob):
 
             self.postprocess(exitCode)
         except Exception as e:
+            logging.error("execution failed: {}".format(str(e)))
             self.postprocess(-1, str(e))
+        finally:
+            try:
+                if stdinP:
+                    stdinP.close()
+                if stdoutP != asyncio.subprocess.DEVNULL:
+                    stdoutP.close()
+                if stderrP != asyncio.subprocess.DEVNULL and stderrP != stdoutP:
+                    stderrP.close()
+            except Exception as e:
+                logging.error("cleanup failed: {}".format(str(e)))
 
 
     @profile
@@ -273,12 +289,6 @@ class LocalSchemaExecutionJob(ExecutionJob):
 
 
     def postprocess(self, exitCode, errorMessage=None):
-        for f in [self.__stdinF, self.__stdoutF, self.__stderrF]:
-            if f is not None and f != asyncio.subprocess.DEVNULL:
-                f.close()
-        self.__stdinF = self.__stdoutF = self.__stderrF = None
-        self.__exec_task = None
-
         super().postprocess(exitCode, errorMessage)
 
 
@@ -287,11 +297,11 @@ class LauncherExecutionJob(ExecutionJob):
     launcher = None
 
     @classmethod
-    def StartAgents(cls, wdir, nodes):
+    def StartAgents(cls, wdir, nodes, binding):
         if cls.launcher:
             raise Exception('launcher agents already ininitialized')
 
-        agents = [ { 'agent_id': node.name, 'slurm': { 'node': node.name } } for node in nodes ]
+        agents = [ { 'agent_id': node.name, 'slurm': { 'node': node.name }, 'options': { 'binding': binding } } for node in nodes ]
         cls.launcher = Launcher(wdir)
 
         asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(cls.launcher.start(agents)))

@@ -242,12 +242,16 @@ class Launcher:
             
             logging.info('running node agent {} via {}'.format(idata['agent_id'], proto))
 
+            agent_args = [idata['agent_id'], self.local_export_address]
+            if idata.get('options'):
+                agent_args.append(json.dumps(idata['options']))
+
             if 'ssh' in idata:
-                process = await self.__fire_ssh_agent(idata['ssh'], [ idata['agent_id'], self.local_export_address ])
+                process = await self.__fire_ssh_agent(idata['ssh'], agent_args)
             elif 'slurm' in idata:
-                process = await self.__fire_slurm_agent(idata['slurm'], [ idata['agent_id'], self.local_export_address ])
+                process = await self.__fire_slurm_agent(idata['slurm'], agent_args)
             elif 'local' in idata:
-                process = await self.__fire_local_agent(idata['local'], [ idata['agent_id'], self.local_export_address ])
+                process = await self.__fire_local_agent(idata['local'], agent_args)
             else:
                 raise ValueError('missing start type of node agent {}'.format(idata['agent_id'] ))
 
@@ -266,7 +270,7 @@ class Launcher:
         logging.debug('all agents {} registered in {} seconds'.format(len(self.nodes), (datetime.now() - start_t).total_seconds()))
 
 
-    async def __fire_ssh_agent(self, ssh_data, args):
+    async def __fire_ssh_agent(self, ssh_data, args, options):
         """
         Launch node agent instance via ssh.
 
