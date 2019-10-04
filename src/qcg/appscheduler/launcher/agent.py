@@ -94,7 +94,7 @@ class Agent:
             await self.__send_ready()
         except Exception:
             self.__cleanup()
-            self.clear()
+            self.__clear()
             raise
         
         while not self.__finish:
