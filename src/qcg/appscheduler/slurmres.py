@@ -15,7 +15,7 @@ def parse_nodelist(nodespec):
     if ex_code != 0:
         raise SlurmEnvError("scontrol command failed: %s" % stderr)
 
-    return stdout.splitlines()
+    return bytes.decode(stdout).splitlines()
 
 
 def parse_slurm_cpu_binding(cpu_bind_list):
@@ -53,7 +53,11 @@ def parse_slurm_resources(config):
         raise SlurmEnvError("missing SLURM_JOB_CPUS_PER_NODE settings")
 
     slurm_nodes = os.environ['SLURM_NODELIST']
-    node_names = parse_nodelist(slurm_nodes)
+
+    if config.get('parse_nodes', 'yes') == 'no':
+        node_names = slurm_nodes.split(',')
+    else:
+        node_names = parse_nodelist(slurm_nodes)
 
     slurm_job_cpus = os.environ['SLURM_JOB_CPUS_PER_NODE']
     cores_num = parse_slurm_job_cpus(slurm_job_cpus)
@@ -80,7 +84,7 @@ def parse_slurm_resources(config):
 
     nodes = []
     for i in range(0, len(node_names)):
-        nname = bytes.decode(node_names[i])
+        nname = node_names[i]
         logging.debug("%s x %d" % (nname, cores_num[i]))
         nodes.append(Node(nname, cores_num[i], 0, coreIds=core_ids))
 
@@ -90,3 +94,24 @@ def parse_slurm_resources(config):
 
 def in_slurm_allocation():
     return 'SLURM_NODELIST' in os.environ and 'SLURM_JOB_CPUS_PER_NODE' in os.environ
+
+
+def test_environment(env=None):
+    if not env:
+        env_d = os.environ
+    elif isinstance(env, dict) or isinstance(env, os._Environ):
+        env_d = env
+    elif isinstance(env, str):
+        env_d = { line.split('=', 1)[0]: line.split('=', 1)[1] for line in env.splitlines() }
+    else:
+        raise ValueError('Wrong type of argument ({}) - only string/dict are allowed'.format(type(env).__name__))
+
+    old_os_environ = os.environ
+    try:
+        os.environ = env_d
+        result = parse_slurm_resources({'parse_nodes': 'no'})
+    finally:
+        os.environ = old_os_environ
+
+    print('parsed SLURM resources: {}'.format(result))
+    return result
