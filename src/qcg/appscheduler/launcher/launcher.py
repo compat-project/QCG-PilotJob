@@ -312,6 +312,8 @@ class Launcher:
             stdoutP = open(os.path.join(self.work_dir, '.qcgpjm', 'nl-start-agent-stdout.log'), 'w')
             stderrP = open(os.path.join(self.work_dir, '.qcgpjm', 'nl-start-agent-stderr.log'), 'w')
 
+        logging.debug('running agent process with args: {}'.format(' '.join([ shutil.which('srun') ] + slurm_args + self.node_local_agent_cmd + args)))
+
         return await asyncio.create_subprocess_exec(shutil.which('srun'), *slurm_args,
                 *self.node_local_agent_cmd, *args, stdout=stdoutP, stderr=stderrP)
 

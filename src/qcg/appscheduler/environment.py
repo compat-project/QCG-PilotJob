@@ -3,6 +3,7 @@ import logging
 import types
 
 from qcg.appscheduler.slurmres import in_slurm_allocation
+from qcg.appscheduler.resources import CRType
 
 
 class Environment:
@@ -123,6 +124,13 @@ class SlurmEnvironment(Environment):
                 'SLURM_HOSTFILE': hostfile
             })
 
+        node_with_gpu_crs = [node for node in job.allocation.nodeAllocations if node.crs != None and CRType.GPU in node.crs]
+        if node_with_gpu_crs:
+            # as currenlty we have no way to specify allocated GPU's per node, we assume that all nodes has the same settings
+            job.env.update({ 'CUDA_VISIBLE_DEVICES': ','.join(node_with_gpu_crs[0].crs[CRType.GPU].instances)})
+        else:
+            # remote CUDA_VISIBLE_DEVICES for allocations without GPU's
+            del job.env['CUDA_VISIBLE_DEVICES']
 
 def __select_auto_environment():
     if in_slurm_allocation():

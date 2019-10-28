@@ -1,105 +1,164 @@
 from enum import Enum
 
 from qcg.appscheduler.errors import *
+from qcg.appscheduler.allocation import CRAllocation, CRBindAllocation, NodeAllocation
 
 
-class NodeAny:
-    def __init__(self, name=None, totalCores=0, used=0, coreIds=None):
+class CRType(Enum):
+    """
+    Consumable resource type
+    """
+    GPU = 1
+    MEM = 2
+
+
+class CR:
+    def __init__(self, crtype, totalCount=0, used=0):
+        self.crtype = crtype
+        self.totalCount = totalCount
+        self.used = used
+
+
+    @property
+    def available(self):
         """
-        Node resources.
-        This class stores and allocates cores. There is no core identification.
-
-        :param name: name of the node
-        :param totalCores: total number of available cores
-        :param used: initial number of used cores
-        :param coreIds: optional core identifiers (UNUSED)
-        """
-        self.__name = name
-        self.__totalCores = totalCores
-        self.__usedCores = used
-        self.resources = None
-
-    def __getName(self):
-        return self.__name
-
-    def __getTotalCores(self):
-        return self.__totalCores
-
-    def __setTotalCores(self, total):
-        assert total >= 0 and total >= self.__usedCores
-        self.__totalCores = total
-
-    def __getUsedCores(self):
-        return self.__usedCores
-
-    def __setUsedCores(self, used):
-        assert used > 0 and used <= self.__totalCores
-        self.__usedCores = used
-
-    def __getFreeCores(self):
-        return self.__totalCores - self.__usedCores
-
-    def __str__(self):
-        return "%s %d (%d used)" % (self.__name, self.__totalCores, self.__usedCores)
-
-
-    def allocate(self, cores):
-        """
-        Allocate maximum number of cores on a node.
-
-        Args:
-            cores (int): maximum number of cores to allocate
+        Number of available resources.
 
         Returns:
-            int: number of allocated cores
+            number of available resources
         """
-        allocated = min(cores, self.free)
-        self.__usedCores += allocated
-
-        if self.resources is not None:
-            self.resources.nodeCoresAllocated(allocated)
-
-        return range(allocated)
+        return self.totalCount - self.used
 
 
-    def release(self, cores):
+    def allocate(self, count):
         """
-        Release specified number of cores on a node.
+        Allocate resources.
 
         Args:
-            cores ([]int): list of cores to release
+            count (int) - number of resources to allocate
+
+        Return:
+            number of allocated resources, or 0 if no resources has been allocated - due to 
+            insufficient resources.
+        """
+        if count <= self.available:
+            self.used += count
+            return CRAllocation(self.crtype, count)
+
+        return None
+
+
+    def release(self, cralloc):
+        """
+        Release allocated consumable resources.
+
+        Args:
+            cralloc (CRAllocation) - allocation to release
 
         Raises:
-            InvalidResourceSpec: when number of cores to release exceeds number of of
-              used cores.
+            InternalError if allocation size is greater than used resources, no resources are released.
         """
-        ncores = len(cores)
+        if not isinstance(cralloc, CRAllocation):
+            raise InternalError("failed type of CR allocation - {} vs expected CRAllocation".format(type(cralloc).__name__))
 
-        if ncores > self.__usedCores:
-            raise InvalidResourceSpec()
-
-        self.__usedCores -= ncores
-
-        if self.resources is not None:
-            self.resources.nodeCoresReleased(ncores)
-
-    name = property(__getName, None, None, "name of the node")
-    total = property(__getTotalCores, __setTotalCores, None, "total number of cores")
-    used = property(__getUsedCores, __setUsedCores, None, "number of allocated cores")
-    free = property(__getFreeCores, None, None, "number of available cores")
+        if cralloc.count > self.used:
+            raise InternalError("failed to release more resources {} than is allocated {} (CR {})".\
+                    format(cralloc.count, self.used, self.crtype.name))
+        
+        self.used -= cralloc.count
 
 
-class NodeCores:
+class CRBind:
+    def __init__(self, crtype, instances):
+        """
+        Consumable resource with bindable instances.
+        The object tracks allocation of specific instances.
 
-    def __init__(self, name=None, totalCores=0, used=0, coreIds=None):
+        Args:
+            crtype (CRType) - type of CR
+            instances (list()) - all available instances
+            used (list) - list of used instances
+        """
+
+        self.crtype = crtype
+        self.totalCount = len(instances)
+        self.__free = list(instances)
+
+
+    @property
+    def available(self):
+        """
+        Number of available resources.
+
+        Returns:
+            number of available resources
+        """
+        return len(self.__free)
+
+
+    @property
+    def used(self):
+        """
+        Number of used resources.
+
+        Returns:
+            number of used resources
+        """
+        return self.totalCount - self.available
+
+
+    def allocate(self, count):
+        """
+        Allocate bindable resources.
+
+        Args:
+            count (int) - number of resources to allocate
+
+        Return:
+            CRBindAllocation with a list of allocated bindable instances of the resources, or None if no resources
+            has been allocated - due to insufficient resources.
+        """
+        if count <= self.available:
+            allocation = CRBindAllocation(self.crtype, self.__free[0:count])
+            self.__free = self.__free[count:]
+            return allocation
+
+        return None
+
+
+    def release(self, cralloc):
+        """
+        Release allocated bindable consumable resources.
+
+        Args:
+            cralloc (CRBindAllocation) - allocation to release
+
+        Raises:
+            InternalError if 'count' is greater than used resources, no resources are released.
+        """
+        if not isinstance(cralloc, CRBindAllocation):
+            raise InternalError("failed type of CR allocation - {} vs expected CRBindAllocation".format(type(cralloc).__name__))
+
+        if cralloc.count > self.used:
+            raise InternalError("failed to release more resources {} than is allocated {} (CR {})".\
+                    format(cralloc.count, self.used, self.crtype.name))
+        
+        self.__free = sorted(self.__free + cralloc.instances)
+
+
+class Node:
+
+    def __init__(self, name=None, totalCores=0, used=0, coreIds=None, crs=None):
         """
         Node resources.
         This class stores and allocates specific cores. Each core is identified by the number.
 
-        :param name: name of the node
-        :param totalCores: total number of available cores
-        :param used: initial number of used cores
-        :param coreIds: optional core identifiers (the list must have at least 'totalCores' elements)
+        Args:
+            name (str) - name of the node
+            totalCores (int) - total number of available cores
+            used (int) - initial number of used cores
+            coreIds (list(int)) - optional core identifiers (the list must have at least 'totalCores' elements)
+            crs (map(CRType,CR|CRBind)) - optional consumable resources
         """
         self.__name = name
         self.__totalCores = totalCores
@@ -108,6 +167,8 @@ class NodeCores:
             self.__freeCores = list(coreIds[used:totalCores])
         else:
             self.__freeCores = list(range(used, self.__totalCores))
+
+        self.__crs = crs
 
 
     def __getName(self):
@@ -122,28 +183,123 @@ class NodeCores:
     def __getFreeCores(self):
         return len(self.__freeCores)
 
+    def __getCRs(self):
+        return self.__crs
+    
+    def __getStrCRs(self):
+        return ', '.join(['{} - {} ({} used))'.format(crtype.name, cr.totalCount, cr.used) for crtype, cr in self.__crs.items()])
+
     def __str__(self):
-        return "{} {} ({} used)".format(self.__name, self.__totalCores, self.__getUsedCores())
+        return '{} {} ({} used){}'.format(self.__name, self.__totalCores, self.__getUsedCores(),
+                ', CR ({})'.format(self.__getStrCRs()) if self.__crs else '')
 
 
-    def allocate(self, cores):
+    def hasEnoughCrs(self, crs):
         """
-        Allocate maximum number of cores on a node.
+        Check if node has enough CR.
 
         Args:
-            cores(int): maximum number of cores to allocate
+            crs (dict(CRType,int)) - requested cr's specification
 
         Returns:
-            [](int): allocated cores
+            true - if node contains requested cr's, otherwise false.
         """
-        nallocated = min(cores, self.__getFreeCores())
-        allocation = self.__freeCores[0:nallocated]
-        self.__freeCores = self.__freeCores[nallocated:]
+        return self.__crs and \
+                all([cr in self.__crs for cr in crs]) and \
+                 all([v <= self.__crs[cr].available for cr, v in crs.items()])
 
-        if self.resources is not None:
-            self.resources.nodeCoresAllocated(len(allocation))
 
-        return allocation
+    def allocateCrs(self, crs):
+        """
+        Allocate requested crs.
+
+        Args:
+            crs (dict(CRType,int)) - requested cr's specification
+            
+        Returns:
+            dict(CRType,CR|CRBind) - with allocated cr's
+
+        Raises:
+            NotSufficientResources - if no all resources could be reserved, in that case no resources will be allocated.
+        """
+        if crs:
+            cr_map = dict()
+
+            try:
+                for cr, count in crs.items():
+                    cr_alloc = self.__crs[cr].allocate(count)
+                    if not cr_alloc:
+                        self.__crs[cr].release(cr_alloc)
+                        raise NotSufficientResources("failed to allocate {} resources @ {} node ({} requested vs {} available)".\
+                                format(cr.name, self.__name, count, self.__crs[cr].available))
+
+                    cr_map[cr] = cr_alloc
+            except:
+                for crtype, cr in cr_map.items():
+                    self.__crs[crtype].release(cr)
+                raise
+
+            return cr_map
+
+        return None
+
+
+    def allocateMax(self, maxCores, crs=None):
+        """
+        Allocate maximum number of cores on a node and specific number of consumable resources.
+
+        Args:
+            maxCores (int) - maximum number of cores to allocate
+            crs (dict(CRType,int)) - optional specific number of consumable resources
+
+        Returns:
+            NodeAllocation with allocated resources, or None if there no any available resources
+        """
+        if crs:
+            # make sure there is enough cr's on the node
+            if not self.hasEnoughCrs(crs):
+                return None
+
+        nallocated = min(maxCores, self.__getFreeCores())
+        if nallocated > 0:
+            allocation = self.__freeCores[0:nallocated]
+            self.__freeCores = self.__freeCores[nallocated:]
+
+            if self.resources is not None:
+                self.resources.nodeCoresAllocated(len(allocation))
+
+            return NodeAllocation(self, allocation, crs=self.allocateCrs(crs))
+
+        return None
+
+
+    def allocateExact(self, nCores, crs=None):
+        """
+        Allocate specific number of cores on a node and specific number of consumable resources.
+
+        Args:
+            nCores (int) - requested number of cores to allocate
+            crs (dict(CRType,int)) - optional specific number of consumable resources
+
+        Returns:
+            NodeAllocation with allocated resources, or None if there no any available resources
+        """
+        if nCores > 0:
+            if crs:
+                # make sure there is enough cr's on the node
+                if not self.hasEnoughCrs(crs):
+                    return None
+
+            if nCores <= self.__getFreeCores():
+                allocation = self.__freeCores[0:nCores]
+                self.__freeCores = self.__freeCores[nCores:]
+
+                if self.resources is not None:
+                    self.resources.nodeCoresAllocated(len(allocation))
+
+                return NodeAllocation(self, allocation, crs=self.allocateCrs(crs))
+
+        return None
 
 
     def release(self, allocation):
@@ -151,24 +307,33 @@ class NodeCores:
         Release allocation on a node.
 
         Args:
-            allocation ([]int): cores allocated
+            allocation (NodeAllocation): allocated resources
         """
-        if len(allocation) > self.__getUsedCores():
-            raise ValueError()
+        if allocation.ncores > self.__getUsedCores():
+            raise InternalError('trying to release more cores than are used on node {}'.format(self.__name))
 
-        self.__freeCores = sorted(self.__freeCores + allocation)
+        self.__freeCores = sorted(self.__freeCores + allocation.cores)
+
+        if allocation.crs:
+            if not self.__crs:
+                raise InternalError('trying to release crs which are not available on node {}'.format(self.__name))
+
+            for crtype, cr_bind in allocation.crs.items():
+                if not crtype in self.__crs:
+                    raise InternalError('CR {} not available on a node {}'.format(crtype.name, self.__name))
+
+                self.__crs[crtype].release(cr_bind)
+
 
         if self.resources is not None:
-            self.resources.nodeCoresReleased(len(allocation))
+            self.resources.nodeCoresReleased(allocation.ncores)
 
 
     name = property(__getName, None, None, "name of the node")
     total = property(__getTotalCores, None, None, "total number of cores")
     used = property(__getUsedCores, None, None, "number of used cores")
     free = property(__getFreeCores, None, None, "number of free cores")
-
-
-Node = NodeCores
+    crs = property(__getCRs, None, None, "available CRs")
 
 
 class ResourcesType(Enum):
@@ -199,17 +364,28 @@ class Resources:
         self.__totalCores = 0
         self.__usedCores = 0
 
-        #		print "initializing %d nodes" % len(nodes)
-        self.__computeCores()
+        self.__maxCrs = dict()
+        self.__totalCrs = dict()
 
-        self.__systemAllocationNode = None
+        #		print "initializing %d nodes" % len(nodes)
+        self.__computeResourceStatus()
+
         self.__systemAllocation = None
 
-    def __computeCores(self):
+    def __computeResourceStatus(self):
         total, used = 0, 0
+        self.__maxCrs = dict()
+        self.__totalCrs = dict()
         for node in self.__nodes:
             total += node.total
             used += node.used
+
+            if node.crs:
+                for cr, value in node.crs.items():
+                    if cr not in self.__maxCrs or value.available > self.__maxCrs[cr]:
+                        self.__maxCrs[cr] = value.available
+
+                    self.__totalCrs[cr] = self.__totalCrs.get(cr, 0) + value.available
 
         self.__totalCores = total
         self.__usedCores = used
@@ -232,18 +408,34 @@ class Resources:
     def __getFreeCores(self):
         return self.__totalCores - self.__usedCores
 
+    def __getMaxCrs(self):
+        """
+        Return maximum number of CRs on nodes.
+
+        Returns:
+            dict(CRType,count) - maximum number of CRs on nodes
+        """
+        return self.__maxCrs
+
+    def __getTotalCrs(self):
+        """
+        Return total number of CRs on nodes.
+
+        Returns:
+            dict(CRType,count) - total number of CRs on nodes
+        """
+        return self.__totalCrs
+
     def allocate4System(self):
-        if self.__systemAllocation and self.__systemAllocationNode:
-            self.__systemAllocationNode.release(self.__systemAllocation)
+        if self.__systemAllocation:
+            self.__systemAllocation.release()
 
             self.__systemAllocation = None
-            self.__systemAllocationNode = None
 
         for node in self.__nodes:
             self.__systemAllocation = node.allocate(1)
 
             if self.__systemAllocation:
-                self.__systemAllocationNode = node
                 break
 
     def nodeCoresAllocated(self, cores):
@@ -268,20 +460,6 @@ class Resources:
         self.__usedCores -= cores
 
 
-    def releaseAllocation(self, alloc):
-        """
-        Relase allocated resources.
-
-        Args:
-            alloc (Allocation): allocation to release
-
-        Raises:
-            InvalidResourceSpec: when number of cores to release on a node is greater
-              than number of used cores.
-        """
-        for node in alloc.nodeAllocations:
-            node.node.release(node.cores)
-
     def __str__(self):
         header = '{} ({} used) cores on {} nodes, options ({})\n'.format(
                 self.__totalCores, self.__usedCores, len(self.__nodes), 'binding={}'.format(self.__binding))
@@ -302,3 +480,5 @@ class Resources:
     totalCores = property(__getTotalCores, None, None, "total number of cores")
     usedCores = property(__getUsedCores, None, None, "used number of cores")
     freeCores = property(__getFreeCores, None, None, "free number of cores")
+    maxCrs = property(__getMaxCrs, None, None, "maximum number of CRs on nodes")
+    totalCrs = property(__getTotalCrs, None, None, "total number of CRs on nodes")

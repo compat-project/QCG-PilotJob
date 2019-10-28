@@ -1,23 +1,68 @@
+
+class CRAllocation:
+    def __init__(self, crtype, count):
+        """
+        Allocation of consumable resources
+
+        Args:
+            crtype (CRType) - type of CR
+            count (int) - amount of allocated CR
+        """
+        self.crtype = crtype
+        self.count = count
+
+
+class CRBindAllocation:
+    def __init__(self, crtype, instances):
+        """
+        Allocation of bindable consumable resources
+
+        Args:
+            crtype (CRType) - type of CR
+            instances (list()) - instances of allocated CR
+        """
+        self.crtype = crtype
+        self.instances = instances
+
+    @property
+    def count(self):
+        return len(self.instances)
+
+
 class NodeAllocation:
 
-    def __init__(self, node, cores):
+    def __init__(self, node, cores, crs):
         """
         Resource allocation on a single node, contains information about a node,
-        along with the cores allocated.
+        along with the allocated cores and consumable resources.
 
         Args:
             node (Node): a node definition
             cores ([]int): allocated cores on this node
+            crs (list((CRType, count))): list of allocated crs
 
         Attributes:
-            __node: a node definition
-            __cores: allocated cores
+            __node (Node): a node definition
+            __cores (list(int)): allocated cores
+            __crs (dict(CRType,CRAllocation|CRBindAllocation)): allocated crs
         """
         assert node
         assert len(cores) > 0
 
         self.__node = node
         self.__cores = cores
+        self.__crs = crs
+
+
+    def release(self):
+        """
+        Release resources allocated in this node allocation.
+        """
+        if self.__node:
+            self.__node.release(self)
+            self.__node = None
+            self.__cores = None
+            self.__crs = None
 
 
     def __getCores(self):
@@ -38,6 +83,16 @@ class NodeAllocation:
             int: list of cores
         """
         return len(self.__cores)
+
+
+    def __getCRs(self):
+        """
+        Return allocated crs on a node.
+
+        Returns:
+            dict((CRType, CRAllocation|CRBindAllocation)) - list of allocated crs
+        """
+        return self.__crs
 
 
     def __getNode(self):
@@ -62,6 +117,7 @@ class NodeAllocation:
     cores = property(__getCores, None, None, "cores @ the node")
     ncores = property(__getNCores, None, None, "number of cores @ the node")
     node = property(__getNode, None, None, "node")
+    crs = property(__getCRs, None, None, "consumable resources")
 
 
 class Allocation:
@@ -92,6 +148,22 @@ class Allocation:
 
         self.__nodes.append(nodeAllocation)
         self.__cores += nodeAllocation.ncores
+
+
+    def release(self):
+        """
+        Release allocated resources.
+        Release resources allocated on all nodes in allocation.
+
+        Raises:
+            InvalidResourceSpec: when number of cores to release on a node is greater
+              than number of used cores.
+        """
+        for node in self.__nodes:
+            node.release()
+
+        self.__nodes = None
+        self.__cores = 0
 
 
     def __updateCores(self):
