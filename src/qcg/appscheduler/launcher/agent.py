@@ -255,13 +255,18 @@ class Agent:
                 stderrP.close()
 
         out_socket = self.context.socket(zmq.REQ)
-        out_socket.connect(self.remote_address)
+        try:
+            out_socket.connect(self.remote_address)
 
-        await out_socket.send_json(status_data)
-        msg = await out_socket.recv_json()
-        logging.debug("got confirmation for process finish {}".format(str(msg)))
-
-        out_socket.close()
+            await out_socket.send_json(status_data)
+            msg = await out_socket.recv_json()
+            logging.debug("got confirmation for process finish {}".format(str(msg)))
+        finally:
+            if out_socket:
+                try:
+                    out_socket.close()
+                except:
+                    pass
 
 
     async def __send_ready(self):
@@ -270,23 +275,28 @@ class Agent:
         The message will contain also the local listening address.
         """
         out_socket = self.context.socket(zmq.REQ)
-        out_socket.connect(self.remote_address)
+        try:
+            out_socket.connect(self.remote_address)
 
-        await out_socket.send_json({
-            'status': 'READY',
-            'date': datetime.now().isoformat(),
-            'agent_id': self.agent_id,
-            'local_address': self.local_export_address })
+            await out_socket.send_json({
+                'status': 'READY',
+                'date': datetime.now().isoformat(),
+                'agent_id': self.agent_id,
+                'local_address': self.local_export_address })
 
-        msg = await out_socket.recv_json()
+            msg = await out_socket.recv_json()
 
-        logging.debug('received ready message confirmation: {}'.format(str(msg)))
+            logging.debug('received ready message confirmation: {}'.format(str(msg)))
 
-        if not msg.get('status', 'UNKNOWN') == 'CONFIRMED':
-            logger.error('agent {} not registered successfully in launcher: {}'.format(self.agent_id, str(msg)))
-            raise Exception('not successfull registration in launcher: {}'.format(str(msg)))
-
-        out_socket.close()
+            if not msg.get('status', 'UNKNOWN') == 'CONFIRMED':
+                logger.error('agent {} not registered successfully in launcher: {}'.format(self.agent_id, str(msg)))
+                raise Exception('not successfull registration in launcher: {}'.format(str(msg)))
+        finally:
+            if out_socket:
+                try:
+                    out_socket.close()
+                except:
+                    pass
 
 
     async def __send_finishing(self):
@@ -296,18 +306,23 @@ class Agent:
         shuting down.
         """
         out_socket = self.context.socket(zmq.REQ)
-        out_socket.connect(self.remote_address)
+        try:
+            out_socket.connect(self.remote_address)
 
-        await out_socket.send_json({
-            'status': 'FINISHING',
-            'date': datetime.now().isoformat(),
-            'agent_id': self.agent_id,
-            'local_address': self.local_address })
-        msg = await out_socket.recv_json()
+            await out_socket.send_json({
+                'status': 'FINISHING',
+                'date': datetime.now().isoformat(),
+                'agent_id': self.agent_id,
+                'local_address': self.local_address })
+            msg = await out_socket.recv_json()
 
-        logging.debug('received finishing message confirmation: {}'.format(str(msg)))
-
-        out_socket.close()
+            logging.debug('received finishing message confirmation: {}'.format(str(msg)))
+        finally:
+            if out_socket:
+                try:
+                    out_socket.close()
+                except:
+                    pass
 
 
 if __name__ == '__main__':
