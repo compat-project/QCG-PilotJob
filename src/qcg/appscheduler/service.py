@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 import traceback
+import resource
 from os.path import exists, join, isabs
 
 from multiprocessing import Process, Queue
@@ -257,7 +258,18 @@ class QCGPMService:
         if self.__manager:
             self.__manager.stop()
 
+        usage = self.get_rusage()
+        logging.info('service resource usage: {}'.format(str(usage.get('service', {}))))
+        logging.info('jobs resource usage: {}'.format(str(usage.get('jobs', {}))))
+
         asyncio.get_event_loop().close()
+
+
+    def get_rusage(self):
+        service_ru = resource.getrusage(resource.RUSAGE_SELF)
+        jobs_ru = resource.getrusage(resource.RUSAGE_CHILDREN)
+
+        return { 'service': service_ru, 'jobs': jobs_ru }
 
 
 class QCGPMServiceProcess(Process):
