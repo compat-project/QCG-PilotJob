@@ -102,7 +102,7 @@ def test_environment(env=None):
     elif isinstance(env, dict) or isinstance(env, os._Environ):
         env_d = env
     elif isinstance(env, str):
-        env_d = { line.split('=', 1)[0]: line.split('=', 1)[1] for line in env.splitlines() }
+        env_d = { line.split('=', 1)[0]: line.split('=', 1)[1] for line in env.splitlines() if len(line.split('=', 1)) == 2 }
     else:
         raise ValueError('Wrong type of argument ({}) - only string/dict are allowed'.format(type(env).__name__))
 
