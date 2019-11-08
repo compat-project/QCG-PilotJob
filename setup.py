@@ -1,9 +1,10 @@
 from distutils.core import setup
+import qcg
 
 setup(
 	name="QCGPilotManager",
 
-	version="0.5.0",
+	version=qcg.__version__,
 
 	author="Piotr Kopta",
 	author_email="pkopta@man.poznan.pl",
