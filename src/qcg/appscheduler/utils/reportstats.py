@@ -95,6 +95,13 @@ class JobsReportStats:
         return parser
 
 
+    def __parse_datetime(self, datetime_str):
+        try:
+            return datetime.strptime(datetime_str, '%Y-%m-%dT%H:%M:%S.%f')
+        except ValueError:
+            return datetime.strptime(datetime_str, '%Y-%m-%dT%H:%M:%S')
+
+
     def __read_report_file(self, report_file):
         """
         Read QCG-PJM json report file.
@@ -137,10 +144,10 @@ class JobsReportStats:
                 finish_state = list(filter(lambda st_en: st_en['state'] == 'SUCCEED', job_entry['history']))
                 assert len(finish_state) == 1
 
-                queued_time = datetime.strptime(queued_state[0]['date'], '%Y-%m-%dT%H:%M:%S.%f')
-                schedule_time = datetime.strptime(schedule_state[0]['date'], '%Y-%m-%dT%H:%M:%S.%f')
-                start_time = datetime.strptime(exec_state[0]['date'], '%Y-%m-%dT%H:%M:%S.%f')
-                finish_time = datetime.strptime(finish_state[0]['date'], '%Y-%m-%dT%H:%M:%S.%f')
+                queued_time = self.__parse_datetime(queued_state[0]['date'])
+                schedule_time = self.__parse_datetime(schedule_state[0]['date'])
+                start_time = self.__parse_datetime(exec_state[0]['date'])
+                finish_time = self.__parse_datetime(finish_state[0]['date'])
 
                 self.jstats['jobs'][job_entry['name']] = { 'r_time': rtime, 'queue_time': queued_time, 'sched_time': schedule_time, 's_time': start_time, 'f_time': finish_time, 'name': job_entry['name'] }
 
