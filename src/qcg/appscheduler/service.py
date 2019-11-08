@@ -76,6 +76,9 @@ class QCGPMService:
         parser.add_argument("--system-core",
                             help="reserve one of the core for the QCG-PJM",
                             default=False, action="store_true")
+        parser.add_argument("--disable-nl",
+                            help="disable custom launching method",
+                            default=False, action="store_true")
         self.__args = parser.parse_args(args)
 
         if self.__args.net:
@@ -119,6 +122,7 @@ class QCGPMService:
             Config.REPORT_FILE: self.__args.report_file,
             Config.LOG_LEVEL: self.__args.log,
             Config.SYSTEM_CORE: self.__args.system_core,
+            Config.DISABLE_NL: self.__args.disable_nl,
         }
 
         self.__wd = Config.EXECUTOR_WD.get(self.__conf)

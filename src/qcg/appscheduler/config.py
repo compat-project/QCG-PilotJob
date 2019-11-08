@@ -93,6 +93,12 @@ class Config(Enum):
         'default': 'final_status'
     }
 
+    DISABLE_NL = {
+        'name': 'nl.disable',
+        'default': False
+    }
+
+
     def get(self, config):
         if 'get' in self.value:
             return self.value['get'](config)

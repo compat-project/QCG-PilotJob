@@ -46,7 +46,8 @@ class Executor:
 
         self.__is_node_launcher = False
 
-        if self.__resources.rtype == ResourcesType.SLURM:
+        if self.__resources.rtype == ResourcesType.SLURM and not Config.DISABLE_NL.get(config):
+            logging.info('initializing custom launching method (node launcher)')
             try:
                 LauncherExecutionJob.StartAgents(self.base_wd, self.__resources.nodes, self.__resources.binding)
                 self.__is_node_launcher = True
@@ -54,6 +55,8 @@ class Executor:
             except Exception as e:
                 logging.error('failed to initialize node launcher agents: {}'.format(str(e)))
                 raise e
+        else:
+            logging.info('custom launching method (node launcher) disabled')
     
 
     def stop(self):
