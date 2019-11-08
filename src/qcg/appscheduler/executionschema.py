@@ -1,5 +1,6 @@
 import os
 import logging
+from functools import reduce
 
 from qcg.appscheduler.errors import *
 from qcg.appscheduler.resources import ResourcesType
@@ -56,7 +57,10 @@ class SlurmExecution(ExecutionSchema):
             "-m", "arbitrary",
             "--mem-per-cpu=0",
 
-            "--cpu-bind=verbose,map_cpu:{}".format(','.join([str(core) for core in exJob.allocation.nodeAllocations[0].cores])) \
+#            "--cpu-bind=verbose,map_cpu:{}".format(','.join([str(core) for core in exJob.allocation.nodeAllocations[0].cores])) \
+#                    if self.resources.binding else \
+#                        "--cpu-bind=verbose,cores",
+            "--cpu-bind=verbose,mask_cpu:{}".format(','.join(['0x{:x}'.format(reduce(lambda x,y: x | y, [ 1 << core for core in exJob.allocation.nodeAllocations[0].cores]))] * len(exJob.allocation.nodeAllocations[0].cores))) \
                     if self.resources.binding else \
                         "--cpu-bind=verbose,cores",
 #
@@ -79,6 +83,8 @@ class SlurmExecution(ExecutionSchema):
 
         exJob.jobExecution.args.append(runConfFile)
 
+        if self.resources.binding:
+            exJob.env.update({ 'QCG_PM_CPU_SET': ','.join([str(c) for c in sum([ alloc.cores for alloc in exJob.allocation.nodeAllocations ], [])]) })
 
 class DirectExecution(ExecutionSchema):
     EXEC_NAME = 'direct'
