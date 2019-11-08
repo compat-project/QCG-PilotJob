@@ -5,7 +5,9 @@ import os
 import sys
 import traceback
 import resource
+import socket
 from os.path import exists, join, isabs
+from datetime import datetime
 
 from multiprocessing import Process, Queue
 
@@ -187,7 +189,9 @@ class QCGPMService:
         rootLogger.addHandler(handler)
         rootLogger.setLevel(logging._nameToLevel.get(Config.LOG_LEVEL.get(config).upper()))
 
-        print('log level set to: {}'.format(Config.LOG_LEVEL.get(config).upper()))
+        logging.info('service {} started {} @ {}'.format(qcg.__version__, str(datetime.now()), socket.gethostname()))
+        logging.info('log level set to: {}'.format(Config.LOG_LEVEL.get(config).upper()))
+
 
     def __setupEventLoop(self):
         if asyncio.get_event_loop() and asyncio.get_event_loop().is_closed():
