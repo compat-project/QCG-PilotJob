@@ -16,7 +16,7 @@ class ZMQInterface:
         pass
 
     def setup(self, conf):
-        zmq.asyncio.install()
+#        zmq.asyncio.install()
         self.zmqCtx = Context.instance()
 
         self.address = Config.ZMQ_IFACE_ADDRESS.get(conf)

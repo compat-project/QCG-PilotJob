@@ -1,7 +1,12 @@
 import os
 import json
+import re
+import multiprocessing as mp
+import queue
+import zmq
 
 from json import JSONDecodeError
+from qcg.appscheduler.service import QCGPMServiceProcess
 
 
 def save_jobs_to_file(jobs, file_path):
@@ -51,3 +56,54 @@ def check_job_status_in_json(jobs, workdir='.', dest_state='SUCCEED'):
 
     if len(to_check) > 0:
         raise ValueError('missing {} jobs in report'.format(','.join(to_check)))
+
+
+def check_service_log_string(resubstr, workdir='.'):
+    service_log_file = os.path.join(workdir, '.qcgpjm', 'service.log')
+
+    regex = re.compile(resubstr)
+
+    with open(service_log_file, 'r') as log_f:
+        for line in log_f:
+            if regex.search(line):
+                return True
+
+    return False
+
+
+def fork_manager(manager_args):
+    if not mp.get_context():
+        mp.set_start_method('fork')
+
+    qcgpm_queue = mp.Queue()
+    qcgpm_process = QCGPMServiceProcess(manager_args, qcgpm_queue)
+    qcgpm_process.start()
+
+    try:
+        qcgpm_conf = qcgpm_queue.get(block=True, timeout=10)
+    except queue.Empty:
+        raise Exception('Service not started - timeout')
+    except Exception as e:
+        raise Exception('Service not started: {}'.format(str(e)))
+
+    if not qcgpm_conf.get('zmq_addresses', None):
+        raise Exception('Missing QCGPM network interface address')
+
+    return qcgpm_process, qcgpm_conf['zmq_addresses'][0]
+
+
+def send_request_valid(address, req_data):
+    ctx = zmq.Context.instance()
+    out_socket = ctx.socket(zmq.REQ)
+    out_socket.connect(address)
+
+    try:
+        out_socket.send_json(req_data)
+        msg = out_socket.recv_json()
+        if not msg['code'] == 0:
+            raise Exception('request failed: {}'.format(msg.get('message', '')))
+
+        return msg
+    finally:
+        if out_socket:
+            out_socket.close()

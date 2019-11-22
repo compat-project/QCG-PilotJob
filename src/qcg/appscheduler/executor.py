@@ -40,8 +40,6 @@ class Executor:
         logging.info('job\' environment contains {} elements'.format(str(envsSet)))
         self.jobEnvs = [ env() for env in envsSet ]
 
-        self.zmq_address = manager.zmq_address
-
         self.__resources = resources
 
         self.__is_node_launcher = False
@@ -58,6 +56,10 @@ class Executor:
         else:
             logging.info('custom launching method (node launcher) disabled')
     
+
+    def getZmqAddress(self):
+        return self.__manager.zmq_address if self.__manager else None
+
 
     def stop(self):
         if self.__is_node_launcher:

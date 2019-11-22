@@ -1,15 +1,26 @@
 import asyncio
 import logging
 import uuid
+from datetime import datetime
+import getpass
+import socket
+import os
+import sys
+import zmq
+import json
 
 from qcg.appscheduler.errors import NotSufficientResources, InvalidResourceSpec, IllegalJobDescription
+from qcg.appscheduler.errors import GovernorRegisterError
 from qcg.appscheduler.executor import Executor
 from qcg.appscheduler.joblist import JobList, JobState
 from qcg.appscheduler.scheduler import Scheduler
 import qcg.appscheduler.profile
 from qcg.appscheduler.config import Config
 from qcg.appscheduler.parseres import get_resources
-from qcg.appscheduler.zmqinterface import ZMQInterface
+from qcg.appscheduler.request import ControlReq
+from qcg.appscheduler.request import JobStatusReq, JobInfoReq
+from qcg.appscheduler.response import Response, ResponseCode
+from qcg.appscheduler.errors import InvalidRequest
 
 
 class SchedulingJob:
@@ -98,25 +109,17 @@ class JobStateCB:
         self.args = args
 
 
-class Manager:
+class DirectManager:
 
-    def __init__(self, config={}, ifaces=[]):
+    def __init__(self, config={}, parentManager=None):
         """
         Manager of jobs to execution.
         The incoming jobs are scheduled and executed.
 
         Args:
             config - configuration
+            receiver - the receiver class that contains information about interfaces
         """
-        self.ifaces = ifaces
-
-        self.zmq_address = None
-        if self.ifaces:
-            zmqiface = next((iface for iface in self.ifaces if isinstance(iface, ZMQInterface)), None)
-
-            if zmqiface:
-                self.zmq_address = zmqiface.real_address
-
         self.resources = get_resources(config)
 
         if Config.SYSTEM_CORE.get(config):
@@ -132,6 +135,33 @@ class Manager:
 
         self.__jobStatesCbs = {}
 
+        self.__receiver = None
+        self.zmq_address = None
+
+        self.managerId = Config.MANAGER_ID.get(config)
+        self.managerTags = Config.MANAGER_TAGS.get(config)
+
+        self.__parentManager = parentManager
+
+
+    def setupInterfaces(self):
+        """
+        Initialize manager after all incoming interfaces has been started.
+        """
+        if self.__parentManager:
+            try:
+                self.registerInParent(self.__parentManager)
+            except:
+                logging.error('Failed to register manager in parent governor manager: {}'.format(sys.exc_info()[0]))
+                raise
+
+
+    def setZmqAddress(self, zmq_address):
+        self.zmq_address = zmq_address
+
+
+    def getHandlerInstance(self):
+        return DirectManagerHandler(self)
 
     def stop(self):
         if self.__executor:
@@ -341,3 +371,354 @@ class Manager:
 
     def getExecutor(self):
         return self.__executor
+
+
+    def registerInParent(self, parent_manager):
+        zmq_ctx = zmq.asyncio.Context.instance()
+        out_socket = zmq_ctx.socket(zmq.REQ)
+
+        try:
+            out_socket.connect(parent_manager)
+            asyncio.get_event_loop().run_until_complete(out_socket.send_json(
+                { 'request': 'register',
+                  'entity': 'manager',
+                  'params': {
+                    'id': self.managerId,
+                    'address': self.zmq_address,
+                    'resources': self.resources.toDict(),
+                    'tags': self.managerTags,
+                  }
+                }
+            ))
+            msg = asyncio.get_event_loop().run_until_complete(out_socket.recv_json())
+            if not msg['code'] == 0:
+                raise GovernorRegisterError('Failed to register manager instance in governor: {}'.format(msg.get('message', '')))
+        finally:
+            if out_socket:
+                try:
+                    out_socket.close()
+                except:
+                    # ignore errors during cleanup
+                    pass
+
+
+class DirectManagerHandler:
+
+    def __init__(self, manager):
+        """
+        Direct execution mode handler for manager.
+        In this mode, the manager will try to execute all incoming tasks on available resources,
+        without submiting them to other managers. Also, if defined, the notifications about
+        tasks completion will be sent to the parent manager (the managers governor).
+
+        :param manager: the manager class
+        """
+        self.__manager = manager
+
+        self.__finishTask = None
+        self.__receiver = None
+
+        self.startTime = datetime.now()
+
+
+    def setReceiver(self, receiver):
+        self.__receiver = receiver
+        if self.__receiver:
+            self.__manager.setZmqAddress(self.__receiver.getZmqAddress())
+
+
+    async def handleRegisterReq(self, iface, request):
+        return Response.Error('Register manager request not supported in this kind of manager (direct)')
+
+
+    async def handleControlReq(self, iface, request):
+        """
+        Handlder for control commands.
+        Control commands are used to configure system during run-time.
+
+        Args:
+            iface (Interface): interface which received request
+            request (ControlReq): control request data
+
+        Returns:
+            Response: the response data
+        """
+        if request.command == ControlReq.REQ_CONTROL_CMD_FINISHAFTERALLTASKSDONE:
+            if self.__finishTask is not None:
+                return Response.Error('Finish request already requested')
+
+            self.__finishTask = asyncio.ensure_future(self.__waitForAllJobs())
+
+        return Response.Ok('%s command accepted' % (request.command))
+
+
+    async def handleSubmitReq(self, iface, request):
+        """
+        Handlder for job submission.
+        Before job will be submited the in-depth validation will be proviede, e.g.: job name
+        uniqness.
+
+        Args:
+            iface (Interface): interface which received request
+            request (SubmitJobReqest): submit request data
+
+        Returns:
+            Response: the response data
+        """
+        current_jobs = set()
+        for job in request.jobs:
+            # verify job name uniqness
+            if self.__manager.jobList.exist(job.name) or job.name in current_jobs:
+                return Response.Error('Job %s already exist' % (job.name))
+
+            current_jobs.add(job.name)
+
+        # enqueue job in the manager
+        try:
+            self.__manager.enqueue(request.jobs)
+        except Exception as e:
+            return Response.Error(str(e))
+
+        jobs = len(request.jobs)
+        data = {
+            'submitted': jobs,
+            'jobs': [job.name for job in request.jobs]
+        }
+
+        return Response.Ok('%d jobs submitted' % (len(request.jobs)), data=data)
+
+
+    async def handleJobStatusReq(self, iface, request):
+        """
+        Handler for job status checking.
+
+        Args:
+            iface (Interface): interface which received request
+            request (JobStatusReq): job status request
+
+        Returns:
+            Response: the response data
+        """
+        result = {}
+
+        for jobName in request.jobNames:
+            try:
+                job = self.__manager.jobList.get(jobName)
+
+                if job is None:
+                    return Response.Error('Job %s doesn\'t exist' % (request.jobName))
+
+                result[jobName] = {'status': int(ResponseCode.OK), 'data': {
+                    'jobName': jobName,
+                    'status': str(job.strState())
+                }}
+            except Exception as e:
+                result[jobName] = {'status': int(ResponseCode.ERROR), 'message': e.args[0]}
+
+        return Response.Ok(data={'jobs': result})
+
+
+    async def handleJobInfoReq(self, iface, request):
+        """
+        Handler for job info checking.
+
+        Args:
+            iface (Interface): interface which received request
+            request (JobInfoReq): job status request
+
+        Returns:
+            Response: the response data
+        """
+        result = {}
+
+        for jobName in request.jobNames:
+            try:
+                job = self.__manager.jobList.get(jobName)
+
+                if job is None:
+                    return Response.Error('Job {} doesn\'t exist'.format(request.jobName))
+
+                jobData = {
+                    'jobName': jobName,
+                    'status': str(job.strState())
+                }
+
+                if job.messages is not None:
+                    jobData['messages'] = job.messages
+
+                if job.runtime is not None and len(job.runtime) > 0:
+                    jobData['runtime'] = job.runtime
+
+                if job.history is not None and len(job.history) > 0:
+                    history_str = ''
+
+                    for entry in job.history:
+                        history_str = '\n'.join([history_str, "%s: %s" % (str(entry[1]), entry[0].name)])
+
+                    jobData['history'] = history_str
+
+                result[jobName] = {'status': int(ResponseCode.OK), 'data': jobData}
+            except Exception as e:
+                result[jobName] = {'status': int(ResponseCode.ERROR), 'message': e.args[0]}
+
+        return Response.Ok(data={'jobs': result})
+
+
+    async def handleCancelJobReq(self, iface, request):
+        job = self.__manager.jobList.get(request.jobName)
+
+        if job is None:
+            return Response.Error('Job %s doesn\'t exist' % (request.jobName))
+
+        return Response.Error('Cancel job is not supported')
+
+
+    async def handleRemoveJobReq(self, iface, request):
+        removed = 0
+        errors = {}
+
+        for jobName in request.jobNames:
+            try:
+                job = self.__manager.jobList.get(jobName)
+
+                if job is None:
+                    raise InvalidRequest('Job %s doesn\'t exist' % (jobName))
+
+                if not job.state.isFinished():
+                    raise InvalidRequest('Job %s not finished - can not be removed' % (jobName))
+
+                self.__manager.jobList.remove(jobName)
+                removed += 1
+            except Exception as e:
+                errors[jobName] = e.args[0]
+
+        data = {
+            'removed': removed,
+        }
+
+        if len(errors) > 0:
+            data['errors'] = errors
+
+        return Response.Ok(data=data)
+
+
+    async def handleListJobsReq(self, iface, request):
+        job_names = self.__manager.jobList.jobs()
+
+        logging.info("got %s jobs from list" % (str(len(job_names))))
+
+        jobs = {}
+        for jobName in job_names:
+            job = self.__manager.jobList.get(jobName)
+
+            if job is None:
+                return Response.Error('One of the job %s doesn\'t exist in registry' % (jobName))
+
+            job_data = {
+                'status': str(job.strState())
+            }
+
+            if job.messages is not None:
+                job_data['messages'] = job.messages
+
+            if job.getQueuePos() is not None:
+                job_data['inQueue'] = job.getQueuePos()
+
+            jobs[jobName] = job_data
+        return Response.Ok(data={
+            'length': len(job_names),
+            'jobs': jobs,
+        })
+
+    async def handleResourcesInfoReq(self, iface, request):
+        resources = self.__manager.resources
+        return Response.Ok(data={
+            'totalNodes': len(resources.nodes),
+            'totalCores': resources.totalCores,
+            'usedCores': resources.usedCores,
+            'freeCores': resources.freeCores
+        })
+
+    async def handleFinishReq(self, iface, request):
+        delay = 2
+
+        if self.__finishTask is not None:
+            return Response.Error('Finish request already requested')
+
+        self.__finishTask = asyncio.ensure_future(self.__delayedFinish(delay))
+
+        return Response.Ok(data={
+            'when': '%ds' % delay
+        })
+
+
+    async def generateStatusResponse(self):
+        nSchedulingJobs = nFailedJobs = nFinishedJobs = nExecutingJobs = 0
+        jobNames = self.__manager.jobList.jobs()
+        for jobName in jobNames:
+            job = self.__manager.jobList.get(jobName)
+
+            if job is None:
+                logging.warning('missing job\'s {} data '.format(jobName))
+            else:
+                if job.state in [JobState.QUEUED, JobState.SCHEDULED]:
+                    nSchedulingJobs += 1
+                elif job.state in [JobState.EXECUTING]:
+                    nExecutingJobs += 1
+                elif job.state in [JobState.FAILED, JobState.OMITTED]:
+                    nFailedJobs += 1
+                elif job.state in [JobState.CANCELED, JobState.SUCCEED]:
+                    nFinishedJobs += 1
+
+        resources = self.__manager.resources
+        return Response.Ok(data={
+            'System': {
+                'Uptime': str(datetime.now() - self.startTime),
+                'Zmqaddress': self.__receiver.getZmqAddress(),
+                'Ifaces': [iface.name() for iface in self.__receiver.getInterfaces()] \
+                    if self.__receiver and self.__receiver.getInterfaces() else [],
+                'Host': socket.gethostname(),
+                'Account': getpass.getuser(),
+                'Wd': os.getcwd(),
+                'PythonVersion': sys.version.replace('\n', ' '),
+                'Python': sys.executable,
+                'Platform': sys.platform,
+            }, 'Resources': {
+                'TotalNodes': len(resources.nodes),
+                'TotalCores': resources.totalCores,
+                'UsedCores': resources.usedCores,
+                'FreeCores': resources.freeCores,
+            }, 'JobStats': {
+                'TotalJobs': len(jobNames),
+                'InScheduleJobs': nSchedulingJobs,
+                'FailedJobs': nFailedJobs,
+                'FinishedJobs': nFinishedJobs,
+                'ExecutingJobs': nExecutingJobs,
+            }})
+
+
+    async def handleStatusReq(self, iface, request):
+        return await self.generateStatusResponse()
+
+
+    async def __waitForAllJobs(self):
+        logging.info("waiting for all jobs to finish (the new method)")
+
+        while not self.__manager.allJobsFinished():
+            await asyncio.sleep(0.2)
+
+        if self.__receiver:
+            self.__receiver.setFinish(True)
+        else:
+            logging.warning('Failed to set finish flag due to lack of receiver access')
+
+
+    async def __delayedFinish(self, delay):
+        logging.info("finishing in %s seconds" % delay)
+
+        await asyncio.sleep(delay)
+
+        if self.__receiver:
+            self.__receiver.setFinish(True)
+        else:
+            logging.warning('Failed to set finish flag due to lack of receiver access')

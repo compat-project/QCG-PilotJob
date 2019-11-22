@@ -98,6 +98,26 @@ class Config(Enum):
         'default': False
     }
 
+    GOVERNOR = {
+        'name': 'governor',
+        'default': False
+    }
+
+    PARENT_MANAGER = {
+        'name': 'manager.parent',
+        'default': None
+    }
+
+    MANAGER_ID = {
+        'name': 'manager.id',
+        'default': None
+    }
+
+    MANAGER_TAGS = {
+        'name': 'manager.tags',
+        'default': None
+    }
+
 
     def get(self, config):
         if 'get' in self.value:

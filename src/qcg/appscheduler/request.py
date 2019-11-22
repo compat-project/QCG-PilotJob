@@ -63,6 +63,35 @@ class ControlReq(Request):
         return json.dumps(self.toDict())
 
 
+class RegisterReq(Request):
+    REQ_NAME = 'register'
+
+    REQ_REGISTER_ENTITIES = [
+        'manager'
+    ]
+
+    def __init__(self, reqData, env=None):
+        assert reqData is not None
+
+        if 'entity' not in reqData or not reqData['entity'] in self.REQ_REGISTER_ENTITIES:
+            raise InvalidRequest('Wrong register request - missing/unknown entity')
+
+        if 'params' not in reqData:
+            raise InvalidRequest('Wrong register request - missing register parameters')
+
+        if not all(e in reqData['params'] for e in ['id', 'address', 'resources']):
+            raise InvalidRequest('Wrong register request - missing register key parameters')
+
+        self.entity = reqData['entity']
+        self.params = reqData['params']
+
+    def toDict(self):
+        return {'request': self.REQ_NAME, 'entity': self.entity, 'params': self.params}
+
+    def toJSON(self):
+        return json.dumps(self.toDict())
+
+
 class SubmitReq(Request):
     REQ_NAME = 'submit'
     REQ_CNT = 1
@@ -320,6 +349,7 @@ class StatusReq(Request):
 
 
 __REQS__ = {
+    RegisterReq.REQ_NAME: RegisterReq,
     ControlReq.REQ_NAME: ControlReq,
     SubmitReq.REQ_NAME: SubmitReq,
     JobStatusReq.REQ_NAME: JobStatusReq,
