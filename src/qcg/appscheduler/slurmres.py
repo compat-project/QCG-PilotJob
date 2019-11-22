@@ -5,7 +5,7 @@ import subprocess
 from math import log2
 
 from qcg.appscheduler.errors import *
-from qcg.appscheduler.resources import Node, Resources, ResourcesType
+from qcg.appscheduler.resources import CRType, CRBind, Node, Resources, ResourcesType
 
 
 def parse_nodelist(nodespec):
@@ -66,7 +66,6 @@ def parse_slurm_resources(config):
         raise SlurmEnvError(
             "failed to parse slurm env: number of nodes (%d) mismatch number of cores (%d)" % (len(node_names),
                                                                                                len(cores_num)))
-
     core_ids = None
     binding = False
 
@@ -82,11 +81,15 @@ def parse_slurm_resources(config):
         logging.debug("cpu list on each node: {}".format(core_ids))
         binding = True
 
+    nCrs = None
+    if 'CUDA_VISIBLE_DEVICES' in os.environ:
+        nCrs = { CRType.GPU: CRBind(CRType.GPU, os.environ['CUDA_VISIBLE_DEVICES'].split(',')) }
+
     nodes = []
     for i in range(0, len(node_names)):
         nname = node_names[i]
         logging.debug("%s x %d" % (nname, cores_num[i]))
-        nodes.append(Node(nname, cores_num[i], 0, coreIds=core_ids))
+        nodes.append(Node(nname, cores_num[i], 0, coreIds=core_ids, crs=nCrs))
 
     logging.debug("generated {} nodes {} binding".format(len(nodes), "with" if binding else "without"))
     return Resources(ResourcesType.SLURM, nodes, binding)

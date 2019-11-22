@@ -80,8 +80,9 @@ class Scheduler:
             InvalidAllocation: when the allocation is not registered in the scheduler (it
               might be released earlier)
         """
-        if alloc not in self.__activeAllocations:
-            raise InvalidAllocation()
+        if alloc:
+            if alloc not in self.__activeAllocations:
+                raise InvalidAllocation()
 
-        self.__activeAllocations.remove(alloc)
-        self.__resources.releaseAllocation(alloc)
+            self.__activeAllocations.remove(alloc)
+            alloc.release()

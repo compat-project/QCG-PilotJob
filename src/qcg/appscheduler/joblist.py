@@ -2,6 +2,7 @@ import json
 import re
 from datetime import datetime, timedelta
 from enum import Enum
+from qcg.appscheduler.resources import CRType
 
 from qcg.appscheduler.errors import JobAlreadyExist, IllegalResourceRequirements, \
     IllegalJobDescription
@@ -162,7 +163,55 @@ class JobResources:
         except:
             raise IllegalResourceRequirements("Wrong wall time format")
 
-    def __init__(self, numCores=None, numNodes=None, wt=None):
+
+    def __validateCrs(self, crs):
+        """
+        Validate consumable resources.
+        Check if crs are known and well defined.
+
+        Args:
+            crs (dict(string, int)) - map with consumable resources.
+
+        Returns:
+            final map of crs
+        """
+        if crs:
+            # already used crs
+            result = dict()
+
+            for name, count in crs.items():
+                if not name.upper() in CRType.__members__:
+                    raise IllegalResourceRequirements("Unknown consumable resource {}".format(name))
+
+                crType = CRType[name.upper()]
+                if crType in result:
+                    raise IllegalResourceRequirements("Consumable resource {} already defined".format(name))
+
+                if not isinstance(count, int):
+                    raise IllegalResourceRequirements("Consumable resource {} count not a number {}".format(name, type(count).__name__))
+
+                if count < 1:
+                    raise IllegalResourceRequirements("Number of consumable resource {} must be greater than 0".format(name))
+
+                result[crType] = count
+
+        return result
+
+
+    def __init__(self, numCores=None, numNodes=None, wt=None, nodeCrs=None):
+        """
+        Job resource requirements.
+
+        * if numNodes > 1, then numCores relates to each of the node, so total number of
+                required cores will be a product of numNodes and numCores
+        * nodeCrs relates to each node available consumable resources
+        
+        Args:
+            numCores - number of cores, either as exact number or as a range
+            numNodes - number of nodes, either as exact number of as a range
+            wt - wall time
+            nodeCrs (dict(string,int)) - each node consumable resources
+        """
         if numCores is None and numNodes is None:
             raise IllegalResourceRequirements("No resources defined")
 
@@ -187,6 +236,13 @@ class JobResources:
         else:
             self.wt = None
 
+        self.nodeCrs = None
+        if nodeCrs:
+            if not isinstance(nodeCrs, dict):
+                raise IllegalJobDescription("Wrong definition of Consumable Resources {} (must be a dictionary)".format(type(nodeCrs).__name__))
+
+            self.nodeCrs = self.__validateCrs(nodeCrs)
+
         self.numCores = numCores
         self.numNodes = numNodes
 
@@ -196,6 +252,9 @@ class JobResources:
     def hasCores(self):
         return self.numCores is not None
 
+    def hasNodeCrs(self):
+        return self.nodeCrs is not None
+
     @property
     def cores(self):
         return self.numCores
@@ -204,6 +263,10 @@ class JobResources:
     def nodes(self):
         return self.numNodes
 
+    @property
+    def crs(self):
+        return self.nodeCrs
+
     def toDict(self):
         result = {}
         if self.hasCores():
@@ -211,6 +274,9 @@ class JobResources:
 
         if self.hasNodes():
             result['numNodes'] = self.numNodes.toDict()
+
+        if self.hasNodeCrs():
+            result['nodeCrs'] = { crtype.name:value for (crtype,value) in self.nodeCrs.items() }
 
         return result
 
