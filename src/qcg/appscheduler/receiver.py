@@ -6,7 +6,7 @@ from enum import Enum
 
 from qcg.appscheduler.errors import InvalidRequest
 from qcg.appscheduler.request import RegisterReq, ListJobsReq, ResourcesInfoReq, FinishReq
-from qcg.appscheduler.request import RemoveJobReq, ControlReq, StatusReq
+from qcg.appscheduler.request import RemoveJobReq, ControlReq, StatusReq, NotifyReq
 from qcg.appscheduler.request import Request, SubmitReq, JobStatusReq, JobInfoReq, CancelJobReq
 from qcg.appscheduler.response import Response, ResponseCode
 from qcg.appscheduler.zmqinterface import ZMQInterface
@@ -75,6 +75,7 @@ class Receiver:
             ResourcesInfoReq: self.__handler.handleResourcesInfoReq,
             FinishReq: self.__handler.handleFinishReq,
             StatusReq: self.__handler.handleStatusReq,
+            NotifyReq: self.__handler.handleNotifyReq,
         }
 
         self.finished = False

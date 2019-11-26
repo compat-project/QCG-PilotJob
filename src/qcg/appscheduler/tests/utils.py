@@ -4,9 +4,12 @@ import re
 import multiprocessing as mp
 import queue
 import zmq
+import time
+from datetime import datetime
 
 from json import JSONDecodeError
 from qcg.appscheduler.service import QCGPMServiceProcess
+from qcg.appscheduler.joblist import JobState
 
 
 def save_jobs_to_file(jobs, file_path):
@@ -107,3 +110,32 @@ def send_request_valid(address, req_data):
     finally:
         if out_socket:
             out_socket.close()
+
+
+def wait_for_job_finish_success(manager_address, jobnames, timeout_secs=0):
+    start_time = datetime.now()
+
+    while len(jobnames):
+        current_jobnames = []
+
+        status_reply = send_request_valid(manager_address, {'request': 'jobStatus', 'jobNames': jobnames})
+        assert all((status_reply['code'] == 0, 'data' in status_reply))
+        assert 'jobs' in status_reply['data']
+        assert len(status_reply['data']['jobs']) > 0
+
+        for jname in jobnames:
+            assert jname in status_reply['data']['jobs']
+            jstatus = status_reply['data']['jobs'][jname]
+            assert all((jstatus['status'] == 0, jstatus['data']['jobName'] == jname))
+
+            jstate = JobState[jstatus['data']['status']]
+            if jstate.isFinished():
+                assert jstate == JobState.SUCCEED
+            else:
+                current_jobnames.append(jname)
+
+        time.sleep(0.5)
+        if timeout_secs and (datetime.now() - start_time).total_seconds() > timeout_secs:
+            raise Exception('Timeout occurred')
+
+        jobnames = current_jobnames

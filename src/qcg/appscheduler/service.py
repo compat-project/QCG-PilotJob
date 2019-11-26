@@ -187,6 +187,7 @@ class QCGPMService:
 
 
     def __setupGovernorManager(self, parentManager):
+        logging.info('starting governer manager ...')
         self.__manager = GovernorManager(self.__conf, parentManager)
         self.__notifId = self.__manager.registerNotifier(self.__jobNotify, self.__manager)
 
@@ -206,6 +207,7 @@ class QCGPMService:
 
 
     def __setupDirectManager(self, parentManager):
+        logging.info('starting direct manager ...')
         self.__manager = DirectManager(self.__conf, parentManager)
         self.__notifId = self.__manager.registerNotifier(self.__jobNotify, self.__manager)
 

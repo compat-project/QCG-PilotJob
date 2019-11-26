@@ -1,11 +1,17 @@
 import asyncio
 import sys
 import logging
+import zmq
+import traceback
+import math
+import copy
 
 from qcg.appscheduler.request import RemoveJobReq, ControlReq, StatusReq
 from qcg.appscheduler.request import Request, SubmitReq, JobStatusReq, JobInfoReq, CancelJobReq
 from qcg.appscheduler.response import Response, ResponseCode
 from qcg.appscheduler.resources import Resources
+from qcg.appscheduler.errors import InvalidRequest, JobAlreadyExist
+from qcg.appscheduler.joblist import JobState
 
 
 class GlobalJob:
@@ -22,19 +28,82 @@ class GlobalJob:
         self.status = status
         self.manager_instance = manager_instance
 
+    def __str__(self):
+        return '{} in {} state (from {} manager)'.format(self.id, self.status.name, self.manager_instance)
+
 
 class ManagerInstance:
 
     def __init__(self, mid, resources, address):
         """
         The information about QCG manager instance available for higher level manager.
-        :param id:
-        :param resources:
-        :param address:
+
+        :param id: manager identifier
+        :param resources: manager's last reported resources
+        :param address: manager's ZMQ input interface address
         """
         self.id = mid
         self.resources = resources
         self.address = address
+
+        self.submitted_jobs = 0
+        self.socket = None
+
+
+    def stop(self):
+        """
+        Cleanup before finish.
+        All resources should be freed.
+        """
+        self.closeSocket()
+
+
+    def getSocket(self):
+        """
+        Return ZMQ socket connected to manager instance.
+        :return: connected ZMQ socket
+        """
+        if not self.socket:
+            self.socket = zmq.asyncio.Context.instance().socket(zmq.REQ)
+            self.socket.connect(self.address)
+
+        return self.socket
+
+
+    def closeSocket(self):
+        """
+        Return ZMQ socket.
+        """
+        if self.socket:
+            try:
+                self.socket.close()
+            except:
+                logging.warning('failed to close manager {} socket: {}'.format(self.address, sys.exc_info()))
+            self.socket = None
+
+
+    async def submitJobs(self, reqJobs):
+        """
+        Send submit request to the manager instance
+
+        :param req: the submit request
+        :return: dict with:
+           'njobs' - number of submitted jobs
+           'names' - list of submited job names
+        """
+        await self.getSocket().send_json(
+            {'request': 'submit',
+             'jobs': reqJobs
+            }
+        )
+        msg = await self.getSocket().recv_json()
+        if not msg['code'] == 0:
+            raise InvalidRequest(
+                'Failed to submit jobs: {}'.format(msg.get('message', '')))
+
+        self.submitted_jobs += msg.get('data', {}).get('submitted', 0)
+        return { 'njobs': msg.get('data', {}).get('submitted', 0),
+                 'names': msg.get('data', {}).get('jobs', []) }
 
 
 class TotalResources:
@@ -108,7 +177,8 @@ class GovernorManager:
         """
         Cleanup before finish.
         """
-        pass
+        for manager in self.managers.values():
+            manager.stop()
 
 
     def updateTotalResources(self):
@@ -126,7 +196,24 @@ class GovernorManager:
     async def __waitForAllJobs(self):
         logging.info('waiting for all jobs to finish')
 
-        #TODO: implement mechanism
+        while not self.allJobsFinished():
+            await asyncio.sleep(0.2)
+
+        logging.info('All ({}) jobs finished'.format(len(self.jobs)))
+
+        if self.__receiver:
+            self.__receiver.setFinish(True)
+        else:
+            logging.warning('Failed to set finish flag due to lack of receiver access')
+
+
+    def allJobsFinished(self):
+        try:
+            return next((job for job in self.jobs.values() if not job.status.isFinished()), None) == None
+        except:
+            logging.error('error counting jobs: {}'.format(sys.exc_info()))
+            logging.error(traceback.format_exc())
+            return False
 
 
     async def handleRegisterReq(self, iface, request):
@@ -152,22 +239,159 @@ class GovernorManager:
 
 
     async def handleControlReq(self, iface, request):
-        if request.command != ControlReq.REQ_CONTROL_CMD_FINISHAFTERLLTASKSDONE:
+        """
+        Handlder for control commands.
+        Control commands are used to configure system during run-time.
+
+        Args:
+            iface (Interface): interface which received request
+            request (ControlReq): control request data
+
+        Returns:
+            Response: the response data
+        """
+        if request.command != ControlReq.REQ_CONTROL_CMD_FINISHAFTERALLTASKSDONE:
             return Response.Error('Not supported command "{}" of finish control request'.format(request.command))
 
         if self.__finishTask is not None:
             return Response.Error('Finish request already requested')
 
         self.__finishTask = asyncio.ensure_future(self.__waitForAllJobs())
+        return Response.Ok('%s command accepted' % (request.command))
 
 
     async def handleSubmitReq(self, iface, request):
-        #TODO: implement mechanism
-        return Response.Error('Currently not supported')
+        if len(self.managers) == 0 or self.totalResources.totalCores == 0:
+            return Response.Error('Error: no resources available')
+
+        try:
+            # validate jobs
+            self.__validateJobReqs(request.jobReqs)
+
+            # split jobs equally between all available managers
+            (nJobs, jobNames) = await self.__scheduleJobs(request.jobReqs)
+
+            data = {
+                'submitted': len(jobNames),
+                'jobs': jobNames
+            }
+
+            return Response.Ok('{} jobs submitted'.format(len(jobNames)), data=data)
+        except Exception as e:
+            logging.error('Submit error: {}'.format(sys.exc_info()))
+            logging.error(traceback.format_exc())
+            return Response.Error(str(e))
+
+
+    def __validateJobReqs(self, jobReqs):
+        req_job_names = set()
+
+        for req in jobReqs:
+            jobReq = req['req']
+
+            if jobReq['name'] in self.jobs or jobReq['name'] in req_job_names:
+                raise JobAlreadyExist('Job {} already exist'.format(jobReq['name']))
+
+
+    async def __scheduleJobs(self, jobReqs):
+        nReqJobs = 0
+        reqJobNames = []
+
+        for req in jobReqs:
+            jobReq = req['req']
+            jobVars = req['vars']
+
+            if 'iterate' in jobReq:
+                # iteration job, split between all available managers
+                (start, end) = jobReq['iterate'][0:2]
+                iterations = end - start
+
+                currIterStart = start
+
+                submit_reqs = []
+
+                splitPart = int(math.ceil(iterations / len(self.managers)))
+
+                managers_list = [ ]
+
+                for m in self.managers.values():
+                    currIterEnd = min(currIterStart + splitPart, end)
+
+                    currJobReq = copy.deepcopy(jobReq)
+                    currJobReq['iterate'] = [ currIterStart, currIterEnd ]
+
+                    submit_reqs.append(m.submitJobs([ currJobReq ]))
+                    managers_list.append(m)
+
+                    currIterStart = currIterEnd
+                    if currIterEnd == end:
+                        break
+
+                submit_results = await asyncio.gather(*submit_reqs)
+                for idx, result in enumerate(submit_results):
+                    m = managers_list[idx]
+
+                    self.__appendNewJobs(result['names'], m)
+
+                    nReqJobs += result['njobs']
+                    reqJobNames.extend(result['names'])
+
+            else:
+                # single job, send to the manager with lest number of submitted jobs
+                manager = min(self.managers.values(), key=lambda m: m.submitted_jobs)
+
+                logging.debug('sending job {} to manager {} ({})'.format(jobReq['name'], manager.id, manager.address))
+                submit_result = await manager.submitJobs([ jobReq ])
+
+                self.__appendNewJobs(submit_result['names'], manager)
+
+                nReqJobs += submit_result['njobs']
+                reqJobNames.extend(submit_result['names'])
+
+        return (nReqJobs, reqJobNames)
+
+
+    def __appendNewJobs(self, jobNames, manager):
+        """
+        Add new jobs to the global registery
+        :param jobNames: list of job names
+        :param manager: manager instance the jobs has been sent to
+        """
+        for jobName in jobNames:
+            self.jobs[jobName] = GlobalJob(jobName, JobState.QUEUED, manager)
+
 
     async def handleJobStatusReq(self, iface, request):
-        #TODO: implement mechanism
-        return Response.Error('Currently not supported')
+        """
+        Handler for job status checking.
+
+        Args:
+            iface (Interface): interface which received request
+            request (JobStatusReq): job status request
+
+        Returns:
+            Response: the response data
+        """
+        result = {}
+
+        for jobName in request.jobNames:
+            try:
+                job = self.jobs.get(jobName)
+
+                if job is None:
+                    return Response.Error('Job %s doesn\'t exist' % (request.jobName))
+
+                result[jobName] = {'status': int(ResponseCode.OK), 'data': {
+                    'jobName': jobName,
+                    'status': str(job.status.name)
+                }}
+            except Exception as e:
+                logging.warning('error to get job status: {}'.format(str(e)))
+                logging.warning(traceback.format_exc())
+                result[jobName] = {'status': int(ResponseCode.ERROR), 'message': e.args[0]}
+
+        return Response.Ok(data={'jobs': result})
+
 
     async def handleJobInfoReq(self, iface, request):
         #TODO: implement mechanism
@@ -208,6 +432,23 @@ class GovernorManager:
     async def handleStatusReq(self, iface, request):
         #TODO: implement mechanism
         return Response.Error('Currently not supported')
+
+
+    async def handleNotifyReq(self, iface, request):
+        jname = request.params.get('name', 'UNKNOWN')
+        job = self.jobs.get(jname, None)
+        if not job:
+            logging.warning('job notified {} not exist'.format(jname))
+            return Response.Error('Job {} unknown'.format(jname))
+
+        newstate = request.params.get('state', 'UNKNOWN')
+        if not newstate in JobState.__members__:
+            logging.warning('notification for job {} contains unknown state {}'.format(jname, newstate))
+            return Response.Error('Job state {} unknown'.format(newstate))
+
+        self.jobs[jname].status = JobState[newstate]
+        logging.debug('job state {} successfully update to {}'.format(jname, newstate))
+        return Response.Ok('job {} updated'.format(jname))
 
 
     async def __delayedFinish(self, delay):

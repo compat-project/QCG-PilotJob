@@ -80,7 +80,7 @@ class RegisterReq(Request):
             raise InvalidRequest('Wrong register request - missing register parameters')
 
         if not all(e in reqData['params'] for e in ['id', 'address', 'resources']):
-            raise InvalidRequest('Wrong register request - missing register key parameters')
+            raise InvalidRequest('Wrong register request - missing key register parameters')
 
         self.entity = reqData['entity']
         self.params = reqData['params']
@@ -97,14 +97,15 @@ class SubmitReq(Request):
     REQ_CNT = 1
 
     def __init__(self, reqData, env=None):
-        self.jobs = []
+        self.jobReqs = [ ]
 
         assert reqData is not None
 
         if 'jobs' not in reqData or not reqData['jobs'] or not isinstance(reqData['jobs'], list):
             raise InvalidRequest('Wrong submit request - missing jobs data')
 
-        newJobs = []
+        # watch out for values - this data can be copied with the 'shallow' method
+        # so complex structures should be omited
         vars = {
             'rcnt': str(SubmitReq.REQ_CNT),
             'uniq': str(uuid.uuid4()),
@@ -116,17 +117,20 @@ class SubmitReq(Request):
 
         SubmitReq.REQ_CNT += 1
 
-        logging.debug("request data contains %d jobs" % (len(reqData['jobs'])))
+        logging.debug('request data contains {} jobs'.format(len(reqData['jobs'])))
+        newJobs = []
 
         for reqJob in reqData['jobs']:
             if not isinstance(reqJob, dict):
                 raise InvalidRequest('Wrong submit request - wrong job data')
 
-            haveIterations = False
-            start = 0
-            end = 1
+            if not 'name' in reqJob:
+                raise InvalidRequest('Missing name in job description')
 
-            # look for 'iterate' directive
+            if not 'execution' in reqJob:
+                raise InvalidRequest('Missing execution element in job description')
+
+           # look for 'iterate' directive
             if 'iterate' in reqJob:
                 if not isinstance(reqJob['iterate'], list) or len(reqJob['iterate']) != 2:
                     raise InvalidRequest('Wrong format of iterative directive: not a two-element list')
@@ -135,90 +139,22 @@ class SubmitReq(Request):
                 if start > end:
                     raise InvalidRequest('Wrong format of iterative directive: start index larger then stop one')
 
-                vars['uniq'] = str(uuid.uuid4())
-                vars['its'] = end - start
-                vars['it_start'] = start
-                vars['it_stop'] = end
-                haveIterations = True
-
-                del reqJob['iterate']
-
-            logging.debug("request job params: start(%d), end(%d), haveIters(%s)" %
-                          (start, end, haveIterations))
-
-            if 'resources' not in env or env['resources'] is None:
-                raise InvalidRequest(
-                    'Wrong submit request - failed to resolve split-into without resource information')
-
-            numCoresPlans = []
-            # look for 'split-into' in resources->numCores
-            if 'resources' in reqJob and 'numCores' in reqJob['resources']:
-                if 'split-into' in reqJob['resources']['numCores']:
-                    numCoresPlans = IterScheduler.GetScheduler('split-into').Schedule(reqJob['resources']['numCores'],
-                            end - start, env['resources'].totalCores)
-                elif 'scheduler' in reqJob['resources']['numCores']:
-                    Scheduler = IterScheduler.GetScheduler(reqJob['resources']['numCores']['scheduler'])
-                    del reqJob['resources']['numCores']['scheduler']
-                    numCoresPlans = Scheduler.Schedule(reqJob['resources']['numCores'],
-                            end - start, env['resources'].totalCores)
-
-            numNodesPlans = []
-            # look for 'split-into' in resources->numNodes
-            if 'resources' in reqJob and 'numNodes' in reqJob['resources']:
-                if 'split-into' in reqJob['resources']['numNodes']:
-                    numNodesPlans = IterScheduler.GetScheduler('split-into').Schedule(reqJob['resources']['numNodes'],
-                            end - start, env['resources'].totalNodes)
-                elif 'scheduler' in reqJob['resources']['numNodes']:
-                    Scheduler = IterScheduler.GetScheduler(reqJob['resources']['numNodes']['scheduler'])
-                    del reqJob['resources']['numNodes']['scheduler']
-                    numNodesPlans = Scheduler.Schedule(reqJob['resources']['numNodes'],
-                            end - start, env['resources'].totalNodes)
-
             # default value for missing 'resources' definition
             if 'resources' not in reqJob:
                 reqJob['resources'] = { 'numCores': { 'exact': 1 } }
 
-            for idx in range(start, end):
-                if haveIterations:
-                    vars['it'] = idx
+            newJobs.append({ 'req': reqJob, 'vars': vars.copy() })
 
-                try:
-                    reqJob_vars = self.__replaceVariables(reqJob, vars)
+        self.jobReqs.extend(newJobs)
 
-                    varsStep2 = {
-                        'jname': reqJob_vars['name']
-                    }
-
-                    logging.debug("replacing jname variable with %s" % (reqJob['name']))
-
-                    reqJob_vars = self.__replaceVariables(reqJob_vars, varsStep2)
-
-                    if numCoresPlans is not None and len(numCoresPlans) > idx - start:
-                        reqJob_vars['resources']['numCores'] = numCoresPlans[idx - start]
-
-                    if numNodesPlans is not None and len(numNodesPlans) > idx - start:
-                        reqJob_vars['resources']['numNodes'] = numNodesPlans[idx - start]
-
-                    newJobs.append(Job(**reqJob_vars))
-                except Exception as e:
-                    logging.exception('Wrong submit request')
-                    raise InvalidRequest('Wrong submit request - problem with variables') from e
-
-        logging.debug("appending %d jobs to request job list" % (len(newJobs)))
-        self.jobs.extend(newJobs)
-
-    def __replaceVariables(self, data, vars):
-        if vars is not None and len(vars) > 0:
-            return json.loads(Template(json.dumps(data)).safe_substitute(vars))
-        else:
-            return data
 
     def toDict(self):
         res = {'request': self.REQ_NAME, 'jobs': []}
-        for job in self.jobs:
-            res['jobs'].append(job.toDict())
+        for job in self.jobReqs:
+            res['jobs'].append(job['req'].toDict())
 
         return res
+
 
     def toJSON(self):
         return json.dumps(self.toDict(), indent=2)
@@ -348,6 +284,35 @@ class StatusReq(Request):
         return json.dumps(self.toDict())
 
 
+class NotifyReq(Request):
+    REQ_NAME = 'notify'
+
+    NOTIFY_ENTITY = [
+        'job'
+    ]
+
+    def __init__(self, reqData, env=None):
+        assert reqData is not None
+
+        if 'entity' not in reqData or not reqData['entity'] in self.NOTIFY_ENTITY:
+            raise InvalidRequest('Wrong notify request - missing/unknown entity')
+
+        if 'params' not in reqData:
+            raise InvalidRequest('Wrong notify request - missing register parameters')
+
+        if not all(e in reqData['params'] for e in ['name', 'state']):
+            raise InvalidRequest('Wrong notify request - missing key notify parameters')
+
+        self.entity = reqData['entity']
+        self.params = reqData['params']
+
+    def toDict(self):
+        return {'request': self.REQ_NAME, 'entity': self.entity, 'params': self.params}
+
+    def toJSON(self):
+        return json.dumps(self.toDict())
+
+
 __REQS__ = {
     RegisterReq.REQ_NAME: RegisterReq,
     ControlReq.REQ_NAME: ControlReq,
@@ -359,5 +324,6 @@ __REQS__ = {
     ListJobsReq.REQ_NAME: ListJobsReq,
     ResourcesInfoReq.REQ_NAME: ResourcesInfoReq,
     FinishReq.REQ_NAME: FinishReq,
-    StatusReq.REQ_NAME: StatusReq
+    StatusReq.REQ_NAME: StatusReq,
+    NotifyReq.REQ_NAME: NotifyReq,
 }

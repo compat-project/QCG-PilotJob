@@ -8,9 +8,11 @@ import os
 import sys
 import zmq
 import json
+import traceback
+from string import Template
 
 from qcg.appscheduler.errors import NotSufficientResources, InvalidResourceSpec, IllegalJobDescription
-from qcg.appscheduler.errors import GovernorRegisterError
+from qcg.appscheduler.errors import GovernorConnectionError, JobAlreadyExist
 from qcg.appscheduler.executor import Executor
 from qcg.appscheduler.joblist import JobList, JobState
 from qcg.appscheduler.scheduler import Scheduler
@@ -21,6 +23,8 @@ from qcg.appscheduler.request import ControlReq
 from qcg.appscheduler.request import JobStatusReq, JobInfoReq
 from qcg.appscheduler.response import Response, ResponseCode
 from qcg.appscheduler.errors import InvalidRequest
+from qcg.appscheduler.iterscheduler import IterScheduler
+from qcg.appscheduler.joblist import Job
 
 
 class SchedulingJob:
@@ -150,7 +154,8 @@ class DirectManager:
         """
         if self.__parentManager:
             try:
-                self.registerInParent(self.__parentManager)
+                self.registerInParent()
+                self.registerNotifier(self.__notifyParentWithJob)
             except:
                 logging.error('Failed to register manager in parent governor manager: {}'.format(sys.exc_info()[0]))
                 raise
@@ -373,26 +378,25 @@ class DirectManager:
         return self.__executor
 
 
-    def registerInParent(self, parent_manager):
-        zmq_ctx = zmq.asyncio.Context.instance()
-        out_socket = zmq_ctx.socket(zmq.REQ)
+    def __getParentSocket(self):
+        parentSocket = zmq.asyncio.Context.instance().socket(zmq.REQ)
+        parentSocket.connect(self.__parentManager)
+
+        return parentSocket
+
+
+    async def __sendParentRequestWithValidAsync(self, request):
+        out_socket = None
 
         try:
-            out_socket.connect(parent_manager)
-            asyncio.get_event_loop().run_until_complete(out_socket.send_json(
-                { 'request': 'register',
-                  'entity': 'manager',
-                  'params': {
-                    'id': self.managerId,
-                    'address': self.zmq_address,
-                    'resources': self.resources.toDict(),
-                    'tags': self.managerTags,
-                  }
-                }
-            ))
-            msg = asyncio.get_event_loop().run_until_complete(out_socket.recv_json())
+            out_socket = self.__getParentSocket()
+
+            await out_socket.send_json(request)
+            msg = await out_socket.recv_json()
             if not msg['code'] == 0:
-                raise GovernorRegisterError('Failed to register manager instance in governor: {}'.format(msg.get('message', '')))
+                raise GovernorConnectionError('Failed to register manager instance in governor: {}'.format(msg.get('message', '')))
+
+            return msg
         finally:
             if out_socket:
                 try:
@@ -400,6 +404,58 @@ class DirectManager:
                 except:
                     # ignore errors during cleanup
                     pass
+
+
+    def __sendParentRequestWithValidSync(self, request):
+        out_socket = None
+
+        try:
+            out_socket = self.__getParentSocket()
+
+            asyncio.get_event_loop().run_until_complete(out_socket.send_json(request))
+            msg = asyncio.get_event_loop().run_until_complete(out_socket.recv_json())
+            if not msg['code'] == 0:
+                raise GovernorConnectionError('Failed to register manager instance in governor: {}'.format(msg.get('message', '')))
+
+            return msg
+        finally:
+            if out_socket:
+                try:
+                    out_socket.close()
+                except:
+                    # ignore errors during cleanup
+                    pass
+
+
+    def __notifyParentWithJob(self, jobId, state):
+        if self.__parentManager and state.isFinished():
+            try:
+                asyncio.ensure_future(self.__sendParentRequestWithValidAsync({ 'request': 'notify',
+                    'entity': 'job',
+                    'params': {
+                        'name': jobId,
+                        'state': state.name
+                    }}))
+            except Exception:
+                logging.error('failed to send job notification to the parent manager: {}'.format(sys.exc_info()))
+                logging.error(traceback.format_exc())
+
+
+    def registerInParent(self):
+        """
+        Register manager in parent governor manager.
+        We are not using asynchronous method because we need to have a "instant" result if registration went OK
+        (in case of problems exception is raised).
+        """
+        self.__sendParentRequestWithValidSync({ 'request': 'register',
+                  'entity': 'manager',
+                  'params': {
+                    'id': self.managerId,
+                    'address': self.zmq_address,
+                    'resources': self.resources.toDict(),
+                    'tags': self.managerTags,
+                  }
+                })
 
 
 class DirectManagerHandler:
@@ -465,27 +521,118 @@ class DirectManagerHandler:
         Returns:
             Response: the response data
         """
-        current_jobs = set()
-        for job in request.jobs:
-            # verify job name uniqness
-            if self.__manager.jobList.exist(job.name) or job.name in current_jobs:
-                return Response.Error('Job %s already exist' % (job.name))
-
-            current_jobs.add(job.name)
-
-        # enqueue job in the manager
+       # enqueue job in the manager
         try:
-            self.__manager.enqueue(request.jobs)
+            jobs = self.__prepareJobs(request.jobReqs)
+            self.__manager.enqueue(jobs)
+
+            data = {
+                'submitted': len(jobs),
+                'jobs': [job.name for job in jobs]
+            }
+
+            return Response.Ok('{} jobs submitted'.format(len(jobs)), data=data)
         except Exception as e:
+            logging.error('Submit error: {}'.format(sys.exc_info()))
+            logging.error(traceback.format_exc())
             return Response.Error(str(e))
 
-        jobs = len(request.jobs)
-        data = {
-            'submitted': jobs,
-            'jobs': [job.name for job in request.jobs]
-        }
 
-        return Response.Ok('%d jobs submitted' % (len(request.jobs)), data=data)
+    def __prepareJobs(self, reqJobs):
+        resources = self.__manager.resources
+
+        req_job_names = set()
+
+        newJobs = []
+        for req in reqJobs:
+            reqJob = req['req']
+            vars = req['vars']
+
+            haveIterations = False
+            start = 0
+            end = 1
+
+            # look for 'iterate' directive
+            if 'iterate' in reqJob:
+                haveIterations = True
+
+                (start, end) = reqJob['iterate'][0:2]
+
+                vars['uniq'] = str(uuid.uuid4())
+                vars['its'] = end - start
+                vars['it_start'] = start
+                vars['it_stop'] = end
+
+                del reqJob['iterate']
+
+            numCoresPlans = []
+            # look for 'split-into' in resources->numCores
+            if 'resources' in reqJob and 'numCores' in reqJob['resources']:
+                if 'split-into' in reqJob['resources']['numCores']:
+                    numCoresPlans = IterScheduler.GetScheduler('split-into').Schedule(reqJob['resources']['numCores'],
+                            vars['its'], resources.totalCores)
+                elif 'scheduler' in reqJob['resources']['numCores']:
+                    Scheduler = IterScheduler.GetScheduler(reqJob['resources']['numCores']['scheduler'])
+                    del reqJob['resources']['numCores']['scheduler']
+                    numCoresPlans = Scheduler.Schedule(reqJob['resources']['numCores'],
+                            vars['its'], resources.totalCores)
+
+            numNodesPlans = []
+            # look for 'split-into' in resources->numNodes
+            if 'resources' in reqJob and 'numNodes' in reqJob['resources']:
+                if 'split-into' in reqJob['resources']['numNodes']:
+                    numNodesPlans = IterScheduler.GetScheduler('split-into').Schedule(reqJob['resources']['numNodes'],
+                            vars['its'], resources.totalNodes)
+                elif 'scheduler' in reqJob['resources']['numNodes']:
+                    Scheduler = IterScheduler.GetScheduler(reqJob['resources']['numNodes']['scheduler'])
+                    del reqJob['resources']['numNodes']['scheduler']
+                    numNodesPlans = Scheduler.Schedule(reqJob['resources']['numNodes'],
+                            vars['its'], resources.totalNodes)
+
+            # default value for missing 'resources' definition
+            if 'resources' not in reqJob:
+                reqJob['resources'] = { 'numCores': { 'exact': 1 } }
+
+            for idx in range(start, end):
+                if haveIterations:
+                    vars['it'] = idx
+
+                try:
+                    reqJob_vars = self.__replaceVariables(reqJob, vars)
+
+                    varsStep2 = {
+                        'jname': reqJob_vars['name']
+                    }
+
+                    reqJob_vars = self.__replaceVariables(reqJob_vars, varsStep2)
+
+                    if numCoresPlans is not None and len(numCoresPlans) > idx - start:
+                        reqJob_vars['resources']['numCores'] = numCoresPlans[idx - start]
+
+                    if numNodesPlans is not None and len(numNodesPlans) > idx - start:
+                        reqJob_vars['resources']['numNodes'] = numNodesPlans[idx - start]
+
+                    # verify job name uniqness
+                    if self.__manager.jobList.exist(reqJob_vars['name']) or \
+                            reqJob_vars['name'] in req_job_names:
+                        raise JobAlreadyExist('Job {} already exist'.format(reqJob_vars['name']))
+
+                    newJobs.append(Job(**reqJob_vars))
+                    req_job_names.add(reqJob_vars['name'])
+                except JobAlreadyExist as e:
+                    raise e
+                except Exception as e:
+                    logging.exception('Wrong submit request')
+                    raise InvalidRequest('Wrong submit request - problem with variables') from e
+
+        return newJobs
+
+
+    def __replaceVariables(self, data, vars):
+        if vars is not None and len(vars) > 0:
+            return json.loads(Template(json.dumps(data)).safe_substitute(vars))
+        else:
+            return data
 
 
     async def handleJobStatusReq(self, iface, request):
@@ -699,6 +846,10 @@ class DirectManagerHandler:
 
     async def handleStatusReq(self, iface, request):
         return await self.generateStatusResponse()
+
+
+    async def handleNotifyReq(self, iface, request):
+        return Response.Error('Operation not supported')
 
 
     async def __waitForAllJobs(self):

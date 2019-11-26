@@ -50,5 +50,5 @@ class SlurmEnvError(AppSchedulerError):
     pass
 
 
-class GovernorRegisterError(AppSchedulerError):
+class GovernorConnectionError(AppSchedulerError):
     pass
