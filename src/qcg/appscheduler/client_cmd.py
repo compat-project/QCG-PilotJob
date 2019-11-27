@@ -6,10 +6,13 @@ import json
 import zmq
 import sys
 
-from os.path import exists, join
+from os.path import exists, join, abspath, isdir
+from os import listdir
 
 DEFAULT_PROTO = 'tcp'
 DEFAULT_PORT = '21000'
+
+AUX_DIR_PTRN = re.compile(r'\.qcgpjm-service-.*')
 
 
 class TimeoutError(Exception):
@@ -19,13 +22,25 @@ class ResponseError(Exception):
     pass
 
 
-def get_address_from_directory(path):
-    wdir = join(path, '.qcgpjm')
-    if exists(wdir) and exists(join(wdir, 'address')):
-        with open(join(wdir, 'address'), 'r') as f:
-            return f.read()
+def find_aux_dirs(path):
+    apath = abspath(path)
+    return [join(apath, entry) for entry in listdir(apath) \
+            if AUX_DIR_PTRN.match(entry) and isdir(join(apath, entry))]
 
-    return None
+def check_aux_dir(path):
+    auxdirs = find_aux_dirs(path)
+
+    return auxdirs[0] if len(auxdirs) > 0 else None
+
+def get_address_from_directory(path):
+    auxdirs = find_aux_dirs(path)
+
+    for wdir in auxdirs:
+        if exists(join(wdir, 'address')):
+            with open(join(wdir, 'address'), 'r') as f:
+                return f.read(), wdir
+
+    return None, None
 
 
 def get_address_from_arg(address):
@@ -94,11 +109,9 @@ def qcgpjm(ctx, path, address, debug):
         if address:
             pjm_address = get_address_from_arg(address)
         elif path:
-            pjm_path = join(path, '.qcgpjm')
-            pjm_address = get_address_from_directory(path)
+            (pjm_address, pjm_path) = get_address_from_directory(path)
         else:
-            pjm_path = join('.', '.qcgpjm')
-            pjm_address = get_address_from_directory('.')
+            (pjm_address, pjm_path) = get_address_from_directory('.')
 
         if not pjm_address:
             raise Exception('unable to find QCG PJM network interface address (use \'-p\' or \'-a\' argument)')
@@ -150,8 +163,9 @@ def status(ctx):
 def setup_logging(debug):
     level=logging.DEBUG if debug else logging.WARNING
 
-    if exists('.qcgpjm'):
-        logfile = '.qcgpjm/qcgpjmclient.log'
+    auxdir = check_aux_dir('.')
+    if auxdir:
+        logfile = join(auxdir, 'qcgpjmclient.log')
     else:
         logfile = 'qcgpjmclient.log'
 

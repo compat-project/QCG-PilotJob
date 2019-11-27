@@ -91,7 +91,8 @@ class Manager:
         Args:
             cfg (dict) - see constructor.
         """
-        self.__logFile = cfg.get('log_file', join('.qcgpjm', 'api.log'))
+        wdir = cfg.get('wdir', '.')
+        self.__logFile = cfg.get('log_file', join(wdir, '.qcgpjm-client', 'api.log'))
         print('log file set to {}'.format(self.__logFile))
 
         if not exists(dirname(abspath(self.__logFile))):

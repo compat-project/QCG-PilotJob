@@ -28,6 +28,7 @@ class Executor:
         self.__config = config
 
         self.base_wd = abspath(Config.EXECUTOR_WD.get(config))
+        self.aux_dir = abspath(Config.AUX_DIR.get(config))
 
         logging.info("executor base working directory set to %s" % (self.base_wd))
 
@@ -47,7 +48,7 @@ class Executor:
         if self.__resources.rtype == ResourcesType.SLURM and not Config.DISABLE_NL.get(config):
             logging.info('initializing custom launching method (node launcher)')
             try:
-                LauncherExecutionJob.StartAgents(self.base_wd, self.__resources.nodes, self.__resources.binding)
+                LauncherExecutionJob.StartAgents(self.base_wd, self.aux_dir, self.__resources.nodes, self.__resources.binding)
                 self.__is_node_launcher = True
                 logging.info('node launcher succesfully initialized')
             except Exception as e:

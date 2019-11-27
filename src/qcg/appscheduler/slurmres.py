@@ -6,6 +6,7 @@ from math import log2
 
 from qcg.appscheduler.errors import *
 from qcg.appscheduler.resources import CRType, CRBind, Node, Resources, ResourcesType
+from qcg.appscheduler.config import Config
 
 
 def parse_nodelist(nodespec):
@@ -86,7 +87,18 @@ def parse_slurm_resources(config):
         nCrs = { CRType.GPU: CRBind(CRType.GPU, os.environ['CUDA_VISIBLE_DEVICES'].split(',')) }
 
     nodes = []
-    for i in range(0, len(node_names)):
+
+    node_start = Config.SLURM_LIMIT_NODES_RANGE_BEGIN.get(config)
+    if not node_start:
+        node_start = 0
+
+    node_end = Config.SLURM_LIMIT_NODES_RANGE_END(config)
+    if not node_end:
+        node_end = len(node_names)
+    else:
+        node_end = min(node_end, len(node_names))
+
+    for i in range(node_start, node_end):
         nname = node_names[i]
         logging.debug("%s x %d" % (nname, cores_num[i]))
         nodes.append(Node(nname, cores_num[i], 0, coreIds=core_ids, crs=nCrs))

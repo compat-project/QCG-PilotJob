@@ -34,15 +34,7 @@ class Agent:
         self.agent_id = agent_id
         self.__finish = False
 
-        self.options = {}
-        if options:
-            try:
-                self.options = json.loads(options)
-            except Exception as e:
-                logging.warning('failed to parse options: {}'.format(str(e)))
-
-        if not self.options or not isinstance(self.options, dict):
-            self.options = {}
+        self.options = options
 
         # set default options
         self.options.setdefault('binding', False)
@@ -331,11 +323,19 @@ if __name__ == '__main__':
         sys.exit(1)
 
     agent_id, raddress = sys.argv[1:3]
-    options = sys.argv[3] if len(sys.argv) > 3 else None
-    
+    options_arg = sys.argv[3] if len(sys.argv) > 3 else None
+
+    options = {}
+    if options_arg:
+        try:
+            options = json.loads(options_arg)
+        except Exception as e:
+            print('failed to parse options: {}'.format(str(e)))
+            sys.exit(1)
+
     logging.basicConfig(
             level=logging.INFO,
-            filename=join('.qcgpjm', 'nl-agent-{}.log'.format(agent_id)),
+            filename=join(options.get('auxDir', '.'), 'nl-agent-{}.log'.format(agent_id)),
             format='%(asctime)-15s: %(message)s')
 
     agent = Agent(agent_id, options)

@@ -10,6 +10,7 @@ from datetime import datetime
 from json import JSONDecodeError
 from qcg.appscheduler.service import QCGPMServiceProcess
 from qcg.appscheduler.joblist import JobState
+from qcg.appscheduler.utils.auxdir import find_single_aux_dir
 
 
 def save_jobs_to_file(jobs, file_path):
@@ -31,7 +32,7 @@ def save_reqs_to_file(reqs, file_path):
 def check_job_status_in_json(jobs, workdir='.', dest_state='SUCCEED'):
     to_check = set(jobs)
 
-    report_path = os.path.join(workdir, '.qcgpjm', 'jobs.report')
+    report_path = os.path.join(find_single_aux_dir(workdir), 'jobs.report')
     with open(report_path, 'r') as report_f:
         for line, entry in enumerate(report_f, 1):
             try:
@@ -62,7 +63,7 @@ def check_job_status_in_json(jobs, workdir='.', dest_state='SUCCEED'):
 
 
 def check_service_log_string(resubstr, workdir='.'):
-    service_log_file = os.path.join(workdir, '.qcgpjm', 'service.log')
+    service_log_file = os.path.join(find_single_aux_dir(workdir), 'service.log')
 
     regex = re.compile(resubstr)
 

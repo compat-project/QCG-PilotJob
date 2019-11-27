@@ -7,8 +7,21 @@ import re
 
 from json import JSONDecodeError
 from datetime import datetime, timedelta
-from os.path import exists, join
+from os.path import exists, join, abspath, isdir
+from os import listdir
 from math import ceil
+
+
+AUX_DIR_PTRN = re.compile(r'\.qcgpjm-service-.*')
+
+def find_aux_dirs(path):
+    apath = abspath(path)
+    return [join(apath, entry) for entry in listdir(apath) \
+            if AUX_DIR_PTRN.match(entry) and isdir(join(apath, entry))]
+
+def check_aux_dir(path):
+    auxdirs = find_aux_dirs(path)
+    return auxdirs[0] if len(auxdirs) > 0 else None
 
 
 class JobsReportStats:
@@ -42,14 +55,16 @@ class JobsReportStats:
 
         if not self.report_file:
             if self.__args.wdir:
-                self.report_file = join(self.__args.wdir, '.qcgpjm', 'jobs.report')
+                aux_dir = check_aux_dir(self.__args.wdir)
+                self.report_file = join(aux_dir, 'jobs.report') if aux_dir else None
 
             if not self.report_file or not exists(self.report_file):
                 raise Exception('report file not accessible or not defined')
 
         if not self.log_file:
             if self.__args.wdir:
-                self.log_file = join(self.__args.wdir, '.qcgpjm', 'service.log')
+                aux_dir = check_aux_dir(self.__args.wdir)
+                self.log_file = join(aux_dir, 'service.log') if aux_dir else None
 
         self.job_size = self.__args.job_size
         self.job_time = self.__args.job_time

@@ -46,9 +46,5 @@ class InvalidRequest(AppSchedulerError):
     pass
 
 
-class SlurmEnvError(AppSchedulerError):
-    pass
-
-
 class GovernorConnectionError(AppSchedulerError):
     pass

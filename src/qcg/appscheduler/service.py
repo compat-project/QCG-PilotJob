@@ -95,8 +95,21 @@ class QCGPMService:
         parser.add_argument('--tags',
                             help='optional manager instance tags separated by commas',
                             default=Config.MANAGER_TAGS.value['default'])
+        parser.add_argument('--slurm-partition-nodes',
+                            help='split Slurm allocation by given number of nodes, where each group will be controlled by separate manager (implies --governor)',
+                            type = int, default = None)
+        parser.add_argument('--slurm-limit-nodes-range-begin',
+                            help='limit Slurm allocation to specified range of nodes (starting node)',
+                            type = int, default = None)
+        parser.add_argument('--slurm-limit-nodes-range-end',
+                            help='limit Slurm allocation to specified range of nodes (ending node)',
+                            type = int, default = None)
 
         self.__args = parser.parse_args(args)
+
+        if self.__args.slurm_partition_nodes:
+            # imply '--governor'
+            self.__args.governor = True
 
         if self.__args.governor or self.__args.parent:
             # imply '--net' in case of hierarchy scheduling - required for inter-manager communication
@@ -156,6 +169,9 @@ class QCGPMService:
             Config.PARENT_MANAGER: self.__args.parent,
             Config.MANAGER_ID: manager_id,
             Config.MANAGER_TAGS: manager_tags,
+            Config.SLURM_PARTITION_NODES: self.__args.slurm_partition_nodes,
+            Config.SLURM_LIMIT_NODES_RANGE_BEGIN: self.__args.slurm_limit_nodes_range_begin,
+            Config.SLURM_LIMIT_NODES_RANGE_END: self.__args.slurm_limit_nodes_range_end,
         }
 
         self.__wd = Config.EXECUTOR_WD.get(self.__conf)
@@ -176,10 +192,14 @@ class QCGPMService:
             iface.setup(self.__conf)
             self.__ifaces.append(iface)
 
-        if self.__args.governor:
+        if self.__args.slurm_partition_nodes:
             self.__setupGovernorManager(self.__args.parent)
+            self.__launchPartitionManagers()
         else:
-            self.__setupDirectManager(self.__args.parent)
+            if self.__args.governor:
+                self.__setupGovernorManager(self.__args.parent)
+            else:
+                self.__setupDirectManager(self.__args.parent)
 
 
     def __generateDefaultManagerId(self):
@@ -243,7 +263,7 @@ class QCGPMService:
         """
         wdir = Config.EXECUTOR_WD.get(self.__conf)
 
-        self.auxDir = join(wdir, '.qcgpjm')
+        self.auxDir = join(wdir, '.qcgpjm-service-{}'.format(Config.MANAGER_ID.get(self.__conf)))
         if not os.path.exists(self.auxDir):
             os.makedirs(self.auxDir)
 

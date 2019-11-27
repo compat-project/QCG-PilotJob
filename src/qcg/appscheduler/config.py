@@ -118,6 +118,20 @@ class Config(Enum):
         'default': None
     }
 
+    SLURM_PARTITION_NODES = {
+        'name': 'slurm.nodes.partition',
+        'default': None
+    }
+
+    SLURM_LIMIT_NODES_RANGE_BEGIN = {
+        'name': 'slurm.nodes.limit.begin',
+        'default': None
+    }
+
+    SLURM_LIMIT_NODES_RANGE_END = {
+        'name': 'slurm.nodes.limit.end',
+        'default': None
+    }
 
     def get(self, config):
         if 'get' in self.value:

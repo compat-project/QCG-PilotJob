@@ -9,6 +9,7 @@ from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.eventloop.defaults import use_asyncio_event_loop
 
 from os.path import exists, abspath, join
+from os import getcwd
 
 import asyncio
 import click
@@ -19,6 +20,9 @@ from zmq.asyncio import Context
 import json
 import logging
 import sys
+
+from qcg.appscheduler.utils.auxdir import find_single_aux_dir
+
 
 CommandCompleter = WordCompleter(['jobs', 'status', 'jinfo', 'load', 'edit',
                                   'jcancel', 'jdel', 'connect', 'exit', 'finish', 'help'], ignore_case=True)
@@ -226,15 +230,15 @@ class CmdJinfo:
 
                 if 'runtime' in jdata and isinstance(jdata['runtime'], dict):
                     for rk, rv in jdata['runtime'].items():
-                status = '\n'.join([status, '%s: %s' % (rk, rv)])
+                        status = '\n'.join([status, '%s: %s' % (rk, rv)])
 
-        color = 'blue'
+                color = 'blue'
                 if jdata['status'] in ['FAILED', 'CANCELED', 'OMITTED']:
-            color = 'red'
+                    color = 'red'
                 elif jdata['status'] in ['SUCCEED']:
-            color = 'green'
+                    color = 'green'
 
-        click.secho(status, fg=color)
+                click.secho(status, fg=color)
 
     @classmethod
     def description(cls):
@@ -379,7 +383,7 @@ class CmdConnect:
 
 
     def __checkServiceDir(self, wd):
-        wdir = join(wd, '.qcgpjm')
+        wdir = find_single_aux_dir(wd)
         if exists(wdir) and exists(join(wdir, 'address')):
             with open(join(wdir, 'address'), 'r') as f:
                 return f.read()
@@ -388,7 +392,7 @@ class CmdConnect:
 
     def __discoverServiceAddress(self, wdir=None):
         if not wdir:
-            wdir = os.getcwd()
+            wdir = getcwd()
 
         click.secho("checking service working directory {} ...".format(wdir))
 

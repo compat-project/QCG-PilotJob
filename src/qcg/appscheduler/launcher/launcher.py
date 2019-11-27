@@ -17,9 +17,12 @@ class Launcher:
     MAX_PORT_RANGE = 40000
     START_TIMEOUT_SECS = 20
 
-    def __init__(self, wdir):
+    def __init__(self, wdir, auxDir):
         # working directory
         self.work_dir = wdir
+
+        # auxiliary directory
+        self.aux_dir = auxDir
 
         # local context
         self.zmq_ctx = {}
@@ -325,8 +328,8 @@ class Launcher:
         stderrP = asyncio.subprocess.DEVNULL
 
         if logging.root.level == logging.DEBUG:
-            stdoutP = open(os.path.join(self.work_dir, '.qcgpjm', 'nl-start-agent-stdout.log'), 'w')
-            stderrP = open(os.path.join(self.work_dir, '.qcgpjm', 'nl-start-agent-stderr.log'), 'w')
+            stdoutP = open(os.path.join(self.aux_dir, 'nl-{}-start-agent-stdout.log'.format(slurm_data['node'])), 'w')
+            stderrP = open(os.path.join(self.aux_dir, 'nl-{}-start-agent-stderr.log'.format(slurm_data['node'])), 'w')
 
         logging.debug('running agent process with args: {}'.format(' '.join([ shutil.which('srun') ] + slurm_args + self.node_local_agent_cmd + args)))
 

@@ -1,19 +1,18 @@
 import pytest
 
-from os.path import exists
+from os.path import exists, join
 
 
 from qcg.appscheduler.api.manager import LocalManager
 from qcg.appscheduler.api.job import Jobs
+from qcg.appscheduler.utils.auxdir import find_single_aux_dir
 
 
 def test_local_manager_resources(tmpdir):
     cores = 4
 
-    client_conf = { 'log_file': tmpdir.join('.qcgpjm', 'api.log') }
-
-    # switch on debugging (by default in api.log file)
-    m = LocalManager(['--wd', str(tmpdir), '--nodes', str(cores)], client_conf)
+   # switch on debugging (by default in api.log file)
+    m = LocalManager(['--wd', str(tmpdir), '--nodes', str(cores)], {'wdir': str(tmpdir)})
 
     res = m.resources()
 
@@ -29,10 +28,8 @@ def test_local_manager_resources_nodes(tmpdir):
     cores_per_node = 3
     res_desc = ','.join([str(cores_per_node) for i in range(nodes)])
 
-    client_conf = { 'log_file': tmpdir.join('.qcgpjm', 'api.log') }
-
-    # switch on debugging (by default in api.log file)
-    m = LocalManager(['--wd', str(tmpdir), '--nodes', res_desc], client_conf)
+   # switch on debugging (by default in api.log file)
+    m = LocalManager(['--wd', str(tmpdir), '--nodes', res_desc], {'wdir': str(tmpdir)})
 
     res = m.resources()
 
@@ -46,10 +43,8 @@ def test_local_manager_resources_nodes(tmpdir):
 def test_local_manager_submit_simple(tmpdir):
     cores = 4
 
-    client_conf = { 'log_file': tmpdir.join('.qcgpjm', 'api.log') }
-
-    # switch on debugging (by default in api.log file)
-    m = LocalManager(['--wd', str(tmpdir), '--nodes', str(cores)], client_conf)
+   # switch on debugging (by default in api.log file)
+    m = LocalManager(['--wd', str(tmpdir), '--nodes', str(cores)], {'wdir': str(tmpdir)})
 
     res = m.resources()
 
@@ -73,8 +68,10 @@ def test_local_manager_submit_simple(tmpdir):
                 jinfos['jobs']['host'].get('data', {}).get('status', '') == 'SUCCEED',
                 jinfos['jobs']['date'].get('data', {}).get('status', '') == 'SUCCEED'))
 
-    assert all((exists(tmpdir.join('.qcgpjm', 'api.log')),
-                exists(tmpdir.join('.qcgpjm', 'service.log')),
+    aux_dir = find_single_aux_dir(str(tmpdir))
+
+    assert all((exists(tmpdir.join('.qcgpjm-client', 'api.log')),
+                exists(join(aux_dir, 'service.log')),
                 exists(tmpdir.join('host.stdout')),
                 exists(tmpdir.join('date.stdout'))))
 
@@ -86,10 +83,8 @@ def test_local_manager_submit_simple(tmpdir):
 def test_local_manager_wait4all(tmpdir):
     cores = 4
 
-    client_conf = { 'log_file': tmpdir.join('.qcgpjm', 'api.log') }
-
-    # switch on debugging (by default in api.log file)
-    m = LocalManager(['--wd', str(tmpdir), '--nodes', str(cores)], client_conf)
+   # switch on debugging (by default in api.log file)
+    m = LocalManager(['--wd', str(tmpdir), '--nodes', str(cores)], {'wdir': str(tmpdir)})
 
     res = m.resources()
 
@@ -113,8 +108,10 @@ def test_local_manager_wait4all(tmpdir):
                 jinfos['jobs']['host'].get('data', {}).get('status', '') == 'SUCCEED',
                 jinfos['jobs']['date'].get('data', {}).get('status', '') == 'SUCCEED'))
 
-    assert all((exists(tmpdir.join('.qcgpjm', 'api.log')),
-                exists(tmpdir.join('.qcgpjm', 'service.log')),
+    aux_dir = find_single_aux_dir(str(tmpdir))
+
+    assert all((exists(tmpdir.join('.qcgpjm-client', 'api.log')),
+                exists(join(aux_dir, 'service.log')),
                 exists(tmpdir.join('host.stdout')),
                 exists(tmpdir.join('date.stdout'))))
 

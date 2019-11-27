@@ -5,13 +5,18 @@ import zmq
 import traceback
 import math
 import copy
+import os
+import shutil
+from datetime import datetime
 
 from qcg.appscheduler.request import RemoveJobReq, ControlReq, StatusReq
 from qcg.appscheduler.request import Request, SubmitReq, JobStatusReq, JobInfoReq, CancelJobReq
 from qcg.appscheduler.response import Response, ResponseCode
 from qcg.appscheduler.resources import Resources
-from qcg.appscheduler.errors import InvalidRequest, JobAlreadyExist
+from qcg.appscheduler.errors import InvalidRequest, JobAlreadyExist, InternalError
 from qcg.appscheduler.joblist import JobState
+from qcg.appscheduler.config import Config
+from qcg.appscheduler.slurmres import in_slurm_allocation, parse_slurm_resources
 
 
 class GlobalJob:
@@ -30,6 +35,75 @@ class GlobalJob:
 
     def __str__(self):
         return '{} in {} state (from {} manager)'.format(self.id, self.status.name, self.manager_instance)
+
+
+class PartitionManager:
+
+    def __init__(self, mid, nodeName, startNode, endNode, workDir, governorAddress, auxDir):
+        """
+        The instance of partition manager.
+        The partition manager is an instance of manager that controls part of the allocation (the nodes range
+        'startNode'-'endNode' of the Slurm allocation). The instance is launched from governor manager to run
+        jobs submited by governor on it's part of the allocation.
+
+        :param mid: partition manager identifier
+        :param nodeName: the node where partition manager should be launched
+        :param startNode: the start node of the allocation the manager should control
+        :param endNode: the end node of the allocation the manager should control
+        :param workDir: the working directory of partition manager
+        :param governorAddress: the address of the governor manager where partition manager should register
+        :param auxDir: the auxiliary directory for partition manager
+        """
+        self.mid = mid
+        self.nodeName = nodeName
+        self.startNode = startNode
+        self.endNode = endNode
+        self.workDir = workDir
+        self.governorAddress = governorAddress
+        self.auxDir = auxDir
+
+        self.stdoutP = None
+        self.stderrP = None
+
+        self.process = None
+
+        self.__partitionManagerCmd = [ sys.executable, '-m', 'qcg.appscheduler.service' ]
+        self.__defaultPartitionManagerArgs = [ ]
+
+
+    async def launch(self):
+        logging.info('launching partition manager {} on node {} to control node numbers {}-{}'.format(
+            self.mid, self.nodeName, self.startNode, self.endNode))
+
+        slurm_args = ['-w', self.nodeName, '-N', '1', '-n', '1', '-D', self.workDir]
+
+        manager_args = [ *self.__defaultPartitionManagerArgs,
+                             '--id', self.mid, '--parent', self.governorAddress,
+                             '--slurm-limit-nodes-range-begin', str(self.startNode),
+                             '--slurm-limit-nodes-range-end', str(self.endNode) ]
+
+        if logging.root.level == logging.DEBUG:
+            manager_args.extend(['--log', 'debug'])
+
+        self.stdoutP = asyncio.subprocess.DEVNULL
+        self.stderrP = asyncio.subprocess.DEVNULL
+
+        if logging.root.level == logging.DEBUG:
+            self.stdoutP = open(os.path.join(self.auxDir, 'part-manager-{}-stdout.log'.format(self.mid)), 'w')
+            self.stderrP = open(os.path.join(self.auxDir, 'part-manager-{}-stderr.log'.format(self.mid)), 'w')
+
+        logging.debug('running partition manager process with args: {}'.format(
+            ' '.join([ shutil.which('srun') ] + slurm_args + self.node_local_agent_cmd + manager_args)))
+
+        self.process = asyncio.create_subprocess_exec(
+            shutil.which('srun'), *slurm_args, *self.node_local_agent_cmd, *manager_args,
+            stdout=self.stdoutP, stderr=self.stderrP)
+
+
+    def terminate(self):
+        if self.process:
+            logging.info('terminating partition manager {} @ {}'.format(self.mid, self.startNode))
+            self.process.terminate()
 
 
 class ManagerInstance:
@@ -148,7 +222,20 @@ class GovernorManager:
         self.__receiver = None
         self.zmq_address = None
 
+        self.__config = config
+        self.__createPartitions = Config.SLURM_PARTITION_NODES.get(config)
+
         self.__parentManager = parentManager
+        self.__partitionManagers = [ ]
+
+        # the minimum number of registered managers the scheduling can start
+        self.__minShedulingManagers = 1
+
+        # the maximum number of buffered jobs until, when reached the submit request will be responsed with error
+        self.__maxBufferedJobs = 1000
+
+        # the maximum nubmer of seconds after start to wait for partition managers to register
+        self.__waitForRegisterTimeout = 10
 
 
     def setupInterfaces(self):
@@ -161,6 +248,95 @@ class GovernorManager:
             except:
                 logging.error('Failed to register manager in parent governor manager: {}'.format(sys.exc_info()[0]))
                 raise
+
+        if self.__createPartitions:
+            self.__launchPartitionManagers(self.__createPartitions)
+
+
+    def __launchPartitionManagers(self, partitionNodes):
+        if partitionNodes < 1:
+            raise InvalidRequest('Failed to partition resources - partition size must be greater or equal 1')
+
+        # get slurm resources - currently only slurm is supported
+        if not in_slurm_allocation():
+            raise InvalidRequest('Failed to partition resources - partitioning resources is currently available only within slurm allocation')
+
+        if not self.zmq_address:
+            raise InternalError('Failed to partition resources - missing zmq interface address')
+
+        slurm_resources = parse_slurm_resources(self.__config)
+
+        if slurm_resources.totalNodes < 1:
+            raise InvalidRequest('Failed to partition resources - allocation contains no nodes')
+
+        npartitions = math.ceil(slurm_resources.totalNodes / partitionNodes)
+        logging.info('{} partitions will be created (in allocation containing {} total nodes)'.format(
+            npartitions, slurm_resources.totalNodes))
+
+        # launch partition manager in the same directory as governor
+        partition_manager_wdir = Config.EXECUTOR_WD.get(self.__conf)
+
+        for part_idx in range(npartitions):
+            part_node = slurm_resources.nodes[part_idx * partitionNodes]
+
+            self.__partitionManagers.append(PartitionManager('partition-{}'.format(part_idx), part_node.name,
+                part_idx * partitionNodes, min(part_idx * partitionNodes + partitionNodes, slurm_resources.totalNodes),
+                partition_manager_wdir, self.zmq_address))
+
+        self.__minShedulingManagers = len(self.__partitionManagers)
+
+        asyncio.ensure_future(self.managePartitionsManagers())
+
+
+    async def managePartitionsManagers(self):
+        """
+        Start and manage partitions manager.
+        Ensure that all started partitions manager registered in governor.
+        """
+
+        # start all partition managers
+        try:
+            asyncio.gather(*[manager.launch() for manager in self.__partitionManagers])
+        except:
+            logging.error('one of partition manager failed to start - killing the rest')
+            # if one of partition manager didn't start - stop all instances and set governor manager finish flag
+            self.__terminatePartitionManagersAndFinish()
+            raise InternalError('Partition managers not started')
+
+        logging.info('all ({}) partition managers started successfully'.format(len(self.__partitionManagers)))
+
+        # check if they registered in assumed time
+        logging.debug('waiting {} secs for partition manager registration'.format(self.__waitForRegisterTimeout))
+
+        startWaitingForRegistration = datetime.now()
+        while len(self.managers) < len(self.__partitionManagers):
+            asyncio.sleep(0.2)
+
+            if (datetime.now() - startWaitingForRegistration).total_seconds() > self.__waitForRegisterTimeout:
+                # timeout exceeded
+                logging.error('not all partition managers registered - only {} on {} total'.format(
+                    self.managers, len(self.__partitionManagers)))
+                self.__terminatePartitionManagersAndFinish()
+                raise InternalError('Partition managers not registered')
+
+        logging.info('all partition managers registered')
+
+
+    def __terminatePartitionManagers(self):
+        for manager in self.__partitionManagers:
+            try:
+                manager.terminate()
+            except:
+                logging.warning('failed to terminate manager: {}'.format(sys.exc_info()))
+
+
+    def __terminatePartitionManagersAndFinish(self):
+        self.__terminatePartitionManagers()
+
+        if self.__receiver:
+            self.__receiver.setFinish(True)
+        else:
+            logging.error('Failed to set finish flag due to lack of receiver access')
 
 
     def getHandlerInstance(self):
@@ -179,6 +355,9 @@ class GovernorManager:
         """
         for manager in self.managers.values():
             manager.stop()
+
+        # kill all partition managers
+        self.__terminatePartitionManagers()
 
 
     def updateTotalResources(self):
@@ -204,7 +383,7 @@ class GovernorManager:
         if self.__receiver:
             self.__receiver.setFinish(True)
         else:
-            logging.warning('Failed to set finish flag due to lack of receiver access')
+            logging.error('Failed to set finish flag due to lack of receiver access')
 
 
     def allJobsFinished(self):
@@ -459,4 +638,4 @@ class GovernorManager:
         if self.__receiver:
             self.__receiver.setFinish(True)
         else:
-            logging.warning('Failed to set finish flag due to lack of receiver access')
+            logging.error('Failed to set finish flag due to lack of receiver access')

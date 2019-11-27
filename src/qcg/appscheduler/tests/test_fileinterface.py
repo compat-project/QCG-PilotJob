@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from qcg.appscheduler.service import QCGPMService
 from qcg.appscheduler.joblist import Job, JobExecution, JobResources, ResourceSize, JobDependencies
 from qcg.appscheduler.errors import IllegalJobDescription
+from qcg.appscheduler.utils.auxdir import find_single_aux_dir
 
 from qcg.appscheduler.tests.utils import save_reqs_to_file, check_job_status_in_json
 
@@ -298,7 +299,7 @@ def test_local_iter_scheduling_job_small(tmpdir):
                    exists(join(abspath(tmpdir.join(jname)), 'sleep-iter.stdout')),
                    exists(join(abspath(tmpdir.join(jname)), 'sleep-iter.stderr'))))
 
-    with open(join(str(tmpdir), '.qcgpjm', 'jobs.report'), 'r') as f:
+    with open(join(find_single_aux_dir(str(tmpdir)), 'jobs.report'), 'r') as f:
         job_stats = [json.loads(line) for line in f.readlines() ]
 
     assert len(job_stats) == nits
@@ -391,7 +392,7 @@ def test_local_iter_scheduling_job_large(tmpdir):
                    exists(join(abspath(tmpdir.join(jname)), 'sleep-iter.stdout')),
                    exists(join(abspath(tmpdir.join(jname)), 'sleep-iter.stderr'))))
 
-    with open(join(str(tmpdir), '.qcgpjm', 'jobs.report'), 'r') as f:
+    with open(join(find_single_aux_dir(str(tmpdir)), 'jobs.report'), 'r') as f:
         job_stats = [json.loads(line) for line in f.readlines() ]
 
     assert len(job_stats) == nits
@@ -533,7 +534,7 @@ def test_local_workflows(tmpdir):
                    exists(join(abspath(tmpdir.join('{}.sandbox'.format(jname))), 'out')),
                    exists(join(abspath(tmpdir.join('{}.sandbox'.format(jname))), 'err'))))
 
-    with open(join(str(tmpdir), '.qcgpjm', 'jobs.report'), 'r') as f:
+    with open(join(find_single_aux_dir(str(tmpdir)), 'jobs.report'), 'r') as f:
         job_stats = [json.loads(line) for line in f.readlines() ]
 
     assert len(job_stats) == len(jnames)
