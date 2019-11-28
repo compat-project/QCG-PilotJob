@@ -131,7 +131,7 @@ def wait_for_job_finish_success(manager_address, jobnames, timeout_secs=0):
 
             jstate = JobState[jstatus['data']['status']]
             if jstate.isFinished():
-                assert jstate == JobState.SUCCEED
+                assert jstate == JobState.SUCCEED, str(jstate)
             else:
                 current_jobnames.append(jname)
 

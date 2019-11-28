@@ -499,7 +499,8 @@ def test_governor_submit_many_instances(tmpdir):
                     'name': jname_tmpl,
                     'iterate': [ 0, njobs ],
                     'execution': {
-                        'exec': '/usr/bin/date',
+                        'exec': '/usr/bin/env',
+                        'args': [ 'date' ],
                         'wd': '{}_{}'.format(wdir_base, '${it}'),
                         'stdout': 'date.stdout',
                         'stderr': 'date.stderr'
