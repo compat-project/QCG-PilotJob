@@ -130,7 +130,9 @@ class SlurmEnvironment(Environment):
             job.env.update({ 'CUDA_VISIBLE_DEVICES': ','.join(node_with_gpu_crs[0].crs[CRType.GPU].instances)})
         else:
             # remote CUDA_VISIBLE_DEVICES for allocations without GPU's
-            del job.env['CUDA_VISIBLE_DEVICES']
+            if 'CUDA_VISIBLE_DEVICES' in job.env:
+                del job.env['CUDA_VISIBLE_DEVICES']
+
 
 def __select_auto_environment():
     if in_slurm_allocation():
