@@ -240,7 +240,8 @@ def test_submit_single_direct_single_job(tmpdir):
                 {
                     'name': jname,
                     'execution': {
-                        'exec': '/usr/bin/date',
+                        'exec': '/usr/bin/env',
+                        'args': [ 'date' ],
                         'wd': 'date.sandbox',
                         'stdout': 'sleep2.stdout',
                         'stderr': 'sleep2.stderr'
@@ -315,7 +316,8 @@ def test_governor_wait_for_all_jobs_single(tmpdir):
                 {
                     'name': jname,
                     'execution': {
-                        'exec': '/usr/bin/date',
+                        'exec': '/usr/bin/env',
+                        'args': [ 'date' ],
                         'wd': 'date.sandbox',
                         'stdout': 'sleep2.stdout',
                         'stderr': 'sleep2.stderr'
@@ -395,7 +397,8 @@ def test_governor_wait_for_all_jobs_many(tmpdir):
                     'name': jname_tmpl,
                     'iterate': [ 0, njobs ],
                     'execution': {
-                        'exec': '/usr/bin/date',
+                        'exec': '/usr/bin/env',
+                        'args': [ 'date' ],
                         'wd': 'date.sandbox',
                         'stdout': 'sleep2.stdout',
                         'stderr': 'sleep2.stderr'
