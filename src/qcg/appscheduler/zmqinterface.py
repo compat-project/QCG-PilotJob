@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import socket
 
 import zmq
 from zmq.asyncio import Context
@@ -13,7 +14,13 @@ class ZMQInterface:
         return "ZMQ"
 
     def __init__(self):
-        pass
+        self.zmqCtx = None
+        self.socket = None
+        self.address = None
+        self.local_port = None
+        self.real_address = None
+        self.external_address = None
+
 
     def setup(self, conf):
 #        zmq.asyncio.install()
@@ -32,11 +39,24 @@ class ZMQInterface:
 
         self.real_address = str(bytes.decode(self.socket.getsockopt(zmq.LAST_ENDPOINT)))
 
-        logging.info("ZMQ interface configured (address %s) @ %s" % (
-            self.address, self.real_address))
+        # the real address might contain the 0.0.0.0 IP address which means that it listens on all
+        # interfaces, sadly this address is not valid for external services to communicate, so we
+        # need to replace 0.0.0.0 with the real address IP
+        self.external_address = self.real_address
+        if '//0.0.0.0:' in self.real_address:
+            self.external_address = self.real_address.replace('//0.0.0.0:', '//{}:'.format(
+                socket.gethostbyname(socket.gethostname())))
+
+        logging.info('ZMQ interface configured (address {}) @ {}, external address @ {}'.format(
+            self.address, self.real_address, self.external_address))
 
     def close(self):
-        pass
+        if self.socket:
+            try:
+                logging.info('closing ZMQ socket')
+                self.socket.close()
+            except:
+                pass
 
     async def receive(self):
         logging.info("ZMQ interface listening for requests with pid {}...".format(os.getpid()))

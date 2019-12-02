@@ -7,6 +7,8 @@ import math
 import copy
 import os
 import shutil
+import socket
+import getpass
 from datetime import datetime
 
 from qcg.appscheduler.request import RemoveJobReq, ControlReq, StatusReq
@@ -23,7 +25,7 @@ class GlobalJob:
 
     def __init__(self, id, status, manager_instance):
         """
-        Job information stored at higher level QCG manager.
+        Job information stored at higher level QCG managernode_local_agent_cmd.
 
         :param id:  job identifier
         :param status: current job status
@@ -93,10 +95,10 @@ class PartitionManager:
             self.stderrP = open(os.path.join(self.auxDir, 'part-manager-{}-stderr.log'.format(self.mid)), 'w')
 
         logging.debug('running partition manager process with args: {}'.format(
-            ' '.join([ shutil.which('srun') ] + slurm_args + self.node_local_agent_cmd + manager_args)))
+            ' '.join([ shutil.which('srun') ] + slurm_args + self.__partitionManagerCmd + manager_args)))
 
-        self.process = asyncio.create_subprocess_exec(
-            shutil.which('srun'), *slurm_args, *self.node_local_agent_cmd, *manager_args,
+        self.process = await asyncio.create_subprocess_exec(
+            shutil.which('srun'), *slurm_args, *self.__partitionManagerCmd, *manager_args,
             stdout=self.stdoutP, stderr=self.stderrP)
 
 
@@ -237,31 +239,43 @@ class GovernorManager:
         # the maximum nubmer of seconds after start to wait for partition managers to register
         self.__waitForRegisterTimeout = 10
 
+        self.startTime = datetime.now()
 
-    def setupInterfaces(self):
+
+    async def setupInterfaces(self):
         """
         Initialize manager after all incoming interfaces has been started.
         """
         if self.__parentManager:
             try:
-                self.registerInParent(self.__parentManager)
+                await self.registerInParent(self.__parentManager)
             except:
                 logging.error('Failed to register manager in parent governor manager: {}'.format(sys.exc_info()[0]))
                 raise
 
         if self.__createPartitions:
-            self.__launchPartitionManagers(self.__createPartitions)
+            await self.__launchPartitionManagers(self.__createPartitions)
 
 
-    def __launchPartitionManagers(self, partitionNodes):
+    async def registerInParent(self):
+        logging.error('Governing managers can not currenlty register in parent managers')
+        raise InternalError('Governing managers can not currenlty register in parent managers')
+
+
+    async def __launchPartitionManagers(self, partitionNodes):
+        logging.info('setup allocation split into partitions by {} nodes'.format(partitionNodes))
+
         if partitionNodes < 1:
+            logging.error('Failed to partition resources - partition size must be greater or equal 1')
             raise InvalidRequest('Failed to partition resources - partition size must be greater or equal 1')
 
         # get slurm resources - currently only slurm is supported
         if not in_slurm_allocation():
+            logging.error('Failed to partition resources - partitioning resources is currently available only within slurm allocation')
             raise InvalidRequest('Failed to partition resources - partitioning resources is currently available only within slurm allocation')
 
         if not self.zmq_address:
+            logging.error('Failed to partition resources - missing zmq interface address')
             raise InternalError('Failed to partition resources - missing zmq interface address')
 
         slurm_resources = parse_slurm_resources(self.__config)
@@ -274,16 +288,27 @@ class GovernorManager:
             npartitions, slurm_resources.totalNodes))
 
         # launch partition manager in the same directory as governor
-        partition_manager_wdir = Config.EXECUTOR_WD.get(self.__conf)
+        partition_manager_wdir = Config.EXECUTOR_WD.get(self.__config)
+        partition_manager_auxdir = Config.AUX_DIR.get(self.__config)
+
+        logging.debug('partition managers working directory {}'.format(partition_manager_wdir))
 
         for part_idx in range(npartitions):
+            logging.debug('creating partition manager {} configuration'.format(part_idx))
+
             part_node = slurm_resources.nodes[part_idx * partitionNodes]
+
+            logging.debug('partition manager node {}'.format(part_node.name))
 
             self.__partitionManagers.append(PartitionManager('partition-{}'.format(part_idx), part_node.name,
                 part_idx * partitionNodes, min(part_idx * partitionNodes + partitionNodes, slurm_resources.totalNodes),
-                partition_manager_wdir, self.zmq_address))
+                partition_manager_wdir, self.zmq_address, partition_manager_auxdir))
+
+            logging.debug('partition manager {} configuration created'.format(part_idx))
 
         self.__minShedulingManagers = len(self.__partitionManagers)
+
+        logging.info('created partition managers configuration and set minimum scheduling managers to {}'.format(self.__minShedulingManagers))
 
         asyncio.ensure_future(self.managePartitionsManagers())
 
@@ -293,33 +318,36 @@ class GovernorManager:
         Start and manage partitions manager.
         Ensure that all started partitions manager registered in governor.
         """
-
-        # start all partition managers
         try:
-            asyncio.gather(*[manager.launch() for manager in self.__partitionManagers])
-        except:
-            logging.error('one of partition manager failed to start - killing the rest')
-            # if one of partition manager didn't start - stop all instances and set governor manager finish flag
-            self.__terminatePartitionManagersAndFinish()
-            raise InternalError('Partition managers not started')
-
-        logging.info('all ({}) partition managers started successfully'.format(len(self.__partitionManagers)))
-
-        # check if they registered in assumed time
-        logging.debug('waiting {} secs for partition manager registration'.format(self.__waitForRegisterTimeout))
-
-        startWaitingForRegistration = datetime.now()
-        while len(self.managers) < len(self.__partitionManagers):
-            asyncio.sleep(0.2)
-
-            if (datetime.now() - startWaitingForRegistration).total_seconds() > self.__waitForRegisterTimeout:
-                # timeout exceeded
-                logging.error('not all partition managers registered - only {} on {} total'.format(
-                    self.managers, len(self.__partitionManagers)))
+            # start all partition managers
+            try:
+                logging.info('starting all partition managers ...')
+                await asyncio.gather(*[manager.launch() for manager in self.__partitionManagers])
+            except:
+                logging.error('one of partition manager failed to start - killing the rest')
+                # if one of partition manager didn't start - stop all instances and set governor manager finish flag
                 self.__terminatePartitionManagersAndFinish()
-                raise InternalError('Partition managers not registered')
+                raise InternalError('Partition managers not started')
 
-        logging.info('all partition managers registered')
+            logging.info('all ({}) partition managers started successfully'.format(len(self.__partitionManagers)))
+
+            # check if they registered in assumed time
+            logging.debug('waiting {} secs for partition manager registration'.format(self.__waitForRegisterTimeout))
+
+            startWaitingForRegistration = datetime.now()
+            while len(self.managers) < len(self.__partitionManagers):
+                await asyncio.sleep(0.2)
+
+                if (datetime.now() - startWaitingForRegistration).total_seconds() > self.__waitForRegisterTimeout:
+                    # timeout exceeded
+                    logging.error('not all partition managers registered - only {} on {} total'.format(
+                        len(self.managers), len(self.__partitionManagers)))
+                    self.__terminatePartitionManagersAndFinish()
+                    raise InternalError('Partition managers not registered')
+
+            logging.info('all partition managers registered')
+        except:
+            logging.error('setup of partition managers failed: {}'.format(str(sys.exc_info())))
 
 
     def __terminatePartitionManagers(self):
@@ -328,6 +356,7 @@ class GovernorManager:
                 manager.terminate()
             except:
                 logging.warning('failed to terminate manager: {}'.format(sys.exc_info()))
+                logging.error(traceback.format_exc())
 
 
     def __terminatePartitionManagersAndFinish(self):
@@ -349,7 +378,7 @@ class GovernorManager:
             self.zmq_address = self.__receiver.getZmqAddress()
 
 
-    def stop(self):
+    async def stop(self):
         """
         Cleanup before finish.
         """
@@ -639,3 +668,43 @@ class GovernorManager:
             self.__receiver.setFinish(True)
         else:
             logging.error('Failed to set finish flag due to lack of receiver access')
+
+
+    async def generateStatusResponse(self):
+                nSchedulingJobs = nFailedJobs = nFinishedJobs = nExecutingJobs = 0
+
+                for job in self.jobs.values():
+                    if job.status in [JobState.QUEUED, JobState.SCHEDULED]:
+                        nSchedulingJobs += 1
+                    elif job.status in [JobState.EXECUTING]:
+                        nExecutingJobs += 1
+                    elif job.status in [JobState.FAILED, JobState.OMITTED]:
+                        nFailedJobs += 1
+                    elif job.status in [JobState.CANCELED, JobState.SUCCEED]:
+                        nFinishedJobs += 1
+
+                return Response.Ok(data={
+                    'System': {
+                        'Uptime': str(datetime.now() - self.startTime),
+                        'Zmqaddress': self.__receiver.getZmqAddress(),
+                        'Ifaces': [iface.name() for iface in self.__receiver.getInterfaces()] \
+                            if self.__receiver and self.__receiver.getInterfaces() else [],
+                        'Host': socket.gethostname(),
+                        'Account': getpass.getuser(),
+                        'Wd': os.getcwd(),
+                        'PythonVersion': sys.version.replace('\n', ' '),
+                        'Python': sys.executable,
+                        'Platform': sys.platform,
+                    }, 'Resources': {
+                        'TotalNodes': self.totalResources.totalNodes,
+                        'TotalCores': self.totalResources.totalCores,
+                        'UsedCores': self.totalResources.usedCores,
+                        'FreeCores': self.totalResources.freeCores,
+                    }, 'JobStats': {
+                        'TotalJobs': len(self.jobs),
+                        'InScheduleJobs': nSchedulingJobs,
+                        'FailedJobs': nFailedJobs,
+                        'FinishedJobs': nFinishedJobs,
+                        'ExecutingJobs': nExecutingJobs,
+                    }})
+

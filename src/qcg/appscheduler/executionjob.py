@@ -308,9 +308,9 @@ class LauncherExecutionJob(ExecutionJob):
 
 
     @classmethod
-    def StopAgents(cls):
+    async def StopAgents(cls):
         if cls.launcher:
-            asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(cls.launcher.stop()))
+            await cls.launcher.stop()
             
 
     @profile

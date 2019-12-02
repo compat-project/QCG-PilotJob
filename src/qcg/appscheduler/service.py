@@ -7,6 +7,7 @@ import traceback
 import resource
 import socket
 import random
+import time
 from os.path import exists, join, isabs
 from datetime import datetime
 
@@ -35,6 +36,7 @@ class QCGPMService:
         Args:
             args (str[]) - command line arguments, if None the command line arguments are parsed
         """
+        self.exitCode = 1
 
         parser = argparse.ArgumentParser()
         parser.add_argument('--net',
@@ -192,14 +194,10 @@ class QCGPMService:
             iface.setup(self.__conf)
             self.__ifaces.append(iface)
 
-        if self.__args.slurm_partition_nodes:
+        if self.__args.governor:
             self.__setupGovernorManager(self.__args.parent)
-            self.__launchPartitionManagers()
         else:
-            if self.__args.governor:
-                self.__setupGovernorManager(self.__args.parent)
-            else:
-                self.__setupDirectManager(self.__args.parent)
+            self.__setupDirectManager(self.__args.parent)
 
 
     def __generateDefaultManagerId(self):
@@ -207,7 +205,7 @@ class QCGPMService:
 
 
     def __setupGovernorManager(self, parentManager):
-        logging.info('starting governer manager ...')
+        logging.info('starting governor manager ...')
         self.__manager = GovernorManager(self.__conf, parentManager)
         self.__notifId = self.__manager.registerNotifier(self.__jobNotify, self.__manager)
 
@@ -227,7 +225,7 @@ class QCGPMService:
 
 
     def __setupDirectManager(self, parentManager):
-        logging.info('starting direct manager ...')
+        logging.info('starting direct manager (with parent manager address {})...'.format(parentManager))
         self.__manager = DirectManager(self.__conf, parentManager)
         self.__notifId = self.__manager.registerNotifier(self.__jobNotify, self.__manager)
 
@@ -337,22 +335,45 @@ class QCGPMService:
             return self.__ifaces
 
 
-    @profile
-    def start(self):
+    async def __runService(self):
+        logging.debug('starting receiver ...')
         self.__receiver.run()
 
-        self.__manager.setupInterfaces()
+        logging.debug('finishing intialization of managers ...')
 
-        asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(self.__stopInterfaces(self.__receiver)))
+        try:
+            await self.__manager.setupInterfaces()
 
-        if self.__manager:
-            self.__manager.stop()
+            await self.__stopInterfaces(self.__receiver)
+            self.exitCode = 0
+        except:
+            logging.error('Service failed: {}'.format(sys.exc_info()))
+            logging.error(traceback.format_exc())
+        finally:
+            if self.__receiver:
+                await self.__receiver.stop()
+
+            logging.info('receiver stopped')
+
+            if self.__manager:
+                await self.__manager.stop()
+
+            logging.info('manager stopped')
+
 
         usage = self.get_rusage()
         logging.info('service resource usage: {}'.format(str(usage.get('service', {}))))
         logging.info('jobs resource usage: {}'.format(str(usage.get('jobs', {}))))
 
-        asyncio.get_event_loop().close()
+
+    @profile
+    def start(self):
+        try:
+            asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(self.__runService()))
+        finally:
+            logging.info('closing event loop')
+            asyncio.get_event_loop().close()
+            logging.info('event loop closed')
 
 
     def get_rusage(self):
@@ -401,7 +422,9 @@ class QCGPMServiceProcess(Process):
 
 if __name__ == "__main__":
     try:
-        QCGPMService().start()
+        service = QCGPMService()
+        service.start()
+        sys.exit(service.exitCode)
     except Exception as e:
         sys.stderr.write('Error: %s\n' % (str(e)))
         traceback.print_exc()

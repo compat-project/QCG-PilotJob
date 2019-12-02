@@ -84,7 +84,8 @@ class Agent:
 
         try:
             await self.__send_ready()
-        except Exception:
+        except:
+            logging.error('failed to signaling ready to manager: {}'.format(sys.exc_info()))
             self.__cleanup()
             self.__clear()
             raise
@@ -107,7 +108,7 @@ class Agent:
         try:
             await self.__send_finishing()
         except Exception as e:
-            logger.error('failed to signal shuting down: {}'.format(str(e)))
+            logging.error('failed to signal shuting down: {}'.format(str(e)))
 
         self.__cleanup()
         self.__clear()
@@ -247,6 +248,8 @@ class Agent:
                 stderrP.close()
 
         out_socket = self.context.socket(zmq.REQ)
+        out_socket.setsockopt(zmq.LINGER, 0)
+
         try:
             out_socket.connect(self.remote_address)
 
@@ -267,6 +270,8 @@ class Agent:
         The message will contain also the local listening address.
         """
         out_socket = self.context.socket(zmq.REQ)
+        out_socket.setsockopt(zmq.LINGER, 0)
+
         try:
             out_socket.connect(self.remote_address)
 
@@ -281,7 +286,7 @@ class Agent:
             logging.debug('received ready message confirmation: {}'.format(str(msg)))
 
             if not msg.get('status', 'UNKNOWN') == 'CONFIRMED':
-                logger.error('agent {} not registered successfully in launcher: {}'.format(self.agent_id, str(msg)))
+                logging.error('agent {} not registered successfully in launcher: {}'.format(self.agent_id, str(msg)))
                 raise Exception('not successfull registration in launcher: {}'.format(str(msg)))
         finally:
             if out_socket:
@@ -298,6 +303,8 @@ class Agent:
         shuting down.
         """
         out_socket = self.context.socket(zmq.REQ)
+        out_socket.setsockopt(zmq.LINGER, 0)
+
         try:
             out_socket.connect(self.remote_address)
 
@@ -341,5 +348,6 @@ if __name__ == '__main__':
     agent = Agent(agent_id, options)
 
     asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(agent.agent(raddress)))
+    asyncio.get_event_loop().close()
 
-    logging.error('node agent {} exiting'.format(agent_id))
+    logging.info('node agent {} exiting'.format(agent_id))

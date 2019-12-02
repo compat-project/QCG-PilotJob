@@ -1,3 +1,4 @@
+import pytest
 import sys
 import os
 import time
@@ -6,6 +7,7 @@ from os.path import join, isfile, isdir, getsize
 
 from qcg.appscheduler.service import QCGPMService
 from qcg.appscheduler.joblist import JobState
+from qcg.appscheduler.slurmres import in_slurm_allocation, get_num_slurm_nodes
 from qcg.appscheduler.tests.utils import save_reqs_to_file, check_service_log_string, fork_manager, send_request_valid, \
     wait_for_job_finish_success
 
@@ -17,7 +19,7 @@ def test_manager_id(tmpdir):
     print('tmpdir: {}'.format(str(tmpdir)))
 
     reqs = [ { 'request': 'resourcesInfo' },
-            { 'request': 'control', 'command': 'finishAfterAllTasksDone' } ]
+             { 'request': 'control', 'command': 'finishAfterAllTasksDone' } ]
     save_reqs_to_file(reqs, file_path)
     print('jobs saved to file_path: {}'.format(str(file_path)))
 
@@ -559,3 +561,128 @@ def test_governor_submit_many_instances(tmpdir):
             if process:
                 process.terminate()
 
+
+def test_slurm_partition_resources(tmpdir):
+    if not in_slurm_allocation() or get_num_slurm_nodes() < 2:
+        pytest.skip('test not run in slurm allocation or allocation is smaller than 2 nodes')
+
+#    governor_dir = tmpdir.join('governor')
+#    os.makedirs(str(governor_dir))
+
+    governor_dir = '/home/kieras/pytest-of-qcgpjm/'
+    print('governor work dir: {}'.format(str(governor_dir)))
+
+    governor_id = 'm-governor'
+    governor_args = ['--log', 'debug', '--wd', str(governor_dir), '--report-format', 'json', '--id', governor_id,
+                     '--slurm-partition-nodes', '1']
+    governor_process, governor_address = fork_manager(governor_args)
+
+    time.sleep(10)
+
+    allocationNodes = 2
+    allocationCores = 6
+
+    try:
+        resources_reply = send_request_valid(governor_address, {'request': 'resourcesInfo'})
+        print('got total resource reply: {}'.format(str(resources_reply)))
+        assert all((resources_reply['code'] == 0, 'data' in resources_reply))
+        assert all((resources_reply['data'].get('totalNodes', 0) == allocationNodes,
+                    resources_reply['data'].get('totalCores', 0) == allocationCores,
+                    resources_reply['data'].get('usedCores', -1) == 0,
+                    resources_reply['data'].get('freeCores', 0) == allocationCores)), str(resources_reply)
+
+        send_request_valid(governor_address, {'request': 'finish'})
+        governor_process.join(5)
+        assert governor_process.exitcode == 0
+    finally:
+        if governor_process:
+            governor_process.terminate()
+
+
+def test_slurm_partition_submit(tmpdir):
+    if not in_slurm_allocation() or get_num_slurm_nodes() < 2:
+        pytest.skip('test not run in slurm allocation or allocation is smaller than 2 nodes')
+
+    #    governor_dir = tmpdir.join('governor')
+    #    os.makedirs(str(governor_dir))
+
+    governor_dir = '/home/kieras/pytest-of-qcgpjm/'
+    print('governor work dir: {}'.format(str(governor_dir)))
+
+    governor_id = 'm-governor'
+    governor_args = ['--log', 'debug', '--wd', str(governor_dir), '--report-format', 'json', '--id', governor_id,
+                     '--slurm-partition-nodes', '1']
+    governor_process, governor_address = fork_manager(governor_args)
+
+    time.sleep(10)
+
+    allocationNodes = 2
+    allocationCores = 6
+
+    try:
+        resources_reply = send_request_valid(governor_address, {'request': 'resourcesInfo'})
+        print('got total resource reply: {}'.format(str(resources_reply)))
+        assert all((resources_reply['code'] == 0, 'data' in resources_reply))
+        assert all((resources_reply['data'].get('totalNodes', 0) == allocationNodes,
+                    resources_reply['data'].get('totalCores', 0) == allocationCores,
+                    resources_reply['data'].get('usedCores', -1) == 0,
+                    resources_reply['data'].get('freeCores', 0) == allocationCores)), str(resources_reply)
+
+        # submit a bunch of jobs
+        njobs = 100
+        jname_tmpl = 'date_${it}'
+        jnames = [ 'date_{}'.format(i) for i in range(0, njobs)]
+        wdir_base = 'date.sandbox'
+        submit_reply = send_request_valid(governor_address, { 'request': 'submit', 'jobs': [
+                {
+                    'name': jname_tmpl,
+                    'iterate': [ 0, njobs ],
+                    'execution': {
+                        'exec': '/usr/bin/env',
+                        'args': [ 'date' ],
+                        'wd': '{}_{}'.format(wdir_base, '${it}'),
+                        'stdout': 'date.stdout',
+                        'stderr': 'date.stderr'
+                    },
+                    'resources': { 'numCores': { 'exact': 1 } }
+                }
+            ] })
+        assert all((submit_reply['code'] == 0, 'data' in resources_reply))
+        assert all((submit_reply['data'].get('submitted', 0) == njobs,
+                    len(submit_reply['data'].get('jobs', [])) == njobs))
+        assert all(jname in submit_reply['data'].get('jobs', []) for jname in jnames)
+
+        status_reply = send_request_valid(governor_address, { 'request': 'jobStatus', 'jobNames': jnames })
+        assert all((status_reply['code'] == 0, 'data' in status_reply))
+        assert 'jobs' in status_reply['data']
+        assert len(status_reply['data']['jobs']) == njobs
+        assert all(jname in status_reply['data']['jobs'] for jname in jnames)
+
+        for jname in jnames:
+            jstatus = status_reply['data']['jobs'][jname]
+            assert all((jstatus['status'] == 0, jstatus['data']['jobName'] == jname,
+                        jstatus['data']['status'] in [ JobState.QUEUED.name, JobState.SUCCEED.name ]))
+
+        status_reply = send_request_valid(governor_address,
+                                          {'request': 'control', 'command': 'finishAfterAllTasksDone'})
+        assert status_reply['code'] == 0
+
+        # wait up to 5 seconds
+        governor_process.join(10)
+        assert governor_process.exitcode == 0
+
+        for i in range(njobs):
+            job_wd = '{}_{}'.format(wdir_base, i)
+
+            full_job_wd_path = join(governor_dir, job_wd)
+            assert isdir(full_job_wd_path), full_job_wd_path
+
+            # check stdout & stderr files
+            assert all((isfile(join(full_job_wd_path, 'date.stdout')),
+                        isfile(join(full_job_wd_path, 'date.stderr'))))
+            assert all((getsize(join(full_job_wd_path, 'date.stdout')) > 0,
+                        getsize(join(full_job_wd_path, 'date.stderr')) == 0))
+
+    finally:
+        if governor_process:
+            governor_process.terminate()

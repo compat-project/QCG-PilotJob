@@ -235,9 +235,10 @@ class Launcher:
             if agent.get('process', None):
                 logging.debug('killing agent {} ...'.format(agent_id))
                 try:
-                    agent['process'].kill()
+#                    agent['process'].kill()
+                    agent['process'].terminate()
                 except:
-                    pass
+                    logging.warning('Failed to kill agent: {}'.format(str(sys.exc_info())))
 
         self.agents.clear()
 

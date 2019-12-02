@@ -139,7 +139,6 @@ class DirectManager:
 
         self.__jobStatesCbs = {}
 
-        self.__receiver = None
         self.zmq_address = None
 
         self.managerId = Config.MANAGER_ID.get(config)
@@ -148,17 +147,20 @@ class DirectManager:
         self.__parentManager = parentManager
 
 
-    def setupInterfaces(self):
+    async def setupInterfaces(self):
         """
         Initialize manager after all incoming interfaces has been started.
         """
         if self.__parentManager:
             try:
-                self.registerInParent()
+                logging.info('registering in parent manager {} ...'.format(self.__parentManager))
+                await self.registerInParent()
                 self.registerNotifier(self.__notifyParentWithJob)
             except:
                 logging.error('Failed to register manager in parent governor manager: {}'.format(sys.exc_info()[0]))
                 raise
+        else:
+            logging.info('no parent manager set')
 
 
     def setZmqAddress(self, zmq_address):
@@ -168,9 +170,10 @@ class DirectManager:
     def getHandlerInstance(self):
         return DirectManagerHandler(self)
 
-    def stop(self):
+
+    async def stop(self):
         if self.__executor:
-            self.__executor.stop()
+            await self.__executor.stop()
 
 
     def allJobsFinished(self):
@@ -381,8 +384,40 @@ class DirectManager:
     def __getParentSocket(self):
         parentSocket = zmq.asyncio.Context.instance().socket(zmq.REQ)
         parentSocket.connect(self.__parentManager)
+        parentSocket.setsockopt(zmq.LINGER, 0)
 
         return parentSocket
+
+
+    def __getParentSyncSocket(self):
+        parentSocket = zmq.Context.instance().socket(zmq.REQ)
+        parentSocket.connect(self.__parentManager)
+        parentSocket.setsockopt(zmq.LINGER, 0)
+
+        return parentSocket
+
+
+    async def __sendParentRequestWithValidAsyncTimeout(self, request, timeout):
+        out_socket = None
+
+        try:
+            out_socket = self.__getParentSocket()
+
+            await out_socket.send_json(request)
+            msg = await asyncio.wait_for(out_socket.recv_json(), timeout)
+            if not msg['code'] == 0:
+                raise GovernorConnectionError('Failed to register manager instance in governor: {}'.format(msg.get('message', '')))
+
+            return msg
+        except:
+            raise GovernorConnectionError('Failed to register manager instance in governor: {}'.format(str(sys.exc_info())))
+        finally:
+            if out_socket:
+                try:
+                    out_socket.close()
+                except:
+                    # ignore errors during cleanup
+                    logging.debug('failed to close socket: {}'.format(str(sys.exc_info())))
 
 
     async def __sendParentRequestWithValidAsync(self, request):
@@ -392,7 +427,7 @@ class DirectManager:
             out_socket = self.__getParentSocket()
 
             await out_socket.send_json(request)
-            msg = await out_socket.recv_json()
+            msg = asyncio.wait_for(out_socket.recv_json(), 5)
             if not msg['code'] == 0:
                 raise GovernorConnectionError('Failed to register manager instance in governor: {}'.format(msg.get('message', '')))
 
@@ -410,10 +445,23 @@ class DirectManager:
         out_socket = None
 
         try:
-            out_socket = self.__getParentSocket()
+            out_socket = self.__getParentSyncSocket()
 
-            asyncio.get_event_loop().run_until_complete(out_socket.send_json(request))
-            msg = asyncio.get_event_loop().run_until_complete(out_socket.recv_json())
+            out_socket.send_json(request)
+            logging.debug('sent register request: {}'.format(str(request)))
+
+            msg = out_socket.recv_json()
+
+#            poller = zmq.Poller()
+#            poller.register(out_socket, zmq.POLLIN)
+#            if poller.poll(5 * 1000):  # 10s timeout in milliseconds
+#                poller.unregister(out_socket)
+#                msg = out_socket.recv_json()
+#            else:
+#                poller.unregister(out_socket)
+#                poller = None
+#                raise TimeoutError('Timeout registering in parent manager {}'.format(self.__parentManager))
+            logging.debug('got register response: {}'.format(str(msg)))
             if not msg['code'] == 0:
                 raise GovernorConnectionError('Failed to register manager instance in governor: {}'.format(msg.get('message', '')))
 
@@ -421,6 +469,7 @@ class DirectManager:
         finally:
             if out_socket:
                 try:
+                    logging.debug('closing sync socket: {}'.format(str(out_socket)))
                     out_socket.close()
                 except:
                     # ignore errors during cleanup
@@ -441,21 +490,19 @@ class DirectManager:
                 logging.error(traceback.format_exc())
 
 
-    def registerInParent(self):
+    async def registerInParent(self):
         """
         Register manager in parent governor manager.
-        We are not using asynchronous method because we need to have a "instant" result if registration went OK
-        (in case of problems exception is raised).
         """
-        self.__sendParentRequestWithValidSync({ 'request': 'register',
-                  'entity': 'manager',
-                  'params': {
-                    'id': self.managerId,
-                    'address': self.zmq_address,
-                    'resources': self.resources.toDict(),
-                    'tags': self.managerTags,
-                  }
-                })
+        await self.__sendParentRequestWithValidAsyncTimeout({ 'request': 'register',
+            'entity': 'manager',
+            'params': {
+            'id': self.managerId,
+            'address': self.zmq_address,
+            'resources': self.resources.toDict(),
+            'tags': self.managerTags,
+          }
+        }, 5)
 
 
 class DirectManagerHandler:
@@ -858,10 +905,7 @@ class DirectManagerHandler:
         while not self.__manager.allJobsFinished():
             await asyncio.sleep(0.2)
 
-        if self.__receiver:
-            self.__receiver.setFinish(True)
-        else:
-            logging.warning('Failed to set finish flag due to lack of receiver access')
+        self.stopReceiver()
 
 
     async def __delayedFinish(self, delay):
@@ -869,6 +913,10 @@ class DirectManagerHandler:
 
         await asyncio.sleep(delay)
 
+        self.stopReceiver()
+
+
+    def stopReceiver(self):
         if self.__receiver:
             self.__receiver.setFinish(True)
         else:

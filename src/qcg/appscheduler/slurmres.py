@@ -46,6 +46,13 @@ def parse_slurm_job_cpus(cpus):
     return result
 
 
+def get_num_slurm_nodes():
+    if 'SLURM_NODELIST' not in os.environ:
+        raise SlurmEnvError("missing SLURM_NODELIST settings")
+
+    return len(parse_nodelist(os.environ['SLURM_NODELIST']))
+
+
 def parse_slurm_resources(config):
     if 'SLURM_NODELIST' not in os.environ:
         raise SlurmEnvError("missing SLURM_NODELIST settings")
@@ -59,6 +66,22 @@ def parse_slurm_resources(config):
         node_names = slurm_nodes.split(',')
     else:
         node_names = parse_nodelist(slurm_nodes)
+
+    node_start = Config.SLURM_LIMIT_NODES_RANGE_BEGIN.get(config)
+    if not node_start:
+        node_start = 0
+
+    node_end = Config.SLURM_LIMIT_NODES_RANGE_END.get(config)
+    if not node_end:
+        node_end = len(node_names)
+    else:
+        node_end = min(node_end, len(node_names))
+
+    logging.debug('node range {} - {} from {} total nodes'.format(node_start, node_end, len(node_names)))
+
+    if node_start > node_end:
+        raise Resources(
+            'Invalid node range arguments - node start {} greater than node end {}'.format(node_start, node_end))
 
     slurm_job_cpus = os.environ['SLURM_JOB_CPUS_PER_NODE']
     cores_num = parse_slurm_job_cpus(slurm_job_cpus)
@@ -75,9 +98,9 @@ def parse_slurm_resources(config):
             os.environ['SLURM_CPU_BIND_TYPE'].startswith('mask_cpu'):
         core_ids = parse_slurm_cpu_binding(os.environ['SLURM_CPU_BIND_LIST'])
 
-        if len(core_ids) < max(cores_num):
+        if len(core_ids) < max(cores_num[node_start:node_end]):
             raise SlurmEnvError("failed to parse cpu binding: the core list ({}) mismatch the cores per node ({})".format(
-                str(core_ids), str(cores_num)))
+                str(core_ids), str(cores_num[node_start:node_end])))
 
         logging.debug("cpu list on each node: {}".format(core_ids))
         binding = True
@@ -86,24 +109,9 @@ def parse_slurm_resources(config):
     if 'CUDA_VISIBLE_DEVICES' in os.environ:
         nCrs = { CRType.GPU: CRBind(CRType.GPU, os.environ['CUDA_VISIBLE_DEVICES'].split(',')) }
 
-    nodes = []
+    nodes = [ Node(node_names[i], cores_num[i], 0, coreIds=core_ids, crs=nCrs) for i in range(node_start, node_end) ]
+    logging.debug('generated {} nodes {} binding'.format(len(nodes), 'with' if binding else 'without'))
 
-    node_start = Config.SLURM_LIMIT_NODES_RANGE_BEGIN.get(config)
-    if not node_start:
-        node_start = 0
-
-    node_end = Config.SLURM_LIMIT_NODES_RANGE_END(config)
-    if not node_end:
-        node_end = len(node_names)
-    else:
-        node_end = min(node_end, len(node_names))
-
-    for i in range(node_start, node_end):
-        nname = node_names[i]
-        logging.debug("%s x %d" % (nname, cores_num[i]))
-        nodes.append(Node(nname, cores_num[i], 0, coreIds=core_ids, crs=nCrs))
-
-    logging.debug("generated {} nodes {} binding".format(len(nodes), "with" if binding else "without"))
     return Resources(ResourcesType.SLURM, nodes, binding)
 
 

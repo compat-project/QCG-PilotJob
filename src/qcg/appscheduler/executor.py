@@ -62,10 +62,10 @@ class Executor:
         return self.__manager.zmq_address if self.__manager else None
 
 
-    def stop(self):
+    async def stop(self):
         if self.__is_node_launcher:
             try:
-                LauncherExecutionJob.StopAgents()
+                await LauncherExecutionJob.StopAgents()
                 self.__is_node_launcher = False
             except Exception as e:
                 logging.error('failed to stop node launcher agents: {}'.format(str(e)))

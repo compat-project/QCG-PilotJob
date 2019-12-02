@@ -82,10 +82,11 @@ class Receiver:
 
         self.__handler.setReceiver(self)
 
+
     def __findZmqAddress(self):
         zmqiface = next((iface for iface in self.__ifaces if isinstance(iface, ZMQInterface)), None)
         if zmqiface:
-            return zmqiface.real_address
+            return zmqiface.external_address
 
         return None
 
@@ -237,10 +238,20 @@ class Receiver:
         logging.info('Successfully initialized {} interfaces'.format(len(self.__tasks)))
 
 
-    def stop(self):
+    async def stop(self):
         """
         Stop all listening on interfaces.
         """
+        await self.cancel_listeners()
+
+        for iface in self.__ifaces:
+            try:
+                iface.close()
+            except:
+                logging.warning('failed to close interface: {}'.format(str(sys.exc_info())))
+
+
+    async def cancel_listeners(self):
         logging.info('canceling {} listener tasks'.format(len(self.__tasks)))
         for task in self.__tasks:
             if task is not None:
@@ -250,7 +261,13 @@ class Receiver:
                 except:
                     logging.warning('failed to cancel listener task: {}'.format(sys.exc_info()[0]))
 
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    logging.debug('listener canceled')
+
         self.__tasks = []
+
 
     def generateStatusResponse(self):
         return self.__handler.generateStatusResponse()
