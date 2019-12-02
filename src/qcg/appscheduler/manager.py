@@ -427,9 +427,9 @@ class DirectManager:
             out_socket = self.__getParentSocket()
 
             await out_socket.send_json(request)
-            msg = asyncio.wait_for(out_socket.recv_json(), 5)
+            msg = await asyncio.wait_for(out_socket.recv_json(), 5)
             if not msg['code'] == 0:
-                raise GovernorConnectionError('Failed to register manager instance in governor: {}'.format(msg.get('message', '')))
+                raise GovernorConnectionError('Failed to send message to parent manager: {}'.format(msg.get('message', '')))
 
             return msg
         finally:
