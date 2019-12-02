@@ -310,7 +310,7 @@ class QCGPMService:
             logging.warning("failed to write final status: {}".format(str(e)))
 
         logging.info("stopping receiver ...")
-        receiver.stop()
+        await receiver.stop()
 
 
     @profile
