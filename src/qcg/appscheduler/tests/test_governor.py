@@ -668,7 +668,7 @@ def test_slurm_partition_submit(tmpdir):
         assert status_reply['code'] == 0
 
         # wait up to 5 seconds
-        governor_process.join(10)
+        governor_process.join(20)
         assert governor_process.exitcode == 0
 
         for i in range(njobs):
