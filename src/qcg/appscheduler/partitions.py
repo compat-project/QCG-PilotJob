@@ -70,7 +70,7 @@ class PartitionManager:
         self.process = None
 
         self.__partitionManagerCmd = [ sys.executable, '-m', 'qcg.appscheduler.service' ]
-        self.__defaultPartitionManagerArgs = [ ]
+        self.__defaultPartitionManagerArgs = [ '--report-format', 'json', '--system-core' ]
 
 
     async def launch(self):
@@ -354,6 +354,9 @@ class GovernorManager:
                     self.__terminatePartitionManagersAndFinish()
                     raise InternalError('Partition managers not registered')
 
+            logging.info('available resources: {} ({} used) cores on {} nodes'.format(
+                self.totalResources.totalCores, self.totalResources.usedCores, self.totalResources.totalNodes))
+
             logging.info('all partition managers registered')
         except:
             logging.error('setup of partition managers failed: {}'.format(str(sys.exc_info())))
@@ -433,7 +436,12 @@ class GovernorManager:
                 while self.__minShedulingManagers <= len(self.managers) and len(self.__submitReqsBuffer) > 0:
                     logging.info('the minimum number of managers has been achieved - scheduling buffered jobs')
                     try:
-                        await self.__scheduleJobs(self.__submitReqsBuffer.pop(0))
+                        # do not remove request from buffer before jobs will be added to the jobs database
+                        # this would provide to the finish of manager (no jobs in db, no jobs in buffer)
+                        jobReq = self.__submitReqsBuffer[0]
+                        await self.__scheduleJobs(jobReq)
+                        # now we can safely remove request from buffer as the jobs are added to the db
+                        self.__submitReqsBuffer.pop(0)
                     except:
                         logging.error('error during scheduling buffered submit requests: {}'.format(sys.exc_info()))
                         logging.error(traceback.format_exc())
