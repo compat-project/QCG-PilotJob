@@ -231,10 +231,16 @@ class GovernorManager:
         self.__partitionManagers = [ ]
 
         # the minimum number of registered managers the scheduling can start
-        self.__minShedulingManagers = 1
+        self.__minShedulingManagers = 0
 
         # the maximum number of buffered jobs until, when reached the submit request will be responsed with error
         self.__maxBufferedJobs = 1000
+
+        # the buffer for submitted jobs
+        self.__submitReqsBuffer = [ ]
+
+        # the task that will schedule buffered submit requests when minimum required number of managers registers
+        self.__scheduleBufferedJobsTask = None
 
         # the maximum nubmer of seconds after start to wait for partition managers to register
         self.__waitForRegisterTimeout = 10
@@ -312,6 +318,9 @@ class GovernorManager:
 
         asyncio.ensure_future(self.managePartitionsManagers())
 
+        # launch task in the background that schedule buffered submit requests
+        self.__scheduleBufferedJobsTask = asyncio.ensure_future(self.__scheduleBufferedJobs())
+
 
     async def managePartitionsManagers(self):
         """
@@ -388,6 +397,18 @@ class GovernorManager:
         # kill all partition managers
         self.__terminatePartitionManagers()
 
+        # stop submiting buffered tasks
+        if self.__scheduleBufferedJobsTask:
+            try:
+                self.__scheduleBufferedJobsTask.cancel()
+            except:
+                logging.warning('failed to cancel buffered jobs scheduler task: {}'.format(sys.exc_info()[0]))
+
+            try:
+                await self.__scheduleBufferedJobsTask
+            except asyncio.CancelledError:
+                logging.debug('listener canceled')
+
 
     def updateTotalResources(self):
         self.totalResources.zero()
@@ -401,13 +422,36 @@ class GovernorManager:
         pass
 
 
+    async def __scheduleBufferedJobs(self):
+        """
+        Take all buffered jobs (already validated) and schedule them on available resources.
+        """
+        while True:
+            try:
+                await asyncio.sleep(0.1)
+
+                while self.__minShedulingManagers <= len(self.managers) and len(self.__submitReqsBuffer) > 0:
+                    logging.info('the minimum number of managers has been achieved - scheduling buffered jobs')
+                    try:
+                        await self.__scheduleJobs(self.__submitReqsBuffer.pop(0))
+                    except:
+                        logging.error('error during scheduling buffered submit requests: {}'.format(sys.exc_info()))
+                        logging.error(traceback.format_exc())
+            except asyncio.CancelledError:
+                logging.info('finishing submitting buffered jobs task')
+                return
+
+
     async def __waitForAllJobs(self):
+        """
+        Wait until all submitted jobs finish and signal receiver to finish.
+        """
         logging.info('waiting for all jobs to finish')
 
         while not self.allJobsFinished():
             await asyncio.sleep(0.2)
 
-        logging.info('All ({}) jobs finished'.format(len(self.jobs)))
+        logging.info('All ({}) jobs finished, no buffered jobs ({})'.format(len(self.jobs), len(self.__submitReqsBuffer)))
 
         if self.__receiver:
             self.__receiver.setFinish(True)
@@ -416,8 +460,13 @@ class GovernorManager:
 
 
     def allJobsFinished(self):
+        """
+        Check if all submitted jobs finished.
+        :return: True if all submitted jobs finished, otherwise False
+        """
         try:
-            return next((job for job in self.jobs.values() if not job.status.isFinished()), None) == None
+            return next((job for job in self.jobs.values() if not job.status.isFinished()), None) == None and \
+                len(self.__submitReqsBuffer) == 0
         except:
             logging.error('error counting jobs: {}'.format(sys.exc_info()))
             logging.error(traceback.format_exc())
@@ -469,22 +518,42 @@ class GovernorManager:
 
 
     async def handleSubmitReq(self, iface, request):
-        if len(self.managers) == 0 or self.totalResources.totalCores == 0:
+        if self.__minShedulingManagers <= len(self.managers) and self.totalResources.totalCores == 0:
             return Response.Error('Error: no resources available')
+
+        if len(self.__submitReqsBuffer) >= self.__maxBufferedJobs:
+            return Response.Error('Error: submit buffer overflow (currently {} buffered jobs) - try submit later'.format(\
+                len(self.__submitReqsBuffer)))
 
         try:
             # validate jobs
             self.__validateJobReqs(request.jobReqs)
+        except Exception as e:
+            logging.error('Submit error: {}'.format(sys.exc_info()))
+            logging.error(traceback.format_exc())
+            return Response.Error(str(e))
 
-            # split jobs equally between all available managers
-            (nJobs, jobNames) = await self.__scheduleJobs(request.jobReqs)
 
-            data = {
-                'submitted': len(jobNames),
-                'jobs': jobNames
-            }
+        try:
+            if self.__minShedulingManagers > len(self.managers):
+                # we don't have all (partition) managers registered - buffer jobs
+                self.__submitReqsBuffer.append(request.jobReqs)
+                logging.debug('buffering submit request, current buffer size: {}'.format(len(self.__submitReqsBuffer)))
 
-            return Response.Ok('{} jobs submitted'.format(len(jobNames)), data=data)
+                return Response.Ok('{} jobs buffered'.format(len(request.jobReqs)), data =
+                    { 'buffered': len(request.jobReqs) })
+            else:
+                # submit at once
+
+                    # split jobs equally between all available managers
+                    (nJobs, jobNames) = await self.__scheduleJobs(request.jobReqs)
+
+                    data = {
+                        'submitted': len(jobNames),
+                        'jobs': jobNames
+                    }
+
+                    return Response.Ok('{} jobs submitted'.format(len(jobNames)), data=data)
         except Exception as e:
             logging.error('Submit error: {}'.format(sys.exc_info()))
             logging.error(traceback.format_exc())
