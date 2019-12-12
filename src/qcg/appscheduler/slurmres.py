@@ -64,6 +64,7 @@ def parse_slurm_resources(config):
                                                                                                len(cores_num)))
 
     core_ids = None
+    binding = False
 
     if 'SLURM_CPU_BIND_LIST' in os.environ and \
             'SLURM_CPU_BIND_TYPE' in os.environ and \
@@ -74,14 +75,17 @@ def parse_slurm_resources(config):
             raise SlurmEnvError("failed to parse cpu binding: the core list ({}) mismatch the cores per node ({})".format(
                 str(core_ids), str(cores_num)))
 
+        logging.debug("cpu list on each node: {}".format(core_ids))
+        binding = True
+
     nodes = []
     for i in range(0, len(node_names)):
         nname = bytes.decode(node_names[i])
         logging.debug("%s x %d" % (nname, cores_num[i]))
         nodes.append(Node(nname, cores_num[i], 0, coreIds=core_ids))
 
-    logging.debug("generated %d nodes" % len(nodes))
-    return Resources(ResourcesType.SLURM, nodes)
+    logging.debug("generated {} nodes {} binding".format(len(nodes), "with" if binding else "without"))
+    return Resources(ResourcesType.SLURM, nodes, binding)
 
 
 def in_slurm_allocation():

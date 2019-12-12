@@ -178,7 +178,7 @@ class ResourcesType(Enum):
 
 class Resources:
 
-    def __init__(self, rtype, nodes=None):
+    def __init__(self, rtype, nodes=None, binding=False):
         """
         Available resources set.
         The set stores and tracks nodes with possible different number of available cores.
@@ -187,6 +187,7 @@ class Resources:
         :param nodes: list of available nodes
         """
         self.__type = rtype
+        self.__binding = binding
 
         self.__nodes = nodes
         if self.__nodes is None:
@@ -215,6 +216,9 @@ class Resources:
 
     def __getRType(self):
         return self.__type
+
+    def __getBinding(self):
+        return self.__binding
 
     def __getNodes(self):
         return self.__nodes
@@ -279,8 +283,8 @@ class Resources:
             node.node.release(node.cores)
 
     def __str__(self):
-        header = '%d (%d used) cores on %d nodes\n' % (self.__totalCores, self.__usedCores, \
-                                                       len(self.__nodes))
+        header = '{} ({} used) cores on {} nodes, options ({})\n'.format(
+                self.__totalCores, self.__usedCores, len(self.__nodes), 'binding={}'.format(self.__binding))
         return header + '\n'.join([str(node) for node in self.__nodes])
 
     #		if self.__nodes:
@@ -292,6 +296,7 @@ class Resources:
         return len(self.__nodes)
 
     rtype = property(__getRType, None, None, "type of resources")
+    binding = property(__getBinding, None, None, "cpu binding active")
     nodes = property(__getNodes, None, None, "list of a nodes")
     totalNodes = property(nNodes, None, None, "total number of nodes")
     totalCores = property(__getTotalCores, None, None, "total number of cores")

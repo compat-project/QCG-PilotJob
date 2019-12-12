@@ -115,29 +115,37 @@ class Launcher:
         agent = self.nodes[agent_id]
 
         out_socket = self.zmq_ctx.socket(zmq.REQ)
-        out_socket.connect(agent['address'])
+        try:
+            out_socket.connect(agent['address'])
 
-        await out_socket.send_json({
-            'cmd': 'RUN',
-            'appid': app_id,
-            'args': args,
-            'stdin': stdin,
-            'stdout': stdout,
-            'stderr': stderr,
-            'env': env,
-            'wdir': wdir,
-            'cores': cores })
-        msg = await out_socket.recv_json()
+            await out_socket.send_json({
+                'cmd': 'RUN',
+                'appid': app_id,
+                'args': args,
+                'stdin': stdin,
+                'stdout': stdout,
+                'stderr': stderr,
+                'env': env,
+                'wdir': wdir,
+                'cores': cores })
+            msg = await out_socket.recv_json()
 
-        if not msg.get('status', None) == 'OK':
-            logging.error('failed to run application {} by agent {}: {}'.format(app_id, agent_id, str(msg)))
+            if not msg.get('status', None) == 'OK':
+                logging.error('failed to run application {} by agent {}: {}'.format(app_id, agent_id, str(msg)))
 
-            if finish_cb:
-                del self.jobs_cb[app_id]
+                if finish_cb:
+                    del self.jobs_cb[app_id]
 
-            raise Exception('failed to run application {} by agent {}: {}'.format(app_id, agent_id, str(msg)))
-        else:
-            logging.debug('application {} successfully launched by agent {}'.format(app_id, agent_id))
+                raise Exception('failed to run application {} by agent {}: {}'.format(app_id, agent_id, str(msg)))
+            else:
+                logging.debug('application {} successfully launched by agent {}'.format(app_id, agent_id))
+        finally:
+            if out_socket:
+                try:
+                    out_socket.close()
+                except:
+                    # ignore errors in this place
+                    pass
 
 
     async def __cleanup(self):
@@ -175,37 +183,45 @@ class Launcher:
         """
         out_socket = self.zmq_ctx.socket(zmq.REQ)
 
-        # create copy because elements might be removed when signal finishing
-        nodes = self.nodes.copy()
+        try:
+            # create copy because elements might be removed when signal finishing
+            nodes = self.nodes.copy()
 
-        for agent_id, agent in nodes.items():
-            logging.debug('connecting to node agent {} @ {} ...'.format(agent_id, agent['address']))
+            for agent_id, agent in nodes.items():
+                logging.debug('connecting to node agent {} @ {} ...'.format(agent_id, agent['address']))
 
-            try:
-                out_socket.connect(agent['address'])
+                try:
+                    out_socket.connect(agent['address'])
 
-                await out_socket.send_json({ 'cmd': 'EXIT' })
+                    await out_socket.send_json({ 'cmd': 'EXIT' })
 
-                msg = await out_socket.recv_json()
+                    msg = await out_socket.recv_json()
 
-                if not msg.get('status', None) == 'OK':
-                    logging.error('failed to finish node agent {}: {}'.format(agent_id, str(msg)))
-                else:
-                    logging.debug('node agent {} signaled to shutdown'.format(agent_id))
+                    if not msg.get('status', None) == 'OK':
+                        logging.error('failed to finish node agent {}: {}'.format(agent_id, str(msg)))
+                    else:
+                        logging.debug('node agent {} signaled to shutdown'.format(agent_id))
 
-                out_socket.disconnect(agent['address'])
-            except Exception as e:
-                logging.error('failed to signal agent to shutdown: {}'.format(str(e)))
+                    out_socket.disconnect(agent['address'])
+                except Exception as e:
+                    logging.error('failed to signal agent to shutdown: {}'.format(str(e)))
 
-        start_t = datetime.now()
+            start_t = datetime.now()
 
-        error = False
-        while len(self.nodes) > 0:
-            if (datetime.now() - start_t).total_seconds() > Launcher.SHUTDOWN_TIMEOUT_SECS:
-                logging.error('timeout while waiting for agents exit - currenlty not finished {}: {}'.format(len(self.nodes), str(','.join(self.nodes.keys()))))
-                raise Exception('timeout while waiting for agents exit')
+            error = False
+            while len(self.nodes) > 0:
+                if (datetime.now() - start_t).total_seconds() > Launcher.SHUTDOWN_TIMEOUT_SECS:
+                    logging.error('timeout while waiting for agents exit - currenlty not finished {}: {}'.format(len(self.nodes), str(','.join(self.nodes.keys()))))
+                    raise Exception('timeout while waiting for agents exit')
 
-            await asyncio.sleep(0.2)
+                await asyncio.sleep(0.2)
+        finally:
+            if out_socket:
+                try:
+                    out_socket.close()
+                except:
+                    # ingore errors in this place
+                    pass
 
 
     def __cancel_agents(self):
@@ -242,12 +258,16 @@ class Launcher:
             
             logging.info('running node agent {} via {}'.format(idata['agent_id'], proto))
 
+            agent_args = [idata['agent_id'], self.local_export_address]
+            if idata.get('options'):
+                agent_args.append(json.dumps(idata['options']))
+
             if 'ssh' in idata:
-                process = await self.__fire_ssh_agent(idata['ssh'], [ idata['agent_id'], self.local_export_address ])
+                process = await self.__fire_ssh_agent(idata['ssh'], agent_args)
             elif 'slurm' in idata:
-                process = await self.__fire_slurm_agent(idata['slurm'], [ idata['agent_id'], self.local_export_address ])
+                process = await self.__fire_slurm_agent(idata['slurm'], agent_args)
             elif 'local' in idata:
-                process = await self.__fire_local_agent(idata['local'], [ idata['agent_id'], self.local_export_address ])
+                process = await self.__fire_local_agent(idata['local'], agent_args)
             else:
                 raise ValueError('missing start type of node agent {}'.format(idata['agent_id'] ))
 
@@ -266,7 +286,7 @@ class Launcher:
         logging.debug('all agents {} registered in {} seconds'.format(len(self.nodes), (datetime.now() - start_t).total_seconds()))
 
 
-    async def __fire_ssh_agent(self, ssh_data, args):
+    async def __fire_ssh_agent(self, ssh_data, args, options):
         """
         Launch node agent instance via ssh.
 

@@ -12,9 +12,10 @@ class ExecutionSchema:
         if resources.rtype not in __SCHEMAS__:
             raise InternalError('Unknown resources type: %s' % name)
 
-        return __SCHEMAS__[resources.rtype](config)
+        return __SCHEMAS__[resources.rtype](resources, config)
 
-    def __init__(self, config):
+    def __init__(self, resources, config):
+        self.resources = resources
         self.config = config
 
     def preprocess(self, exJob):
@@ -27,8 +28,8 @@ class ExecutionSchema:
 class SlurmExecution(ExecutionSchema):
     EXEC_NAME = 'slurm'
 
-    def __init__(self, config):
-        super(SlurmExecution, self).__init__(config)
+    def __init__(self, resources, config):
+        super(SlurmExecution, self).__init__(resources, config)
 
     def preprocess(self, exJob):
         job_exec = exJob.jobExecution.exec
@@ -54,9 +55,11 @@ class SlurmExecution(ExecutionSchema):
             "-n", str(exJob.ncores),
             "-m", "arbitrary",
             "--mem-per-cpu=0",
-#            "--cpu-bind=verbose,map_cpu:{}".format(','.join([cores for node in exJob.allocation.nodeAllocations]))
-            "--cpu-bind=verbose,map_cpu:{}".format(','.join([str(core) for core in exJob.allocation.nodeAllocations[0].cores])),
-#            "--cpu-bind=verbose,cores",
+
+            "--cpu-bind=verbose,map_cpu:{}".format(','.join([str(core) for core in exJob.allocation.nodeAllocations[0].cores])) \
+                    if self.resources.binding else \
+                        "--cpu-bind=verbose,cores",
+#
             "--multi-prog" ]
 
         if exJob.jobExecution.stdin:
@@ -80,8 +83,8 @@ class SlurmExecution(ExecutionSchema):
 class DirectExecution(ExecutionSchema):
     EXEC_NAME = 'direct'
 
-    def __init__(self, config):
-        super(DirectExecution, self).__init__(config)
+    def __init__(self, resources, config):
+        super(DirectExecution, self).__init__(resources, config)
 
     def preprocess(self, exJob):
         pass

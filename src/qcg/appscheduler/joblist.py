@@ -23,7 +23,7 @@ class JobState(Enum):
 
 class JobExecution:
     def __init__(self, exec, args=None, env=None, wd=None, \
-                 stdin=None, stdout=None, stderr=None):
+                 stdin=None, stdout=None, stderr=None, modules=None, venv=None):
         if exec is None:
             raise IllegalJobDescription("Job execution not defined")
 
@@ -35,6 +35,13 @@ class JobExecution:
         self.stdin = stdin
         self.stdout = stdout
         self.stderr = stderr
+
+        if modules and not isinstance(modules, list):
+            self.modules = [ modules ]
+        else:
+            self.modules = modules
+
+        self.venv = venv
 
         if args is not None:
             if not isinstance(args, list):
@@ -61,6 +68,12 @@ class JobExecution:
 
         if self.stderr is not None:
             result['stderr'] = self.stderr
+
+        if self.modules is not None:
+            result['modules'] = self.modules
+
+        if self.venv is not None:
+            result['venv'] = self.venv
 
         return result
 

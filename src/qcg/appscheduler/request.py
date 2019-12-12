@@ -306,6 +306,19 @@ class FinishReq(Request):
         return json.dumps(self.toDict())
 
 
+class StatusReq(Request):
+    REQ_NAME = 'status'
+
+    def __init__(self, reqData, env=None):
+        pass
+
+    def toDict(self):
+        return {'request': self.REQ_NAME}
+
+    def toJSON(self):
+        return json.dumps(self.toDict())
+
+
 __REQS__ = {
     ControlReq.REQ_NAME: ControlReq,
     SubmitReq.REQ_NAME: SubmitReq,
@@ -315,5 +328,6 @@ __REQS__ = {
     RemoveJobReq.REQ_NAME: RemoveJobReq,
     ListJobsReq.REQ_NAME: ListJobsReq,
     ResourcesInfoReq.REQ_NAME: ResourcesInfoReq,
-    FinishReq.REQ_NAME: FinishReq
+    FinishReq.REQ_NAME: FinishReq,
+    StatusReq.REQ_NAME: StatusReq
 }

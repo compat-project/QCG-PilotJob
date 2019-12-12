@@ -3,10 +3,12 @@
 from prompt_toolkit import prompt
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
-from prompt_toolkit.contrib.completers import WordCompleter
-from prompt_toolkit import prompt_async
+from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.shortcuts import PromptSession
+from prompt_toolkit.patch_stdout import patch_stdout
+from prompt_toolkit.eventloop.defaults import use_asyncio_event_loop
 
-from os.path import exists, abspath
+from os.path import exists, abspath, join
 
 import asyncio
 import click
@@ -80,21 +82,21 @@ class CmdJobs:
             raise Exception('invalid reply from the service')
 
         jobs = []
-        for job in d['data']['jobs']:
+        for jname, jdata in d['data']['jobs'].items():
             jStatus = 'UNKNOWN'
             jMessages = None
             inQueue = sys.maxsize
 
             # optional
-            if 'messages' in job:
-                jMessages = job['messages']
+            if 'messages' in jdata:
+                jMessages = jdata['messages']
 
             # optional
-            if 'inQueue' in job:
-                inQueue = job['inQueue']
+            if 'inQueue' in jdata:
+                inQueue = jdata['inQueue']
 
-            jobs.append({'name': job['name'],
-                         'status': job['status'],
+            jobs.append({'name': jname,
+                         'status': jdata['status'],
                          'messages': jMessages,
                          'inQueue': inQueue})
 
@@ -175,18 +177,18 @@ class CmdJinfo:
     NAME = 'jinfo'
 
     def __init__(self, args):
-        if args is None or len(args) != 1:
+        if args is None or len(args) < 1:
             raise Exception('"%s" wrong syntax\n\n%s' % (self.NAME, CmdJinfo.help_str()))
 
-        self.jName = args[0]
+        self.jNames = args
 
     async def run(self, ctx):
         if not ctx.connected:
             raise Exception('not connected')
 
         await ctx.zmqSock.send(str.encode(json.dumps({
-            "request": "jobStatus",
-            "jobName": self.jName
+            "request": "jobInfo",
+            "jobNames": self.jNames
         })))
 
         logging.info("request sent - waiting for response")
@@ -208,22 +210,28 @@ class CmdJinfo:
             raise Exception('invalid reply from the service')
 
         data = d['data']
-        status = "%s" % (data['status'])
+        if not 'jobs' in data:
+            raise Exception('missing jobs information')
 
-        if 'messages' in data:
-            status = ' '.join([status, data['messages']])
+        for jname, jstatus in data['jobs'].items():
+            status = jname
 
-        if 'history' in data:
-            status = '\n'.join([status, data['history']])
+            jdata = jstatus.get('data')
+            if jdata:
+                if 'messages' in jdata:
+                    status = ' '.join([status, jdata['messages']])
 
-        if 'runtime' in data and isinstance(data['runtime'], dict):
-            for rk, rv in data['runtime'].items():
+                if 'history' in jdata:
+                    status = '\n'.join([status, jdata['history']])
+
+                if 'runtime' in jdata and isinstance(jdata['runtime'], dict):
+                    for rk, rv in jdata['runtime'].items():
                 status = '\n'.join([status, '%s: %s' % (rk, rv)])
 
         color = 'blue'
-        if data['status'] in ['FAILED', 'CANCELED', 'OMITTED']:
+                if jdata['status'] in ['FAILED', 'CANCELED', 'OMITTED']:
             color = 'red'
-        elif data['status'] in ['SUCCEED']:
+                elif jdata['status'] in ['SUCCEED']:
             color = 'green'
 
         click.secho(status, fg=color)
@@ -322,10 +330,10 @@ class CmdJdel:
     NAME = 'jdel'
 
     def __init__(self, args):
-        if args is None or len(args) != 1:
+        if args is None or len(args) < 1:
             raise Exception('"%s" wrong syntax\n\n%s' % (self.NAME, CmdJdel.help_str()))
 
-        self.jName = args[0]
+        self.jNames = args
 
     async def run(self, ctx):
         if not ctx.connected:
@@ -333,7 +341,7 @@ class CmdJdel:
 
         await ctx.zmqSock.send(str.encode(json.dumps({
             "request": "removeJob",
-            "jobName": self.jName
+            "jobNames": self.jNames
         })))
 
         logging.info("request sent - waiting for response")
@@ -360,7 +368,7 @@ class CmdJdel:
 
     @classmethod
     def help_str(cls):
-        return '''%s syntax:\n\t%s {job name}''' % (cls.NAME, cls.NAME)
+        return '''%s syntax:\n\t%s {job name1} [{job name2} ... {job namen}]''' % (cls.NAME, cls.NAME)
 
 
 class CmdConnect:
@@ -369,12 +377,34 @@ class CmdConnect:
     DEFAULT_PROTO = "tcp"
     DEFAULT_PORT = "5555"
 
+
+    def __checkServiceDir(self, wd):
+        wdir = join(wd, '.qcgpjm')
+        if exists(wdir) and exists(join(wdir, 'address')):
+            with open(join(wdir, 'address'), 'r') as f:
+                return f.read()
+
+        return None
+
+    def __discoverServiceAddress(self, wdir=None):
+        if not wdir:
+            wdir = os.getcwd()
+
+        click.secho("checking service working directory {} ...".format(wdir))
+
+        address = self.__checkServiceDir(wdir)
+        if not address:
+            address = CmdConnect.DEFAULT_ADDRESS
+
+        return address
+
     def __init__(self, args):
         if args is not None and len(args) > 1:
             raise Exception('"%s" wrong syntax\n\n%s' % (self.NAME, CmdConnect.help_str()))
 
-        if args is None or len(args) < 1:
-            self.address = CmdConnect.DEFAULT_ADDRESS
+        if args is None or len(args) < 1 or args[0].startswith('dir:'):
+            wd = args[0][4:] if len(args) > 0 else None
+            self.address = self.__discoverServiceAddress(wd)
         else:
             address = args[0]
 
@@ -399,11 +429,40 @@ class CmdConnect:
         try:
             ctx.zmqSock = ctx.zmqCtx.socket(zmq.REQ)
             ctx.zmqSock.connect(self.address)
+
+            try:
+                await asyncio.wait_for(ctx.zmqSock.send(str.encode(json.dumps({
+                    "request": "status"
+                }))), timeout=5.0)
+            except asyncio.TimeoutError:
+                raise Exception('connection timeout')
+
+            try:
+                r = self.__validReply(await asyncio.wait_for(ctx.zmqSock.recv(), timeout=5.0))
+            except asyncio.TimeoutError:
+                raise Exception('service not responding')
+
             ctx.connected = True
         except Exception as e:
             raise Exception('failed to connect to %s - %s' % (self.address, e.args[0]))
 
         click.secho("connection established", fg='green')
+
+
+       
+    def __validReply(self, reply):
+        reply = bytes.decode(reply)
+        logging.info("received reply: %s" % reply)
+        d = json.loads(reply)
+
+        if not isinstance(d, dict) or 'code' not in d or 'data' not in d:
+            raise Exception('invalid reply from the service')
+
+        if d['code'] != 0:
+            raise Exception('failed to get resource info')
+
+        return d
+
 
     @classmethod
     def description(cls):
@@ -556,14 +615,14 @@ async def handle():
     ctx = Ctx()
     cmdParser = Cmd()
 
-    while True and not ctx.finish:
-        user_input = await prompt_async(
-            '> ',
+    session = PromptSession('> ',
             history=FileHistory('history.txt'),
             auto_suggest=AutoSuggestFromHistory(),
-            completer=CommandCompleter,
-            patch_stdout=True
-        )
+            completer=CommandCompleter)
+
+    with patch_stdout():
+        while True and not ctx.finish:
+            user_input = await session.prompt(async_=True)
 
         #	message = click.edit()
 
@@ -579,7 +638,8 @@ async def handle():
 
 logging.basicConfig(filename="client.log", level=logging.DEBUG)
 
-zmq.asyncio.install()
+use_asyncio_event_loop()
+
 asyncio.get_event_loop().run_until_complete(asyncio.gather(
     handle()
 ))
