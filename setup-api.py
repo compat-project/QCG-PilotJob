@@ -3,7 +3,7 @@ from distutils.core import setup
 setup(
 	name='QCGPilotManagerAPI',
 
-	version='0.5.0',
+	version='0.6.0',
 
 	author='Piotr Kopta',
 	author_email='pkopta@man.poznan.pl',
