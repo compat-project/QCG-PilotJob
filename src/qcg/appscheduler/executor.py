@@ -9,7 +9,6 @@ from string import Template
 
 from qcg.appscheduler.executionschema import ExecutionSchema
 from qcg.appscheduler.joblist import JobExecution
-from qcg.appscheduler.zmqinterface import ZMQInterface
 from qcg.appscheduler.config import Config
 from qcg.appscheduler.environment import getEnvironment
 from qcg.appscheduler.executionjob import LocalSchemaExecutionJob, LauncherExecutionJob
@@ -41,13 +40,7 @@ class Executor:
         logging.info('job\' environment contains {} elements'.format(str(envsSet)))
         self.jobEnvs = [ env() for env in envsSet ]
 
-        if manager.ifaces:
-            logging.info('defined ifaces {}'.format(str(manager.ifaces)))
-            zmqiface = next((iface for iface in manager.ifaces if isinstance(iface, ZMQInterface)), None)
-
-            if zmqiface:
-                self.zmq_address = zmqiface.real_address
-
+        self.zmq_address = manager.zmq_address
 
         self.__resources = resources
 
@@ -55,7 +48,7 @@ class Executor:
 
         if self.__resources.rtype == ResourcesType.SLURM:
             try:
-                LauncherExecutionJob.StartAgents(self.base_wd, self.__resources.nodes)
+                LauncherExecutionJob.StartAgents(self.base_wd, self.__resources.nodes, self.__resources.binding)
                 self.__is_node_launcher = True
                 logging.info('node launcher succesfully initialized')
             except Exception as e:

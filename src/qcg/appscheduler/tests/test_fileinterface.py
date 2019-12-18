@@ -37,7 +37,7 @@ def test_local_simple_job(tmpdir):
     save_reqs_to_file(reqs, file_path)
     print('jobs saved to file_path: {}'.format(str(file_path)))
 
-    sys.argv = [ 'QCG-PilotJob', '--file', '--file-path', str(file_path), '--nodes', '2', '--wd', str(tmpdir),
+    sys.argv = [ 'QCG-PilotJob', '--log', 'debug', '--file', '--file-path', str(file_path), '--nodes', '2', '--wd', str(tmpdir),
                  '--report-format', 'json']
     QCGPMService().start()
 

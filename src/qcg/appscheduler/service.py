@@ -139,6 +139,9 @@ class QCGPMService:
             self.__ifaces.append(iface)
 
         self.__manager = Manager(self.__conf, self.__ifaces)
+
+        self.__setupAddressFile()
+
         self.__notifId = self.__manager.registerNotifier(self.__jobNotify, self.__manager)
         self.__receiver = Receiver(self.__manager, self.__ifaces)
 
@@ -186,10 +189,38 @@ class QCGPMService:
             asyncio.set_event_loop(asyncio.new_event_loop())
 
 
+    def __setupAddressFile(self):
+        if self.__manager and self.__manager.zmq_address:
+            addressFile = Config.ADDRESS_FILE.get(self.__conf)
+            self.__addressFile = addressFile if isabs(addressFile) else join(self.auxDir, addressFile)
+
+            if exists(self.__addressFile):
+                os.remove(self.__addressFile)
+
+            with open(self.__addressFile, 'w') as f:
+                f.write(self.__manager.zmq_address)
+
+            logging.debug('address interface written to the {} file...'.format(self.__addressFile)) 
+
+
     @profile
     async def __stopInterfaces(self, receiver):
         while not receiver.isFinished:
             await asyncio.sleep(0.5)
+
+        try:
+            response = await receiver.generateStatusResponse()
+
+            statusFile = Config.FINAL_STATUS_FILE.get(self.__conf)
+            statusFile = statusFile if isabs(statusFile) else join(self.auxDir, statusFile)
+
+            if exists(statusFile):
+                os.remove(statusFile)
+
+            with open(statusFile, 'w') as f:
+                f.write(response.toJSON())
+        except Exception as e:
+            logging.warning("failed to write final status: {}".format(str(e)))
 
         logging.info("stopping receiver ...")
         receiver.stop()

@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import socket
+import json
 from datetime import datetime
 from datetime import datetime
 from os.path import join
@@ -16,13 +17,14 @@ class Agent:
     MIN_PORT_RANGE = 10000
     MAX_PORT_RANGE = 40000
 
-    def __init__(self, agent_id):
+    def __init__(self, agent_id, options):
         """
         The node agent class.
         This class is responsible for launching jobs on local resources.
 
         Args:
             agent_id - agent identifier
+            options - agent options
             context - ZMQ context
             in_socket - agent listening socket
             local_port - the local listening socket port
@@ -31,6 +33,21 @@ class Agent:
         """
         self.agent_id = agent_id
         self.__finish = False
+
+        self.options = {}
+        if options:
+            try:
+                self.options = json.loads(options)
+            except Exception as e:
+                logging.warning('failed to parse options: {}'.format(str(e)))
+
+        if not self.options or not isinstance(self.options, dict):
+            self.options = {}
+
+        # set default options
+        self.options.setdefault('binding', False)
+
+        logging.info('agent options: {}'.format(str(self.options)))
 
         self.__clear()
 
@@ -77,7 +94,7 @@ class Agent:
             await self.__send_ready()
         except Exception:
             self.__cleanup()
-            self.clear()
+            self.__clear()
             raise
         
         while not self.__finish:
@@ -170,7 +187,7 @@ class Agent:
             if len(args) < 1:
                 raise Exception('missing application executable')
 
-            if cores:
+            if cores and self.options.get('binding', False):
                 app_exec = 'taskset'
                 app_args = [ '-c', ','.join([str(c) for c in cores]), *args ]
             else:
@@ -238,13 +255,18 @@ class Agent:
                 stderrP.close()
 
         out_socket = self.context.socket(zmq.REQ)
-        out_socket.connect(self.remote_address)
+        try:
+            out_socket.connect(self.remote_address)
 
-        await out_socket.send_json(status_data)
-        msg = await out_socket.recv_json()
-        logging.debug("got confirmation for process finish {}".format(str(msg)))
-
-        out_socket.close()
+            await out_socket.send_json(status_data)
+            msg = await out_socket.recv_json()
+            logging.debug("got confirmation for process finish {}".format(str(msg)))
+        finally:
+            if out_socket:
+                try:
+                    out_socket.close()
+                except:
+                    pass
 
 
     async def __send_ready(self):
@@ -253,23 +275,28 @@ class Agent:
         The message will contain also the local listening address.
         """
         out_socket = self.context.socket(zmq.REQ)
-        out_socket.connect(self.remote_address)
+        try:
+            out_socket.connect(self.remote_address)
 
-        await out_socket.send_json({
-            'status': 'READY',
-            'date': datetime.now().isoformat(),
-            'agent_id': self.agent_id,
-            'local_address': self.local_export_address })
+            await out_socket.send_json({
+                'status': 'READY',
+                'date': datetime.now().isoformat(),
+                'agent_id': self.agent_id,
+                'local_address': self.local_export_address })
 
-        msg = await out_socket.recv_json()
+            msg = await out_socket.recv_json()
 
-        logging.debug('received ready message confirmation: {}'.format(str(msg)))
+            logging.debug('received ready message confirmation: {}'.format(str(msg)))
 
-        if not msg.get('status', 'UNKNOWN') == 'CONFIRMED':
-            logger.error('agent {} not registered successfully in launcher: {}'.format(self.agent_id, str(msg)))
-            raise Exception('not successfull registration in launcher: {}'.format(str(msg)))
-
-        out_socket.close()
+            if not msg.get('status', 'UNKNOWN') == 'CONFIRMED':
+                logger.error('agent {} not registered successfully in launcher: {}'.format(self.agent_id, str(msg)))
+                raise Exception('not successfull registration in launcher: {}'.format(str(msg)))
+        finally:
+            if out_socket:
+                try:
+                    out_socket.close()
+                except:
+                    pass
 
 
     async def __send_finishing(self):
@@ -279,33 +306,39 @@ class Agent:
         shuting down.
         """
         out_socket = self.context.socket(zmq.REQ)
-        out_socket.connect(self.remote_address)
+        try:
+            out_socket.connect(self.remote_address)
 
-        await out_socket.send_json({
-            'status': 'FINISHING',
-            'date': datetime.now().isoformat(),
-            'agent_id': self.agent_id,
-            'local_address': self.local_address })
-        msg = await out_socket.recv_json()
+            await out_socket.send_json({
+                'status': 'FINISHING',
+                'date': datetime.now().isoformat(),
+                'agent_id': self.agent_id,
+                'local_address': self.local_address })
+            msg = await out_socket.recv_json()
 
-        logging.debug('received finishing message confirmation: {}'.format(str(msg)))
-
-        out_socket.close()
+            logging.debug('received finishing message confirmation: {}'.format(str(msg)))
+        finally:
+            if out_socket:
+                try:
+                    out_socket.close()
+                except:
+                    pass
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        print('error: wrong arguments\n\n\tagent {id} {remote_address}\n\n')
+    if len(sys.argv) < 3 or len(sys.argv) > 5:
+        print('error: wrong arguments\n\n\tagent {id} {remote_address} [options_in_json]\n\n')
         sys.exit(1)
 
     agent_id, raddress = sys.argv[1:3]
+    options = sys.argv[3] if len(sys.argv) > 3 else None
     
     logging.basicConfig(
             level=logging.INFO,
             filename=join('.qcgpjm', 'nl-agent-{}.log'.format(agent_id)),
             format='%(asctime)-15s: %(message)s')
 
-    agent = Agent(agent_id)
+    agent = Agent(agent_id, options)
 
     asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(agent.agent(raddress)))
 

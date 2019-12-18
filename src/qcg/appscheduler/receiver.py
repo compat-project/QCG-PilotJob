@@ -1,14 +1,20 @@
 import asyncio
 import logging
+import socket
+import os
+import sys
+import getpass
 from asyncio import CancelledError
 from enum import Enum
+from datetime import datetime
 
 from qcg.appscheduler.errors import InvalidRequest
 from qcg.appscheduler.manager import Manager
 from qcg.appscheduler.request import ListJobsReq, ResourcesInfoReq, FinishReq
-from qcg.appscheduler.request import RemoveJobReq, ControlReq
+from qcg.appscheduler.request import RemoveJobReq, ControlReq, StatusReq
 from qcg.appscheduler.request import Request, SubmitReq, JobStatusReq, JobInfoReq, CancelJobReq
 from qcg.appscheduler.response import Response, ResponseCode
+from qcg.appscheduler.joblist import JobState
 
 
 class ResponseStatus(Enum):
@@ -69,11 +75,14 @@ class Receiver:
             RemoveJobReq: self.__handleRemoveJobReq,
             ListJobsReq: self.__handleListJobsReq,
             ResourcesInfoReq: self.__handleResourcesInfoReq,
-            FinishReq: self.__handleFinishReq
+            FinishReq: self.__handleFinishReq,
+            StatusReq: self.__handleStatusReq,
         }
 
         self.__finishTask = None
         self.isFinished = False
+
+        self.startTime = datetime.now()
 
 
     async def __listen(self, iface):
@@ -451,6 +460,57 @@ class Receiver:
             'when': '%ds' % delay,
         })
 
+
+    async def generateStatusResponse(self):
+        nSchedulingJobs = nFailedJobs = nFinishedJobs = nExecutingJobs = 0
+        jobNames = self.__manager.jobList.jobs()
+        for jobName in jobNames:
+            job = self.__manager.jobList.get(jobName)
+
+            if job is None:
+                logging.warning('missing job\'s {} data '.format(jobName))
+            else:
+                if job.state in [ JobState.QUEUED, JobState.SCHEDULED ]:
+                    nSchedulingJobs += 1
+                elif job.state in [ JobState.EXECUTING ]:
+                    nExecutingJobs += 1
+                elif job.state in [ JobState.FAILED, JobState.OMITTED ]:
+                    nFailedJobs += 1
+                elif job.state in [ JobState.CANCELED, JobState.SUCCEED ]:
+                    nFinishedJobs += 1
+
+        resources = self.__manager.resources
+        return Response.Ok(data={
+            'System': {
+                'Uptime': str(datetime.now() - self.startTime),
+                'Zmqaddress': self.__manager.zmq_address,
+                'Ifaces': [ iface.name() for iface in self.__ifaces ],
+                'Host': socket.gethostname(),
+                'Account': getpass.getuser(),
+                'Wd': os.getcwd(),
+                'PythonVersion': sys.version.replace('\n', ' '),
+                'Python': sys.executable,
+                'Platform': sys.platform,
+            },
+            'Resources': {
+                'TotalNodes': len(resources.nodes),
+                'TotalCores': resources.totalCores,
+                'UsedCores': resources.usedCores,
+                'FreeCores': resources.freeCores,
+            },
+            'JobStats': { 
+                'TotalJobs': len(jobNames),
+                'InScheduleJobs': nSchedulingJobs,
+                'FailedJobs': nFailedJobs,
+                'FinishedJobs': nFinishedJobs,
+                'ExecutingJobs': nExecutingJobs,
+            }
+        })
+
+
+    async def __handleStatusReq(self, iface, request):
+        logging.info("Handling service status info from %s iface" % (iface.__class__.__name__))
+        return await self.generateStatusResponse()
 
     async def __waitForAllJobs(self):
         logging.info("waiting for all jobs to finish (the new method)")
