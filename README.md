@@ -1,12 +1,12 @@
 # QCG-PilotJob
 The QCG Pilot Job service for execution of many computing tasks inside one allocation
 =======
-# The QCG Pilot Manager v 0.5.0
+# The QCG Pilot Manager v 0.6.2
 
 
 Author: Piotr Kopta <pkopta@man.poznan.pl>, Tomasz Piontek <piontek@man.poznan.pl>, Bartosz Bosak <bbosak@man.poznan.pl>
 
-Copyright (C) 2017-2018 Poznan Supercomputing and Networking Center
+Copyright (C) 2017-2019 Poznan Supercomputing and Networking Center
 
 
 ## OVERVIEW
@@ -208,6 +208,8 @@ The Job description is a dictionary with the following keys:
     the job starts.
   - `stdin`, `stdout`, `stderr` (optional) `String` - path to the
     standard input , standard output and standard error files respectively. 
+  - `modules` (optional) `Array of String` - the list of environment modules that should be loaded before start of the job
+  - `venv` (optional) `String` - the path to the virtual environment inside in job should be started
 - `resources` (optional) `Dict` - resource requirements, a dictionary with the following keys: 
   - `numCores` (optional) `Dict` - number of cores,
   - `numNodes` (optional) `Dict`- number of nodes,
