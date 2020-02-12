@@ -1,3 +1,11 @@
+Version 0.4   2019-06-10 Bartosz Bosak <bbosak@man.poznan.pl>
+	* new LocalManager class, which allows to start QCG Pilot Job Manager
+	directly from a python code
+	* the testing mode of execution which allows to define virtual
+	resources and may be useful e.g. for tests performed on users'
+	laptops.
+
+
 Version 0.2   2018-03-14 Piotr Kopta <pkopta@man.poznan.pl>
 	* new variable in job's execution environemnt QCG_PM_ZMQ_ADDRESS with
 	address of QCG PJM ZMQ interface
