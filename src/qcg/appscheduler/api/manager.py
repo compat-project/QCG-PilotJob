@@ -506,7 +506,7 @@ class LocalManager(Manager):
         print('manager process started')
 
         try:
-            self.qcgpm_conf = self.qcgpm_queue.get(block=True, timeout=10)
+            self.qcgpm_conf = self.qcgpm_queue.get(block=True, timeout=600)
         except queue.Empty:
             raise errors.ServiceError('Service not started - timeout')
         except Exception as e:

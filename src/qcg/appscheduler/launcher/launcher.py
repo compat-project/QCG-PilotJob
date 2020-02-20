@@ -15,7 +15,9 @@ class Launcher:
 
     MIN_PORT_RANGE = 10000
     MAX_PORT_RANGE = 40000
-    START_TIMEOUT_SECS = 60
+
+    # due to eagle node wake up issues
+    START_TIMEOUT_SECS = 600
 
     def __init__(self, wdir):
         # working directory
