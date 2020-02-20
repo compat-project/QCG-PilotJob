@@ -54,6 +54,7 @@ class SlurmExecution(ExecutionSchema):
         exJob.jobExecution.args = [
             "-n", str(exJob.ncores),
             "-m", "arbitrary",
+            "--overcommit",
             "--mem-per-cpu=0",
 
             "--cpu-bind=verbose,map_cpu:{}".format(','.join([str(core) for core in exJob.allocation.nodeAllocations[0].cores])) \
