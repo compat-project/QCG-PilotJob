@@ -318,7 +318,11 @@ class Launcher:
         if not 'node' in slurm_data:
             raise ValueError('missing slurm node name')
 
-        slurm_args = [ '-w', slurm_data['node'], '-N', '1', '-n', '1', '-D', self.work_dir, '--slurmd-debug=verbose', '-vvvvv', '-u' ]
+        slurm_args = ['-w', slurm_data['node'], '-N', '1', '-n', '1', '-D', self.work_dir, '-u']
+        
+        if logging.root.level == logging.DEBUG:
+            slurm_args.extend(['--slurmd-debug=verbose', '-vvvvv'])
+
         slurm_args.extend(slurm_data.get('args', []))
 
         stdoutP = asyncio.subprocess.DEVNULL
