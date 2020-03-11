@@ -259,7 +259,7 @@ class LocalSchemaExecutionJob(ExecutionJob):
 
             logging.debug("launching job {}: {} {}".format(self.job.name, je.exec, str(je.args)))
 
-            logging.info("local process for job {} launched".format(self.job.name))
+            logging.info("local process {} for job {} launched".format(process.pid, self.job.name))
 
             await process.wait()
 
