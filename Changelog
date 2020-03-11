@@ -1,3 +1,11 @@
+Version 0.7   2020-03-11 Piotr Kopta <pkopta@man.poznan.pl>
+	* bugfix related to 'step creation temporarily disabled' 
+	* bugfix extended node launcher agent wait time
+
+Version 0.6   2019-12-12 Piotr Kopta <pkopta@man.poznan.pl>
+	* support for including Python virtual environments in tasks
+	* support for loading environment modules in tasks
+
 Version 0.4   2019-06-10 Bartosz Bosak <bbosak@man.poznan.pl>
 	* new LocalManager class, which allows to start QCG Pilot Job Manager
 	directly from a python code
