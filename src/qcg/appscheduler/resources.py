@@ -520,7 +520,7 @@ class Resources:
             self.__systemAllocation = None
 
         for node in self.__nodes:
-            self.__systemAllocation = node.allocate(1)
+            self.__systemAllocation = node.allocateExact(1)
 
             if self.__systemAllocation:
                 break

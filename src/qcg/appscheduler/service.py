@@ -245,13 +245,13 @@ class QCGPMService:
 
 
     def __setupReports(self, config):
-        self.__jobReporter = getReporter(Config.REPORT_FORMAT.get(config))
-
         jobReportFile = Config.REPORT_FILE.get(config)
         self.__jobReportFile = jobReportFile if isabs(jobReportFile) else join(self.auxDir, jobReportFile)
 
         if exists(self.__jobReportFile):
             os.remove(self.__jobReportFile)
+
+        self.__jobReporter = getReporter(Config.REPORT_FORMAT.get(config), self.__jobReportFile)
 
 
     def __setupAuxDir(self, config):
@@ -289,11 +289,16 @@ class QCGPMService:
         if asyncio.get_event_loop() and asyncio.get_event_loop().is_closed():
             asyncio.set_event_loop(asyncio.new_event_loop())
 
+        # different child watchers - available in Python >=3.8
+        #asyncio.set_child_watcher(asyncio.ThreadedChildWatcher())
+
 
     @profile
     async def __stopInterfaces(self, receiver):
         while not receiver.isFinished():
             await asyncio.sleep(0.5)
+
+        logging.info('receiver stopped')
 
         try:
             response = await receiver.generateStatusResponse()
@@ -315,11 +320,9 @@ class QCGPMService:
 
     @profile
     def __jobNotify(self, jobId, state, manager):
-        if self.__jobReportFile and self.__jobReporter:
+        if self.__jobReporter:
             if state.isFinished():
-                with open(self.__jobReportFile, 'a') as f:
-                    job = manager.jobList.get(jobId)
-                    self.__jobReporter.reportJob(job, f)
+                self.__jobReporter.reportJob(manager.jobList.get(jobId))
 
                     
     def getIfaces(self, iface_class=None):
@@ -350,6 +353,9 @@ class QCGPMService:
             logging.error('Service failed: {}'.format(sys.exc_info()))
             logging.error(traceback.format_exc())
         finally:
+            if self.__jobReporter:
+                self.__jobReporter.flush()
+
             if self.__receiver:
                 await self.__receiver.stop()
 
@@ -359,7 +365,6 @@ class QCGPMService:
                 await self.__manager.stop()
 
             logging.info('manager stopped')
-
 
         usage = self.get_rusage()
         logging.info('service resource usage: {}'.format(str(usage.get('service', {}))))

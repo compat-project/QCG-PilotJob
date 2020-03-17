@@ -293,7 +293,7 @@ class DirectManager:
         """
         if len(self.__jobStatesCbs) > 0:
             logging.debug("notifies callbacks about %s job status change %s" % (jobId, state))
-            self.__processTask = asyncio.ensure_future(self.__callCallbacks(
+            asyncio.ensure_future(self.__callCallbacks(
                 jobId, state, self.__jobStatesCbs.values()
             ))
 
@@ -905,6 +905,7 @@ class DirectManagerHandler:
         while not self.__manager.allJobsFinished():
             await asyncio.sleep(0.2)
 
+        logging.info("detected all jobs finished")
         self.stopReceiver()
 
 
