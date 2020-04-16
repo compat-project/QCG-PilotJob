@@ -50,17 +50,21 @@ class SlurmExecution(ExecutionSchema):
         #        exJob.modifiedArgs = [ "-n", str(exJob.ncores), "--export=NONE", "-m", "arbitrary", "--multi-prog", runConfFile ]
         #        exJob.modifiedArgs = [ "-n", str(exJob.ncores), "-m", "arbitrary", "--mem-per-cpu=0", "--slurmd-debug=verbose", "--multi-prog", runConfFile ]
 
+        if self.resources.binding:
+            core_ids = []
+            for nodeAllocation in exJob.allocation.nodeAllocations:
+                core_ids.extend([str(core) for core in nodeAllocation.cores])
+            cpu_bind = "--cpu-bind=verbose,map_cpu:{}".format(','.join(core_ids))
+        else:
+            cpu_bind = "--cpu-bind=verbose,cores",
+
         exJob.jobExecution.exec = 'srun'
         exJob.jobExecution.args = [
             "-n", str(exJob.ncores),
             "-m", "arbitrary",
             "--overcommit",
             "--mem-per-cpu=0",
-
-            "--cpu-bind=verbose,map_cpu:{}".format(','.join([str(core) for core in exJob.allocation.nodeAllocations[0].cores])) \
-                    if self.resources.binding else \
-                        "--cpu-bind=verbose,cores",
-#
+            cpu_bind,
             "--multi-prog" ]
 
         if exJob.jobExecution.stdin:
