@@ -56,7 +56,7 @@ class SlurmExecution(ExecutionSchema):
                 core_ids.extend([str(core) for core in nodeAllocation.cores])
             cpu_bind = "--cpu-bind=verbose,map_cpu:{}".format(','.join(core_ids))
         else:
-            cpu_bind = "--cpu-bind=verbose,cores",
+            cpu_bind = "--cpu-bind=verbose,cores"
 
         exJob.jobExecution.exec = 'srun'
         exJob.jobExecution.args = [
