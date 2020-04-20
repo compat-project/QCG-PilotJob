@@ -19,6 +19,37 @@ def parse_nodelist(nodespec):
     return bytes.decode(stdout).splitlines()
 
 
+def get_allocation_data():
+    """
+    Get information about slurm allocation and pack it into dictionary.
+    The information is obtained by 'scontrol show job' command
+
+    :return: list of all allocation attributes and values and also a dictionary, a dictionary
+      might be used to check if any element exist in attributes, but for some attributes like Node, CPU_IDs they
+      are not uniq so in the map there will be just the last occurence of these attributes; remember that
+      the dictionary doesn't contain information about attributes order.
+    """
+    slurm_job_id = os.environ.get('SLURM_JOB_ID', None)
+    p = subprocess.Popen(['scontrol', 'show', '-o', '--detail', 'job', slurm_job_id], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = p.communicate()
+    ex_code = p.wait()
+    if ex_code != 0:
+        raise SlurmEnvError("scontrol show job failed: {}".format(stderr))
+
+    raw_data = bytes.decode(stdout).replace('\n', ' ')
+    result = { 'list': [ ],
+               'map': { } }
+    for element in raw_data.split(' '):
+        elements = element.split('=', 1)
+        name = elements[0]
+        value = elements[1] if len(elements) > 1 else None
+
+        result['map'][name] = value
+        result['list'].append((name, value))
+
+    return result
+
+
 def parse_slurm_cpu_binding(cpu_bind_list):
     cores = []
     for hex_mask in cpu_bind_list.split(','):
@@ -60,6 +91,10 @@ def parse_slurm_resources(config):
     if 'SLURM_JOB_CPUS_PER_NODE' not in os.environ:
         raise SlurmEnvError("missing SLURM_JOB_CPUS_PER_NODE settings")
 
+    allocation_data = None
+    if config.get('parse_nodes', 'yes') == 'yes':
+        allocation_data = get_allocation_data()
+
     slurm_nodes = os.environ['SLURM_NODELIST']
 
     if config.get('parse_nodes', 'yes') == 'no':
@@ -93,33 +128,142 @@ def parse_slurm_resources(config):
     core_ids = None
     binding = False
 
-    if 'SLURM_CPU_BIND_LIST' in os.environ and \
-            'SLURM_CPU_BIND_TYPE' in os.environ and \
-            os.environ['SLURM_CPU_BIND_TYPE'].startswith('mask_cpu'):
-        core_ids = parse_slurm_cpu_binding(os.environ['SLURM_CPU_BIND_LIST'])
-
-        if len(core_ids) < max(cores_num[node_start:node_end]):
-            raise SlurmEnvError("failed to parse cpu binding: the core list ({}) mismatch the cores per node ({})".format(
-                str(core_ids), str(cores_num[node_start:node_end])))
-
-        logging.debug("cpu list on each node: {}".format(core_ids))
+    if not allocation_data is None and 'CPU_IDs' in allocation_data['map']:
+        core_ids = parse_slurm_allocation_cpu_ids(allocation_data['list'], node_names[node_start:node_end],
+                                                  cores_num[node_start:node_end])
+        print('got cores binding per node: {}'.format(','.join(
+            ['{}: [{}]'.format(node_name, ','.join([str(core) for core in node_cores])) for node_name, node_cores in core_ids.items()])))
         binding = True
+    elif 'SLURM_CPU_BIND_LIST' in os.environ and 'SLURM_CPU_BIND_TYPE' in os.environ and \
+        os.environ['SLURM_CPU_BIND_TYPE'].startswith('mask_cpu'):
+        core_ids = parse_slurm_env_binding(os.environ['SLURM_CPU_BIND_LIST'], node_names[node_start:node_end],
+                                           cores_num[node_start:node_end])
+        binding = True
+    else:
+        logging.warning('warning: failed to get slurm binding information - missing SLURM_CPU_BIND_LIST and CPU_IDSs')
+
+    if binding:
+        logging.debug('core binding: {}'.format(','.join([str(id) for id in core_ids])))
 
     nCrs = None
     if 'CUDA_VISIBLE_DEVICES' in os.environ:
         nCrs = { CRType.GPU: CRBind(CRType.GPU, os.environ['CUDA_VISIBLE_DEVICES'].split(',')) }
 
-    nodes = [ Node(node_names[i], cores_num[i], 0, coreIds=core_ids, crs=nCrs) for i in range(node_start, node_end) ]
+    nodes = [ Node(node_names[i], cores_num[i], 0, coreIds=core_ids[node_names[i]] if not core_ids is None else None, crs=nCrs) for i in range(node_start, node_end) ]
     logging.debug('generated {} nodes {} binding'.format(len(nodes), 'with' if binding else 'without'))
 
     return Resources(ResourcesType.SLURM, nodes, binding)
 
 
+def parse_slurm_allocation_cpu_ids(allocation_data_list, node_names, cores_num):
+    """
+    Based on allocation data obtained via 'scontrol show job --detail' return information about core bindings per node.
+    The information in the allocation data is optimized, so getting those binding might be tricky.
+    The data can be described in form:
+
+        Nodes=c[1-2] CPU_IDs=0 Mem=0 GRES=
+
+    but also as:
+
+        Nodes=c1 CPU_IDs=1 Mem=0 GRES=
+        Nodes=c2 CPU_IDs=0 Mem=0 GRES=
+
+    :param allocation_data_list: allocation data (as map ('map' key) and list ('list'))
+    :param node_names: node names for which the binding should be parsed
+    :param cores_num: the number of allocated cores for given nodes (the binding information must match # of cores)
+    :return: a dictionary with node names as keys and binded core list as value
+    """
+    nodes = { }
+
+    try:
+        curr_nodes = [ ]
+        for param in allocation_data_list:
+            name, value = param
+
+            if name == 'Nodes':
+                curr_node = value
+                if any(c in value for c in ['-', '[', ']']):
+                    curr_nodes.extend(parse_nodelist(value))
+                else:
+                    curr_nodes.append(value)
+            elif name == 'CPU_IDs':
+                core_ids = []
+                for element in value.split(','):
+                    if '-' in element:
+                        start, end = element.split('-', 1)
+                        core_ids.extend(list(range(int(start), int(end) + 1)))
+                    else:
+                        core_ids.append(int(element))
+
+                if curr_nodes is None:
+                    raise Exception('missing node name in allocation data')
+
+                for curr_node in curr_nodes:
+                    if curr_node in node_names:
+                        nodes[curr_node] = core_ids
+
+                curr_nodes = [ ]
+    except Exception as e:
+        raise SlurmEnvError('unknown format of cpu binding: {}'.format(str(e)))
+
+    if len(nodes) != len(node_names):
+        raise SlurmEnvError('failed to parse cpu binding from job info: the node binding list ({}) differes from '
+                            'node list ({})'.format(len(nodes), len(node_names)))
+
+    if len(nodes) != len(cores_num):
+        raise SlurmEnvError('failed to parse cpu binding from job info: the node binding list ({}) differes from '
+                            'ncores per node list ({})'.format(len(nodes), len(cores_num)))
+
+    for idx, node in enumerate(nodes.keys()):
+        if len(nodes[node]) != cores_num[idx]:
+            raise SlurmEnvError('failed to parse cpu binding: the node binding for node ({}) ({}) differs from cores '
+                                'per node {}'.format(node, len(nodes[node]), cores_num[idx]))
+
+    return nodes
+
+
+def parse_slurm_env_binding(slurm_cpu_bind_list, node_names, cores_num):
+    """
+    Based on environment varialbe SLURM_CPU_BIND_LIST set by slurm return information about core bindings per node.
+    WARNING: those information might not be as precise as those obtained from allocation data, as environment variable
+    contain the same information for all nodes, so if not all nodes has the same architecture and number of allocated
+    cores the information might not be correct.
+    """
+    core_ids = parse_slurm_cpu_binding(slurm_cpu_bind_list)
+
+    if len(core_ids) < max(cores_num):
+        raise SlurmEnvError("failed to parse cpu binding: the core list ({}) mismatch the cores per node ({})".format(
+            str(core_ids), str(cores_num)))
+
+    logging.debug("cpu list on each node: {}".format(core_ids))
+
+    return { node_name: core_ids for node_name in node_names }
+
+
 def in_slurm_allocation():
+    """
+    Check if program has been run inside slurm allocation.
+    We detect some environment variables (like SLURM_NODELIST) that are always set by slurm.
+
+    :return: true if we are inside slurm allocation, otherwise false
+    """
     return 'SLURM_NODELIST' in os.environ and 'SLURM_JOB_CPUS_PER_NODE' in os.environ
 
 
 def test_environment(env=None):
+    """
+    Try to parse slurm resources based on environment passed as dictionary, or string where each
+    environment variable is placed in the separate line.
+    WARNING: some information must be gathered through slurm client programs like 'scontrol' so gathering resource
+    information only on environment variables is limited.
+
+    :param env: environment to test, if
+        None - the current environment is checked
+        dict - the environment in form of dictionary to be checked
+        string - the environment in form of string where each variable is placed in separate line
+
+    :return: Resources object with gathered slurm information.
+    """
     if not env:
         env_d = os.environ
     elif isinstance(env, dict) or isinstance(env, os._Environ):
