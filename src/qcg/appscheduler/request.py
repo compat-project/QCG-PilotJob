@@ -130,12 +130,13 @@ class SubmitReq(Request):
             if not 'execution' in reqJob:
                 raise InvalidRequest('Missing execution element in job description')
 
-           # look for 'iterate' directive
-            if 'iterate' in reqJob:
-                if not isinstance(reqJob['iterate'], list) or len(reqJob['iterate']) != 2:
+            # look for 'iterate' directive
+            if 'iteration' in reqJob:
+                if not isinstance(reqJob['iteration'], dict) or 'stop' not in reqJob['iteration']:
                     raise InvalidRequest('Wrong format of iterative directive: not a two-element list')
 
-                (start, end) = reqJob['iterate'][0:2]
+                start = reqJob['iteration'].get('start', 0)
+                end = reqJob['iteration']['stop']
                 if start > end:
                     raise InvalidRequest('Wrong format of iterative directive: start index larger then stop one')
 
@@ -300,7 +301,7 @@ class NotifyReq(Request):
         if 'params' not in reqData:
             raise InvalidRequest('Wrong notify request - missing register parameters')
 
-        if not all(e in reqData['params'] for e in ['name', 'state']):
+        if not all(e in reqData['params'] for e in ['name', 'state', 'attributes']):
             raise InvalidRequest('Wrong notify request - missing key notify parameters')
 
         self.entity = reqData['entity']

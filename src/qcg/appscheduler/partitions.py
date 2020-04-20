@@ -23,20 +23,64 @@ from qcg.appscheduler.slurmres import in_slurm_allocation, parse_slurm_resources
 
 class GlobalJob:
 
-    def __init__(self, id, status, manager_instance):
+    def __init__(self, name, status, job_parts):
         """
-        Job information stored at higher level QCG managernode_local_agent_cmd.
+        Job information stored at GovernorManager
 
-        :param id:  job identifier
-        :param status: current job status
-        :param manager_instance: address of the manager instance that schedules & executes job
+        :param name (str):  job name
+        :param status (JobStatus): current job status
+        :param job_parts (GlobalJobPart[]): instances of the job parts
         """
-        self.id = id
+        self.name = name
         self.status = status
-        self.manager_instance = manager_instance
+
+        self.job_parts = { job_part.id: job_part for job_part in job_parts }
+        self.unfinished = len(self.job_parts)
 
     def __str__(self):
-        return '{} in {} state (from {} manager)'.format(self.id, self.status.name, self.manager_instance)
+        return '{} in {} state (with {} managers)'.format(self.name, self.status.name, len(self.job_parts))
+
+    def update_part_status(self, part_id, state):
+        """
+        Set new job part state.
+        In this method we compute also the new global job state.
+
+        :return True if status has been updated, False otherwise
+        """
+        job_part = self.job_parts.get(part_id)
+        if not job_part:
+            return False
+
+        job_part.state = state
+        if state.isFinished():
+            # updating global status
+            self.unfinished = self.unfinished - 1
+            if self.unfinished == 0:
+                nfailed_parts = sum([1 if job_part.state in [ JobState.FAILED, JobState.OMITTED, JobState.CANCELED]
+                                     else 0 for job_part in self.job_parts.values()])
+                self.status = JobState.SUCCEED if nfailed_parts == 0 else JobState.FAILED
+
+        return True
+
+class GlobalJobPart:
+
+    def __init__(self, id, local_job_name, it_start, it_stop, status, manager_instance):
+        """
+        Part of the global iterated job.
+
+        :param id (str): job part identifier
+        :param local_job_name (str): name of the job in the local manager instance
+        :param it_start (int): iteration start (None in case of noniterated job)
+        :param it_end (int): iteration stop (None in case of noniterated job)
+        :param status (JobStatus): status of this part of job
+        :param manager_instance (ManagerInstance): address of the manager instance that schedules & executes part of the job
+        """
+        self.id = id
+        self.local_job_name = local_job_name
+        self.it_start = it_start
+        self.it_stop = it_stop
+        self.status = status
+        self.manager_instance = manager_instance
 
 
 class PartitionManager:
@@ -48,13 +92,13 @@ class PartitionManager:
         'startNode'-'endNode' of the Slurm allocation). The instance is launched from governor manager to run
         jobs submited by governor on it's part of the allocation.
 
-        :param mid: partition manager identifier
-        :param nodeName: the node where partition manager should be launched
-        :param startNode: the start node of the allocation the manager should control
-        :param endNode: the end node of the allocation the manager should control
-        :param workDir: the working directory of partition manager
-        :param governorAddress: the address of the governor manager where partition manager should register
-        :param auxDir: the auxiliary directory for partition manager
+        :param mid (str): partition manager identifier
+        :param nodeName (str): the node where partition manager should be launched
+        :param startNode (int): the start node of the allocation the manager should control
+        :param endNode (int): the end node of the allocation the manager should control
+        :param workDir (str): the working directory of partition manager
+        :param governorAddress (str): the address of the governor manager where partition manager should register
+        :param auxDir (str): the auxiliary directory for partition manager
         """
         self.mid = mid
         self.nodeName = nodeName
@@ -77,7 +121,7 @@ class PartitionManager:
         logging.info('launching partition manager {} on node {} to control node numbers {}-{}'.format(
             self.mid, self.nodeName, self.startNode, self.endNode))
 
-        slurm_args = ['-w', self.nodeName, '-N', '1', '-n', '1', '-D', self.workDir]
+        slurm_args = ['-J', str(self.mid), '-w', self.nodeName, '--oversubscribe', '--overcommit', '-N', '1', '-n', '1', '-D', self.workDir]
 
         manager_args = [ *self.__defaultPartitionManagerArgs,
                              '--id', self.mid, '--parent', self.governorAddress,
@@ -553,15 +597,15 @@ class GovernorManager:
             else:
                 # submit at once
 
-                    # split jobs equally between all available managers
-                    (nJobs, jobNames) = await self.__scheduleJobs(request.jobReqs)
+                # split jobs equally between all available managers
+                (nJobs, jobNames) = await self.__scheduleJobs(request.jobReqs)
 
-                    data = {
-                        'submitted': len(jobNames),
-                        'jobs': jobNames
-                    }
+                data = {
+                    'submitted': len(jobNames),
+                    'jobs': jobNames
+                }
 
-                    return Response.Ok('{} jobs submitted'.format(len(jobNames)), data=data)
+                return Response.Ok('{} jobs submitted'.format(len(jobNames)), data=data)
         except Exception as e:
             logging.error('Submit error: {}'.format(sys.exc_info()))
             logging.error(traceback.format_exc())
@@ -586,9 +630,13 @@ class GovernorManager:
             jobReq = req['req']
             jobVars = req['vars']
 
-            if 'iterate' in jobReq:
+            job_name = jobReq['name']
+
+            if 'iteration' in jobReq:
                 # iteration job, split between all available managers
-                (start, end) = jobReq['iterate'][0:2]
+                job_its = jobReq['iteration']
+                start = job_its.get('start', 0)
+                end = job_its.get('stop')
                 iterations = end - start
 
                 currIterStart = start
@@ -597,16 +645,22 @@ class GovernorManager:
 
                 splitPart = int(math.ceil(iterations / len(self.managers)))
 
-                managers_list = [ ]
-
-                for m in self.managers.values():
+                job_parts = [ ]
+                for idx, m in enumerate(self.managers.values()):
                     currIterEnd = min(currIterStart + splitPart, end)
 
                     currJobReq = copy.deepcopy(jobReq)
-                    currJobReq['iterate'] = [ currIterStart, currIterEnd ]
+                    iter_id = str(idx)
+                    currJobReq.setdefault('attributes', {}).update({
+                        'parent_job_id': job_name,
+                        'parent_job_part_id': iter_id
+                    })
+
+                    currJobReq['iteration'] = { 'start': currIterStart, 'stop': currIterEnd }
 
                     submit_reqs.append(m.submitJobs([ currJobReq ]))
-                    managers_list.append(m)
+
+                    job_parts.append({ 'id': iter_id, 'start': currIterStart, 'stop': currIterEnd, 'manager': m})
 
                     currIterStart = currIterEnd
                     if currIterEnd == end:
@@ -614,36 +668,46 @@ class GovernorManager:
 
                 submit_results = await asyncio.gather(*submit_reqs)
                 for idx, result in enumerate(submit_results):
-                    m = managers_list[idx]
+                    job_parts[idx]['local_name'] = result['names'][0]
 
-                    self.__appendNewJobs(result['names'], m)
+                self.__appendNewJob(job_name, job_parts)
 
-                    nReqJobs += result['njobs']
-                    reqJobNames.extend(result['names'])
-
+                nReqJobs = nReqJobs + 1
+                reqJobNames.append(job_name)
             else:
                 # single job, send to the manager with lest number of submitted jobs
                 manager = min(self.managers.values(), key=lambda m: m.submitted_jobs)
 
                 logging.debug('sending job {} to manager {} ({})'.format(jobReq['name'], manager.id, manager.address))
+                iter_id = "0"
+                jobReq.setdefault('attributes', {}).update({
+                    'parent_job_id': job_name,
+                    'parent_job_part_id': iter_id
+                })
                 submit_result = await manager.submitJobs([ jobReq ])
 
-                self.__appendNewJobs(submit_result['names'], manager)
+                logging.debug('submit result: {}'.format(str(submit_result)))
+                self.__appendNewJob(job_name, [{'id': iter_id, 'start': None, 'stop': None, 'local_name': submit_result['names'][0],
+                                                'manager': manager}])
 
-                nReqJobs += submit_result['njobs']
-                reqJobNames.extend(submit_result['names'])
+                nReqJobs = nReqJobs + 1
+                reqJobNames.append(job_name)
 
         return (nReqJobs, reqJobNames)
 
 
-    def __appendNewJobs(self, jobNames, manager):
+    def __appendNewJob(self, job_name, job_parts):
         """
-        Add new jobs to the global registery
-        :param jobNames: list of job names
-        :param manager: manager instance the jobs has been sent to
+        Add new job to the global registry
+
+        :param job_name: job name
+        :param job_parts: information about job parts
         """
-        for jobName in jobNames:
-            self.jobs[jobName] = GlobalJob(jobName, JobState.QUEUED, manager)
+        parts = []
+        for job_part in job_parts:
+            parts.append(GlobalJobPart(job_part['id'], job_part['local_name'], job_part['start'], job_part['stop'],
+                                       JobState.QUEUED, job_part['manager']))
+        self.jobs[job_name] = GlobalJob(job_name, JobState.QUEUED, parts)
 
 
     async def handleJobStatusReq(self, iface, request):
@@ -720,20 +784,28 @@ class GovernorManager:
 
 
     async def handleNotifyReq(self, iface, request):
-        jname = request.params.get('name', 'UNKNOWN')
-        job = self.jobs.get(jname, None)
+        global_job_id = request.params.get('attributes', {}).get('parent_job_id')
+        global_job_part_id = request.params.get('attributes', {}).get('parent_job_part_id')
+
+        if global_job_id is None or global_job_part_id is None:
+            return Response.Error('Unknown job notify data {}'.format(str(request.params)))
+
+        job = self.jobs.get(global_job_id, None)
         if not job:
-            logging.warning('job notified {} not exist'.format(jname))
-            return Response.Error('Job {} unknown'.format(jname))
+            logging.warning('job notified {} not exist'.format(global_job_id))
+            return Response.Error('Job {} unknown'.format(global_job_id))
 
         newstate = request.params.get('state', 'UNKNOWN')
         if not newstate in JobState.__members__:
-            logging.warning('notification for job {} contains unknown state {}'.format(jname, newstate))
-            return Response.Error('Job state {} unknown'.format(newstate))
+            logging.warning('notification for job {} contains unknown state {}'.format(global_job_id, newstate))
+            return Response.Error('Job\'s {} state {} unknown'.format(global_job_id, newstate))
 
-        self.jobs[jname].status = JobState[newstate]
-        logging.debug('job state {} successfully update to {}'.format(jname, newstate))
-        return Response.Ok('job {} updated'.format(jname))
+        if job.update_part_status(global_job_part_id, JobState[newstate]):
+            logging.debug('job state {} successfully update to {}'.format(global_job_id, str(newstate)))
+            return Response.Ok('job {} updated'.format(global_job_id))
+        else:
+            return Response.Error('Failed to update job\'s {} part {} status to {}'.format(global_job_id,
+                global_job_part_id, str(newstate)))
 
 
     async def __delayedFinish(self, delay):

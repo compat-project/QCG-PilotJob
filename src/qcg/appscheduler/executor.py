@@ -16,12 +16,11 @@ from qcg.appscheduler.resources import ResourcesType
 import qcg.appscheduler.profile
 
 
-
-
 class Executor:
+
     def __init__(self, manager, config, resources):
         """
-        Execute jobs inside allocations.
+        Execute job iterations.
         """
         self.__manager = manager
         self.__notFinished = {}
@@ -69,53 +68,61 @@ class Executor:
                 self.__is_node_launcher = False
             except Exception as e:
                 logging.error('failed to stop node launcher agents: {}'.format(str(e)))
- 
+
+
     @profile
-    async def execute(self, allocation, job):
+    async def execute(self, allocation, jobIteration):
         """
-        Asynchronusly execute job inside allocation.
-        After successfull prepared environment, a new task will be created
-        for the job, this function call will return before job finish.
+        Asynchronusly execute job iteration inside allocation.
+        After successfull prepared environment, a new execution job will be created
+        for the job iteration, this function call will return before job iteration finish.
 
         Args:
-            allocation (Allocation): allocation of resources for job
-            job (Job): job execution details
+            allocation (Allocation): allocation of resources for job iteration
+            jobIteration (SchedulingIteration): job iteration execution details
         """
 #        logging.info("executing job %s" % (job.name))
 
-        job.appendRuntime({'allocation': allocation.description()})
+        jobIteration.job.appendRuntime({'allocation': allocation.description()}, jobIteration.iteration)
 
         try:
             if all((self.__is_node_launcher, len(allocation.nodeAllocations) == 1, allocation.nodeAllocations[0].ncores == 1)):
-                execTask = LauncherExecutionJob(self, self.jobEnvs, allocation, job)
+                execJobIt = LauncherExecutionJob(self, self.jobEnvs, allocation, jobIteration)
             else:
-                execTask = LocalSchemaExecutionJob(self, self.jobEnvs, allocation, job, self.schema)
+                execJobIt = LocalSchemaExecutionJob(self, self.jobEnvs, allocation, jobIteration, self.schema)
 
-            self.__notFinished[execTask.id] = execTask
-            await execTask.run()
+            self.__notFinished[execJobIt.id] = execJobIt
+            await execJobIt.run()
         except Exception as e:
-            logging.exception("Failed to launch job %s" % (job.name))
-            self.__manager.jobFinished(job, allocation, -1, str(e))
+            logging.exception("Failed to launch job {}".format(jobIteration.name))
+            self.__manager.jobFinished(jobIteration, allocation, -1, str(e))
 
 
     def allJobsFinished(self):
         return len(self.__notFinished) == 0
 
 
-    def taskExecuting(self, task):
-        if self.__manager is not None:
-            self.__manager.jobExecuting(task.job)
-
-
-    def taskFinished(self, task):
+    def jobIterationExecuting(self, execJob):
         """
-        Signal job finished.
-        This function should be called by a task which created a process for job.
+        Signal job iteration executing start.
+        This function should be called by a execution job which created a process for job iteration.
 
         Args:
-            task (ExecutorJob): task data
+            execJob (ExecutorJob): execution job iteration data
         """
-        del self.__notFinished[task.id]
+        if self.__manager is not None:
+            self.__manager.jobExecuting(execJob.jobIteration)
+
+
+    def jobIterationFinished(self, execJob):
+        """
+        Signal job iteration finished.
+        This function should be called by a execution job which created a process for job iteration.
+
+        Args:
+            execJob (ExecutorJob): execution job iteration data
+        """
+        del self.__notFinished[execJob.id]
 
         if self.__manager is not None:
-            self.__manager.jobFinished(task.job, task.allocation, task.exitCode, task.errorMessage)
+            self.__manager.jobFinished(execJob.jobIteration, execJob.allocation, execJob.exitCode, execJob.errorMessage)

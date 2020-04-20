@@ -115,7 +115,7 @@ class SlurmEnvironment(Environment):
 
         if not opts.get('nohostfile', False):
             # create host file
-            hostfile = os.path.join(job.wdPath, ".%s.hostfile" % job.job.name)
+            hostfile = os.path.join(job.wdPath, ".{}.hostfile".format(job.jobIteration.name))
             with open(hostfile, 'w') as f:
                 for node in job.allocation.nodeAllocations:
                     for i in range(0, node.ncores):

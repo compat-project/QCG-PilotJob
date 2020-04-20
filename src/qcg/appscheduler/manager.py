@@ -883,7 +883,7 @@ class DirectManagerHandler:
             return Response.Ok('{} jobs submitted'.format(len(jobs)), data=data)
         except Exception as e:
             logging.error('Submit error: {}'.format(sys.exc_info()))
-            logging.error(traceback.format_exc())
+#            logging.error(traceback.format_exc())
             return Response.Error(str(e))
 
 
@@ -906,10 +906,6 @@ class DirectManagerHandler:
             # default value for missing 'resources' definition
             if 'resources' not in reqJob:
                 reqJob['resources'] = { 'numCores': { 'exact': 1 } }
-            else:
-                # validate resource requirements
-                #TODO: verify maximum resource requirements against available resources
-                pass
 
             try:
                 reqJob_vars = self.__replaceVariables(reqJob, vars)
@@ -919,7 +915,12 @@ class DirectManagerHandler:
                         reqJob_vars['name'] in req_job_names:
                     raise JobAlreadyExist('Job {} already exist'.format(reqJob_vars['name']))
 
-                newJobs.append(Job(**reqJob_vars))
+                newJob = Job(**reqJob_vars)
+                # validate resource requirements
+                if not resources.checkMaximumJobRequirements(newJob.resources):
+                    raise InvalidRequest('Not enough resources for job {}'.format(vars['jname']))
+
+                newJobs.append(newJob)
                 req_job_names.add(reqJob_vars['name'])
             except InvalidRequest:
                 raise

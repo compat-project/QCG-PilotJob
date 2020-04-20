@@ -16,12 +16,20 @@ import qcg.appscheduler.profile
 class ExecutionJob:
 
     @profile
-    def __init__(self, executor, envs, allocation, job):
+    def __init__(self, executor, envs, allocation, jobIteration):
+        """
+        Class is responsible for executing a single job iteration inside allocation.
+
+        :param executor (Executor): object for tracing job iteration executions
+        :param envs (Environment[]): job iteration environments
+        :param allocation (Allocation) : scheduled allocation for job iteration
+        :param jobIteration (SchedulingIteration) : job iteration to execute
+        """
         assert allocation is not None
-        assert job is not None
+        assert jobIteration is not None
 
         self.allocation = allocation
-        self.job = job
+        self.jobIteration = jobIteration
         self.__envs = envs
         self.id = str(uuid.uuid4().hex)
         self.exitCode = None
@@ -51,7 +59,7 @@ class ExecutionJob:
         # job execution description with variables replaced
         self.jobExecution = JobExecution(
             **json.loads(
-                self.__substituteJobVariables(self.job.execution.toJSON())
+                self.__substituteJobVariables(self.jobIteration.job.execution.toJSON())
             ))
 
     def __setupJobVariables(self):
@@ -65,15 +73,14 @@ class ExecutionJob:
             'nlist': self.nlist
         }
 
+        if self.jobIteration.iteration is not None:
+            self.__jobVars['it'] = self.jobIteration.iteration
+
     def __substituteJobVariables(self, data):
         """
         Replace any variables used in job description.
         """
-        if isinstance(data, str):
-            return Template(data).safe_substitute(self.__jobVars)
-        else:
-            return json.loads(Template(json.dumps(data)).safe_substitute(self.__jobVars))
-
+        return Template(data).safe_substitute(self.__jobVars)
 
     def __setupSandbox(self):
         """
@@ -88,9 +95,9 @@ class ExecutionJob:
             if not os.path.isabs(self.wdPath):
                 self.wdPath = os.path.join(self.__executor.base_wd, self.wdPath)
 
-#        logging.info("preparing job %s sanbox at %s" % (self.job.name, self.wdPath))
+#        logging.info("preparing job %s sanbox at %s" % (self.jobIteration.name, self.wdPath))
         if not os.path.exists(self.wdPath):
-#            logging.info("creating directory for job %s at %s" % (self.job.name, self.wdPath))
+#            logging.info("creating directory for job %s at %s" % (self.jobIteration.name, self.wdPath))
             os.makedirs(self.wdPath)
 
 
@@ -136,16 +143,23 @@ class ExecutionJob:
 
             bash_cmd = ''
             if self.jobExecution.modules:
-                bash_cmd += ' '.join(['module load {};'.format(mod) for mod in self.jobExecution.modules])
+                bash_cmd += ' '.join(['source /etc/profile && module load {};'.format(mod) for mod in self.jobExecution.modules])
 
             if self.jobExecution.venv:
                 bash_cmd += 'source {}/bin/activate;'.format(self.jobExecution.venv)
-        
-            bash_cmd += 'exec {} {}'.format(
-                job_exec,
-                ' '.join([str(arg).replace(" ", "\ ") for arg in job_args]))
-        
+
+            if self.jobExecution.script:
+                bash_cmd += self.jobExecution.script
+            else:
+                bash_cmd += 'exec {} {}'.format(
+                    job_exec,
+                    ' '.join([str(arg).replace(" ", "\ ") for arg in job_args]))
+
             self.jobExecution.args = [ '-c', bash_cmd ]
+        else:
+            if self.jobExecution.script:
+                self.jobExecution.exec = 'bash'
+                self.jobExecution.args = ['-c', self.jobExecution.script]
 
 
     def preStart(self):
@@ -155,8 +169,8 @@ class ExecutionJob:
         """
         self.__jobStartTime = datetime.now()
 
-        self.__executor.taskExecuting(self)
-        self.job.appendRuntime({'wd': self.wdPath})
+        self.__executor.jobIterationExecuting(self)
+        self.jobIteration.job.appendRuntime({'wd': self.wdPath}, iteration=self.jobIteration.iteration)
 
 
     @profile
@@ -175,11 +189,11 @@ class ExecutionJob:
         else:
             self.__jobRunTime = 0
 
-        self.job.appendRuntime({'rtime': str(self.__jobRunTime)})
+        self.jobIteration.job.appendRuntime({'rtime': str(self.__jobRunTime)}, iteration=self.jobIteration.iteration)
 
         self.exitCode = exitCode
         self.errorMessage = errorMessage
-        self.__executor.taskFinished(self)
+        self.__executor.jobIterationFinished(self)
 
 
     async def run(self):
@@ -193,18 +207,18 @@ class ExecutionJob:
 
             await self.launch()
         except Exception as ex:
-            logging.exception("failed to start job %s" % (self.job.name))
+            logging.exception("failed to start job {}".format(self.jobIteration.name))
             self.postprocess(-1, str(ex))
 
 
 class LocalSchemaExecutionJob(ExecutionJob):
 
     @profile
-    def __init__(self, executor, envs, allocation, job, schema):
+    def __init__(self, executor, envs, allocation, jobIteration, schema):
         """
         Run application as a local process according to defined schema.
         """
-        super().__init__(executor, envs, allocation, job)
+        super().__init__(executor, envs, allocation, jobIteration)
         
         self.__schema = schema
         self.__processTask = None
@@ -252,18 +266,19 @@ class LocalSchemaExecutionJob(ExecutionJob):
                 stdout=stdoutP,
                 stderr=stderrP,
                 cwd=self.wdPath,
-    #            env={ **os.environ, **self.env }
                 env=self.env,
                 shell=False,
             )
 
-            logging.debug("launching job {}: {} {}".format(self.job.name, je.exec, str(je.args)))
+            logging.debug("launching job {}: {} {}".format(self.jobIteration.name, je.exec, str(je.args)))
+            logging.debug("launching env: {}".format(','.join(['{}: {}'.format(env_n, env_v)
+                                                               for env_n, env_v in self.env.items()])))
 
-            logging.info("local process for job {} launched".format(self.job.name))
+            logging.info("local process for job {} launched".format(self.jobIteration.name))
 
             await process.wait()
 
-            logging.info("local process for job {} finished".format(self.job.name))
+            logging.info("local process for job {} finished".format(self.jobIteration.name))
 
             exitCode = process.returncode
 
@@ -311,14 +326,15 @@ class LauncherExecutionJob(ExecutionJob):
     async def StopAgents(cls):
         if cls.launcher:
             await cls.launcher.stop()
+            cls.launcher = None
             
 
     @profile
-    def __init__(self, executor, envs, allocation, job):
+    def __init__(self, executor, envs, allocation, jobIteration):
         """
         Run application through the node launcher service.
         """
-        super().__init__(executor, envs, allocation, job)
+        super().__init__(executor, envs, allocation, jobIteration)
         self.envOpts = { 'nohostfile': True }
 
 

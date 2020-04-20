@@ -1,6 +1,7 @@
 import json
 
 from enum import Enum
+import logging
 
 from qcg.appscheduler.errors import *
 from qcg.appscheduler.allocation import CRAllocation, CRBindAllocation, NodeAllocation
@@ -559,6 +560,43 @@ class Resources:
 
     def nNodes(self):
         return len(self.__nodes)
+
+
+    def checkMaximumJobRequirements(self, jobResources):
+        """
+        Check if given resource requirements can be met with those available.
+
+        :param resourcesSpec (JobResources): job's resource requirements described as dictionary
+        :return: true - if job's resources requirements are less than available, false otherwise
+        """
+        if jobResources.hasNodes():
+            minNodes = jobResources.nodes.exact if jobResources.nodes.isExact() else jobResources.nodes.min
+
+            if minNodes > self.nNodes():
+                # not enough nodes
+                logging.info('Not enough nodes')
+                return False
+
+            if jobResources.hasCores():
+                minCores = jobResources.cores.exact if jobResources.cores.isExact() else jobResources.cores.min
+
+                foundNodes = 0
+                for node in self.nodes:
+                    if node.total >= minCores:
+                        foundNodes += 1
+                        if foundNodes >= minNodes:
+                            break
+
+                if foundNodes < minNodes:
+                    # not enough cores on nodes
+                    logging.info('Not enough suitable nodes')
+                    return False
+
+        if jobResources.getMinimumNumberOfCores() > self.totalCores:
+            logging.info('Not enough total cores')
+            return False
+
+        return True
 
 
     def toDict(self):

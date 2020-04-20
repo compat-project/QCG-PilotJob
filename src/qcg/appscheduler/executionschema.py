@@ -11,7 +11,7 @@ class ExecutionSchema:
     @classmethod
     def GetSchema(cls, resources, config):
         if resources.rtype not in __SCHEMAS__:
-            raise InternalError('Unknown resources type: %s' % name)
+            raise InternalError('Unknown resources type: {}'.format(resources.rtype))
 
         return __SCHEMAS__[resources.rtype](resources, config)
 
@@ -33,11 +33,16 @@ class SlurmExecution(ExecutionSchema):
         super(SlurmExecution, self).__init__(resources, config)
 
     def preprocess(self, exJob):
+        """
+        Prepare job iteration execution arguments.
+
+        :param exJob (ExecutionJob): execution job iteration data
+        """
         job_exec = exJob.jobExecution.exec
         job_args = exJob.jobExecution.args
 
         # create run configuration
-        runConfFile = os.path.join(exJob.wdPath, ".%s.runconfig" % exJob.job.name)
+        runConfFile = os.path.join(exJob.wdPath, ".%s.runconfig" % exJob.jobIteration.name)
         with open(runConfFile, 'w') as f:
             f.write("0\t%s %s\n" % (
                 job_exec,
@@ -51,19 +56,22 @@ class SlurmExecution(ExecutionSchema):
         #        exJob.modifiedArgs = [ "-n", str(exJob.ncores), "--export=NONE", "-m", "arbitrary", "--multi-prog", runConfFile ]
         #        exJob.modifiedArgs = [ "-n", str(exJob.ncores), "-m", "arbitrary", "--mem-per-cpu=0", "--slurmd-debug=verbose", "--multi-prog", runConfFile ]
 
+        if self.resources.binding:
+            core_ids = []
+            for nodeAllocation in exJob.allocation.nodeAllocations:
+                core_ids.extend([str(core) for core in nodeAllocation.cores])
+            cpu_bind = "--cpu-bind=verbose,map_cpu:{}".format(','.join(core_ids))
+#           cpu_bind = "--cpu-bind=verbose,mask_cpu:{}".format(','.join(['0x{:x}'.format(reduce(lambda x,y: x | y, [ 1 << core for core in core_ids]))])
+        else:
+            cpu_bind = "--cpu-bind=verbose,cores"
+
         exJob.jobExecution.exec = 'srun'
         exJob.jobExecution.args = [
             "-n", str(exJob.ncores),
             "-m", "arbitrary",
+            "--overcommit",
             "--mem-per-cpu=0",
-
-#            "--cpu-bind=verbose,map_cpu:{}".format(','.join([str(core) for core in exJob.allocation.nodeAllocations[0].cores])) \
-#                    if self.resources.binding else \
-#                        "--cpu-bind=verbose,cores",
-            "--cpu-bind=verbose,mask_cpu:{}".format(','.join(['0x{:x}'.format(reduce(lambda x,y: x | y, [ 1 << core for core in exJob.allocation.nodeAllocations[0].cores]))] * len(exJob.allocation.nodeAllocations[0].cores))) \
-                    if self.resources.binding else \
-                        "--cpu-bind=verbose,cores",
-#
+            cpu_bind,
             "--multi-prog" ]
 
         if exJob.jobExecution.stdin:
@@ -78,13 +86,14 @@ class SlurmExecution(ExecutionSchema):
             exJob.jobExecution.args.extend(["-e", os.path.join(exJob.wdPath, exJob.jobExecution.stderr)])
             exJob.jobExecution.stderr = None
 
-        if exJob.job.resources.wt:
-            exJob.jobExecution.args.extend(["--time", "0:{}".format(int(exJob.job.resources.wt.total_seconds()))])
+        if exJob.jobIteration.resources.wt:
+            exJob.jobExecution.args.extend(["--time", "0:{}".format(int(exJob.jobIteration.resources.wt.total_seconds()))])
 
         exJob.jobExecution.args.append(runConfFile)
 
         if self.resources.binding:
             exJob.env.update({ 'QCG_PM_CPU_SET': ','.join([str(c) for c in sum([ alloc.cores for alloc in exJob.allocation.nodeAllocations ], [])]) })
+
 
 class DirectExecution(ExecutionSchema):
     EXEC_NAME = 'direct'

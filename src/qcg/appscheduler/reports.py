@@ -10,8 +10,8 @@ class JobReport:
         self.bufferedEntries = 0
         self.bufferSize = buffer_size
 
-    def reportJob(self, job):
-        self.reportJobEntry(job, self.buffer)
+    def reportJob(self, job, iteration):
+        self.reportJobEntry(job, iteration, self.buffer)
         self.bufferedEntries += 1
 
         if self.bufferedEntries > self.bufferSize:
@@ -25,7 +25,7 @@ class JobReport:
         self.buffer = io.StringIO()
         self.bufferedEntries = 0
 
-    def reportJobEntry(self, job, ostream):
+    def reportJobEntry(self, job, iteration, ostream):
         raise NotImplementedError()
 
 
@@ -36,12 +36,18 @@ class TextFileReport(JobReport):
         super(TextFileReport, self).__init__(report_file)
         logging.info('initializing TEXT job report')
 
-    def reportJobEntry(self, job, ostream):
-        ostream.write("%s (%s) %s\n\t%s\n\t%s\n" % (job.name, job.strState(), job.messages or '',
+    def reportJobEntry(self, job, iteration, ostream):
+        jname = job.getName(iteration)
+        jstate = job.getStateStr(iteration)
+        jmessages = job.getMessages(iteration)
+        jhistory = job.getHistory(iteration)
+        jruntime = job.getRuntime(iteration)
+
+        ostream.write("%s (%s) %s\n\t%s\n\t%s\n" % (jname, jstate, jmessages or '',
                                               "\n\t".join(
-                                                  ["{}: {}".format(str(en[1]), en[0].name) for en in job.history]),
+                                                  ["{}: {}".format(str(en[1]), en[0].name) for en in jhistory]),
                                               "\n\t".join(
-                                                  ["{}: {}".format(k, v) for k, v in job.runtime.items()])))
+                                                  ["{}: {}".format(k, v) for k, v in jruntime.items()])))
 
 
 class JsonFileReport(JobReport):
@@ -51,21 +57,29 @@ class JsonFileReport(JobReport):
         super(JsonFileReport, self).__init__(report_file)
         logging.info('initializing JSON job report')
 
-    def reportJobEntry(self, job, ostream):
+    def reportJobEntry(self, job, iteration, ostream):
+        jname = job.getName(iteration)
+        jstate = job.getStateStr(iteration)
+        jmessages = job.getMessages(iteration)
+        jhistory = job.getHistory(iteration)
+        jruntime = job.getRuntime(iteration)
+
         data = {
-            'name': job.name,
-            'state': job.strState(),
-            'history': [ { 'state': e[0].name, 'date': e[1].isoformat() } for e in job.history ],
-            'runtime': { k: v for k, v in job.runtime.items() },
-            'execution': job.execution.toDict(),
-            'resources': job.resources.toDict()
+            'name': jname,
+            'state': jstate,
+            'history': [ { 'state': e[0].name, 'date': e[1].isoformat() } for e in jhistory ],
+            'runtime': { k: v for k, v in jruntime.items() },
         }
-        if job.messages:
-            data['messages'] = job.messages
-        if job.files:
-            data['files'] = job.files.toDict()
-        if job.dependencies:
-            data['dependencies'] = job.dependencies.toDict()
+
+        if iteration is None:
+            data['execution'] = job.execution.toDict()
+            data['resources'] = job.resources.toDict()
+
+            if job.dependencies:
+                data['dependencies'] = job.dependencies.toDict()
+
+        if jmessages:
+            data['messages'] = jmessages
 
         ostream.write(json.dumps(data, separators=(',', ': ')) + '\n')
 

@@ -116,7 +116,7 @@ class Jobs:
         if 'name' not in stdJob:
             raise InvalidJobDescriptionError('Missing "name" key')
 
-        if 'execution' not in stdJob or 'exec' not in stdJob['execution']:
+        if 'execution' not in stdJob or ('exec' not in stdJob['execution'] and 'script' not in stdJob['execution']):
             raise InvalidJobDescriptionError('Missing "execution/exec" key')
 
         if stdJob['name'] in self.__list:

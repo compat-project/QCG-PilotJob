@@ -1,5 +1,7 @@
 import json
 import re
+import logging
+
 from datetime import datetime, timedelta
 from enum import Enum
 from qcg.appscheduler.resources import CRType
@@ -23,12 +25,16 @@ class JobState(Enum):
 
 
 class JobExecution:
-    def __init__(self, exec, args=None, env=None, wd=None, \
+    def __init__(self, exec=None, args=None, env=None, script=None, wd=None, \
                  stdin=None, stdout=None, stderr=None, modules=None, venv=None):
-        if exec is None:
-            raise IllegalJobDescription("Job execution not defined")
+        if all((not exec, not script)):
+            raise IllegalJobDescription("Job execution (exec or script) not defined")
+
+        if script and (exec or args or env):
+            raise IllegalJobDescription("Job script and exec or args or env defined")
 
         self.exec = exec
+        self.script = script
 
         self.args = []
         self.env = {}
@@ -57,7 +63,7 @@ class JobExecution:
         self.wd = wd
 
     def toDict(self):
-        result = {'exec': self.exec, 'args': self.args, 'env': self.env}
+        result = {'exec': self.exec, 'args': self.args, 'env': self.env, 'script': self.script}
         if self.wd is not None:
             result['wd'] = self.wd
 
@@ -83,10 +89,10 @@ class JobExecution:
 
 
 class ResourceSize:
-    def __init__(self, exact=None, min=None, max=None):
-        if exact is not None and (min is not None or max is not None):
+    def __init__(self, exact=None, min=None, max=None, scheduler=None):
+        if exact is not None and (min is not None or max is not None or scheduler is not None):
             raise IllegalResourceRequirements(
-                "Exact number of resources defined with min/max number")
+                "Exact number of resources defined with min/max/scheduler")
 
         if max is not None and min is not None and min > max:
             raise IllegalResourceRequirements("Maximum number greater than minimal")
@@ -100,6 +106,7 @@ class ResourceSize:
         self.__exact = exact
         self.__min = min
         self.__max = max
+        self.__scheduler = scheduler
 
     @property
     def exact(self):
@@ -112,6 +119,10 @@ class ResourceSize:
     @property
     def max(self):
         return self.__max
+
+    @property
+    def scheduler(self):
+        return self.__scheduler
 
     @property
     def range(self):
@@ -132,6 +143,9 @@ class ResourceSize:
         if self.__max is not None:
             result['max'] = self.__max
 
+        if self.__scheduler is not None:
+            result['scheduler'] = self.__scheduler
+
         return result
 
     def toJSON(self):
@@ -144,10 +158,7 @@ class JobResources:
     def __parseWt(self, wt):
         parts = None
 
-        try:
-            parts = self.__wtRegex.match(wt)
-        except:
-            raise IllegalResourceRequirements("Wrong wall time format")
+        parts = self.__wtRegex.match(wt)
 
         if not parts:
             raise IllegalResourceRequirements("Wrong wall time format")
@@ -159,7 +170,13 @@ class JobResources:
                 if param:
                     timeParams[name] = int(param)
 
-            return timedelta(**timeParams)
+            td = timedelta(**timeParams)
+            if td.total_seconds() == 0:
+                raise IllegalResourceRequirements("Wall time must be greater than 0")
+
+            return td
+        except IllegalResourceRequirements:
+            raise
         except:
             raise IllegalResourceRequirements("Wrong wall time format")
 
@@ -205,7 +222,7 @@ class JobResources:
         * if numNodes > 1, then numCores relates to each of the node, so total number of
                 required cores will be a product of numNodes and numCores
         * nodeCrs relates to each node available consumable resources
-        
+
         Args:
             numCores - number of cores, either as exact number or as a range
             numNodes - number of nodes, either as exact number of as a range
@@ -237,7 +254,7 @@ class JobResources:
             self.wt = None
 
         self.nodeCrs = None
-        if nodeCrs:
+        if not nodeCrs is None:
             if not isinstance(nodeCrs, dict):
                 raise IllegalJobDescription("Wrong definition of Consumable Resources {} (must be a dictionary)".format(type(nodeCrs).__name__))
 
@@ -267,6 +284,22 @@ class JobResources:
     def crs(self):
         return self.nodeCrs
 
+    def getMinimumNumberOfCores(self):
+        minCores = 1
+        if self.hasCores():
+            if self.cores.isExact():
+                minCores = self.cores.exact
+            else:
+                minCores = self.cores.range[0]
+
+        if self.hasNodes():
+            if self.nodes.isExact():
+                minCores = minCores * self.nodes.exact
+            else:
+                minCores = minCores * self.nodes.range[0]
+
+        return minCores
+
     def toDict(self):
         result = {}
         if self.hasCores():
@@ -284,59 +317,21 @@ class JobResources:
         return json.dumps(self.toDict(), indent=2)
 
 
-class JobFiles:
-    def __validateFileList(self, fileList, errorMessage):
-        if not isinstance(fileList, list):
-            raise IllegalJobDescription(errorMessage)
-
-        for file in fileList:
-            if not isinstance(file, str) and not isinstance(file, list):
-                raise IllegalJobDescription(errorMessage)
-
-            if isinstance(file, list):
-                if (len(file) < 1 or len(file) > 2):
-                    raise IllegalJobDescription(errorMessage)
-
-                if not isinstance(file[0], str) or (len(file) > 1 and not isinstance(file[1], str)):
-                    raise IllegalJobDescription(errorMessage)
-
-    def __init__(self, stageIn=None, stageOut=None):
-        self.stageIn = []
-        self.stageOut = []
-
-        if stageIn is not None:
-            self.__validateFileList(stageIn, "Stage in element of array must be an name or 2-element touple")
-            self.stageIn = stageIn
-
-        if stageOut is not None:
-            self.__validateFileList(stageOut, "Stage out element of array must be an name or 2-element touple")
-            self.stageOut = stageOut
-
-    def toDict(self):
-        return self.__dict__
-
-    def toJSON(self):
-        return json.dumps(self.toDict(), indent=2)
-
-
 class JobDependencies:
     def __validateJobList(self, jobList, errorMessage):
-        if not isinstance(jobList, dict):
+        if not isinstance(jobList, list):
             raise IllegalJobDescription(errorMessage)
 
-        for jobName in jobList.get('after'):
+        for jobName in jobList:
             if not isinstance(jobName, str):
                 raise IllegalJobDescription(errorMessage)
 
-    def __init__(self, jobList=None):
+    def __init__(self, after=None):
         self.after = []
 
-        if jobList is not None:
-            if isinstance(jobList, str):
-                self.after = [jobList]
-            else:
-                self.__validateJobList(jobList, "Dependency task's list must be an array of job names")
-                self.after = jobList['after']
+        if after is not None:
+            self.__validateJobList(after, "Dependency task's list must be an array of job names")
+            self.after = after
 
     def hasDependencies(self):
         return len(self.after) > 0
@@ -348,10 +343,85 @@ class JobDependencies:
         return json.dumps(self.toDict(), indent=2)
 
 
+class JobIteration:
+    def __init__(self, start=None, stop=None):
+        if stop is None:
+            raise IllegalJobDescription("Missing stop iteration value")
+
+        if start is None:
+            start = 0
+
+        if start >= stop:
+            raise IllegalJobDescription("Job iteration stop greater or equal than start")
+
+        self.start = start
+        self.stop = stop
+
+    def inRange(self, index):
+        return index >= self.start and index < self.stop
+
+    def iterations(self):
+        return self.stop - self.start
+
+    def toDict(self):
+        return self.__dict__
+
+    def toJSON(self):
+        return json.dumps(self.toDict(), indent=2)
+
+    def __str__(self):
+        return "{}-{}".format(self.start, self.stop)
+
+
+class SubJobState:
+    def __init__(self):
+        self.__state = JobState.QUEUED
+        self.__history = []
+        self.__messages = None
+        self.__runtime = {}
+
+    def getState(self):
+        return self.__state
+
+    def setState(self, state, errorMsg=None):
+        assert isinstance(state, JobState), "Wrong state type"
+
+        self.__state = state
+        self.__history.append((state, datetime.now()))
+        if errorMsg:
+            self.appendMessage(errorMsg)
+
+    def appendRuntime(self, data):
+        self.__runtime.update(data)
+
+    def getHistory(self):
+        return self.__history
+
+    def getMessages(self):
+        return self.__messages
+
+    def getRuntime(self):
+        return self.__runtime
+
+    def appendMessage(self, msg):
+        if self.__messages is None:
+            self.__messages = msg
+        else:
+            self.__messages = '\n'.join([self.__messages, msg])
+
+
 class Job:
-    def __init__(self, name, execution, resources, files=None, dependencies=None):
+    @staticmethod
+    def validate_jobname(jobname):
+        return not ':' in jobname
+
+    def __init__(self, name, execution, resources, iteration=None, dependencies=None, attributes=None):
         if name is None:
             raise IllegalJobDescription("Job name not defined")
+
+        if not Job.validate_jobname(name):
+            raise IllegalJobDescription("Invalid job name {}".format(name))
+
         self.__name = name
 
         if isinstance(execution, JobExecution):
@@ -368,28 +438,47 @@ class Job:
         else:
             raise IllegalJobDescription("Job resources not defined or wrong type")
 
-        if isinstance(files, JobFiles) or files is None:
-            self.__files = files
-        elif isinstance(files, dict):
-            self.__files = JobFiles(**files)
+        if isinstance(iteration, JobIteration) or iteration is None:
+            self.__iteration = iteration
+        elif isinstance(iteration, dict):
+            try:
+                self.__iteration = JobIteration(**iteration)
+            except IllegalJobDescription:
+                raise
+            except:
+                raise IllegalJobDescription("Job iteration wrong specification")
         else:
-            raise IllegalJobDescription("Job files wrong type")
+            raise IllegalJobDescription("Job iteration wrong type")
 
         if isinstance(dependencies, JobDependencies) or dependencies is None:
             self.dependencies = dependencies
         elif isinstance(dependencies, dict):
-            self.dependencies = JobDependencies(dependencies)
+            try:
+                self.dependencies = JobDependencies(**dependencies)
+            except IllegalJobDescription:
+                raise
+            except:
+                raise IllegalJobDescription("Job dependencies wrong specification")
         else:
             raise IllegalJobDescription("Job dependencies wrong type")
 
+        if not attributes is None and not isinstance(attributes, dict):
+            raise IllegalJobDescription("Job attributes must be dictionary")
+        self.attributes = attributes
+
+        if self.__iteration:
+            self.__subjobs = [ SubJobState() for i in range(self.__iteration.start, self.__iteration.stop)]
+            self.__subjobs_notFinished = self.__iteration.iterations()
+            self.__subjobs_failed = 0
         self.__history = []
 
-        self.runtime = {}
+        self.__runtime = {}
 
         # history must be initialized before
-        self.state = JobState.QUEUED
+        self.__state = None
+        self.setState(JobState.QUEUED)
 
-        self.messages = None
+        self.__messages = None
 
         # position in scheduling queue - None if not set
         self.__queuePos = None
@@ -397,6 +486,9 @@ class Job:
     @property
     def name(self):
         return self.__name
+
+    def getName(self, iteration=None):
+        return self.__name if iteration is None else '{}:{}'.format(self.__name, iteration)
 
     @property
     def execution(self):
@@ -406,38 +498,92 @@ class Job:
     def resources(self):
         return self.__resources
 
-    def hasFiles(self):
-        return self.__files is not None
+    def getHistory(self, iteration=None):
+        if iteration is None:
+            return self.__history
+        else:
+            return self.__getSubJob(iteration).getHistory()
 
-    @property
-    def files(self):
-        return self.__files
+    def getMessages(self, iteration=None):
+        if iteration is None:
+            return self.__messages
+        else:
+            return self.__getSubJob(iteration).getMessages()
 
-    @property
-    def state(self):
-        return self.__state
+    def getRuntime(self, iteration=None):
+        if iteration is None:
+            return self.__runtime
+        else:
+            return self.__getSubJob(iteration).getRuntime()
 
-    def strState(self):
-        return self.__state.name
+    def isIterative(self):
+        return self.__iteration is not None
 
-    @property
-    def history(self):
-        return self.__history
+    def getIteration(self):
+        return self.__iteration
 
-    @state.setter
-    def state(self, state):
+    def getState(self, iteration=None):
+        if iteration is None:
+            return self.__state
+        else:
+            return self.__getSubJob(iteration).getState()
+
+    def getStateStr(self, iteration=None):
+        return self.getState(iteration).name
+
+    def __getSubJob(self, iteration):
+        return self.__subjobs[iteration - self.__iteration.start]
+
+    def setState(self, state, iteration=None, errorMsg=None):
+        """
+        Change job/iteration state.
+
+        :param state: the new state
+        :param iteration: iteration index
+        :param errorMsg: optional error message description
+
+        :return: True if job iteration status change triggered job status change (for example the last iteration job
+          finished, so the whole job also finished)
+                 False - the parent job state has not been changed
+        """
         assert isinstance(state, JobState), "Wrong state type"
-        self.__history.append((state, datetime.now()))
-        self.__state = state
+
+        logging.debug('job {} iteration {} status changed to {} (final ? {})'.format(self.__name, iteration, state.name,
+                                                                             state.isFinished()))
+
+        if not iteration is None:
+            self.__getSubJob(iteration).setState(state, errorMsg)
+
+            if state.isFinished():
+                self.__subjobs_notFinished = self.__subjobs_notFinished - 1
+
+                if state == JobState.FAILED or state == JobState.OMITTED or state == JobState.CANCELED:
+                    self.__subjobs_failed += 1
+
+                logging.debug('currently not finished subjobs {}, failed {}'.format(self.__subjobs_notFinished,
+                                                                                    self.__subjobs_failed))
+
+                if self.__subjobs_notFinished == 0 and not self.__state.isFinished():
+                    # all subjobs finished - change whole job state
+                    final_state = JobState.SUCCEED if self.__subjobs_failed == 0 else JobState.FAILED
+                    self.setState(final_state)
+                    return final_state
+        else:
+            self.__state = state
+            self.__history.append((state, datetime.now()))
+            if errorMsg:
+                self.appendMessage(errorMsg)
+
+        return None
 
     def hasDependencies(self):
-        return self.dependencies is not None and self.dependencies.hasDependencies()
+            return self.dependencies is not None and self.dependencies.hasDependencies()
 
     def appendMessage(self, msg):
-        if self.messages is None:
-            self.messages = msg
+        if self.__messages is None:
+            self.__messages = msg
         else:
-            self.messages = '\n'.join([self.messages, msg])
+            self.__messages = '\n'.join([self.__messages, msg])
 
     def getQueuePos(self):
         return self.__queuePos
@@ -448,8 +594,11 @@ class Job:
     def clearQueuePos(self):
         self.__queuePos = None
 
-    def appendRuntime(self, data):
-        self.runtime.update(data)
+    def appendRuntime(self, data, iteration):
+        if not iteration is None:
+            self.__getSubJob(iteration).appendRuntime(data)
+        else:
+            self.__runtime.update(data)
 
     def toDict(self):
         result = {
@@ -457,11 +606,14 @@ class Job:
             'execution': self.__execution.toDict(),
             'resources': self.__resources.toDict()}
 
-        if self.__files is not None:
-            result['files'] = self.__files.toDict()
+        if not self.__iteration is None:
+            result['iteration'] = self.__iteration.toDict()
 
-        if self.dependencies is not None:
+        if not self.dependencies is None:
             result['dependencies'] = self.dependencies.toDict()
+
+        if not self.attributes is None:
+            result['attributes'] = self.attributes
 
         return result
 
@@ -472,6 +624,10 @@ class Job:
 class JobList:
     def __init__(self):
         self.__jmap = {}
+
+    def parse_jobname(self, jobname):
+        parts = jobname.split(':', 1)
+        return parts[0], parts[1] if len(parts) > 1 else None
 
     def add(self, job):
         assert isinstance(job, Job), "Wrong job type '%s'" % (type(job).__name__)
