@@ -305,6 +305,7 @@ class Agent:
         out_socket = self.context.socket(zmq.REQ)
         out_socket.setsockopt(zmq.LINGER, 0)
 
+        logging.debug("sending finishing message")
         try:
             out_socket.connect(self.remote_address)
 
@@ -313,6 +314,7 @@ class Agent:
                 'date': datetime.now().isoformat(),
                 'agent_id': self.agent_id,
                 'local_address': self.local_address })
+            logging.debug("finishing message sent, waiting for confirmation")
             msg = await out_socket.recv_json()
 
             logging.debug('received finishing message confirmation: {}'.format(str(msg)))
@@ -341,9 +343,13 @@ if __name__ == '__main__':
             sys.exit(1)
 
     logging.basicConfig(
-            level=logging.INFO,
+            level=logging.DEBUG,
+#            level=logging.INFO,
             filename=join(options.get('auxDir', '.'), 'nl-agent-{}.log'.format(agent_id)),
             format='%(asctime)-15s: %(message)s')
+
+    if asyncio.get_event_loop() and asyncio.get_event_loop().is_closed():
+        asyncio.set_event_loop(asyncio.new_event_loop())
 
     agent = Agent(agent_id, options)
 
@@ -351,3 +357,4 @@ if __name__ == '__main__':
     asyncio.get_event_loop().close()
 
     logging.info('node agent {} exiting'.format(agent_id))
+    sys.exit(0)
