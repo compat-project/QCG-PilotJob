@@ -7,72 +7,15 @@ import asyncio
 import time
 from shutil import rmtree
 import sys
-from subprocess import run, PIPE, Popen
 
-import qcg
 from qcg.appscheduler.service import QCGPMService
 from qcg.appscheduler.slurmres import in_slurm_allocation, get_num_slurm_nodes
-from qcg.appscheduler.parseres import get_resources
-from qcg.appscheduler.resources import ResourcesType
 from qcg.appscheduler.executionjob import LauncherExecutionJob
 from qcg.appscheduler.joblist import Job, JobExecution, JobResources, ResourceSize, JobDependencies
-from qcg.appscheduler.tests.utils import save_reqs_to_file, check_job_status_in_json
+from qcg.appscheduler.tests.utils import save_reqs_to_file, check_job_status_in_json, get_slurm_resources, \
+    get_slurm_resources_binded, set_pythonpath_to_qcg_module
 
-SHARED_PATH = '/data'
-
-
-def get_allocation_data():
-    slurm_job_id = environ.get('SLURM_JOB_ID', None)
-    print('slurm job id: {}'.format(slurm_job_id))
-    out_p = run(['scontrol', 'show', 'job', slurm_job_id], shell=False, stdout=PIPE, stderr=PIPE)
-    out_p.check_returncode()
-
-    raw_data = bytes.decode(out_p.stdout).replace('\n', ' ')
-    result = {}
-    for element in raw_data.split(' '):
-        elements = element.split('=', 1)
-        result[elements[0]] = elements[1] if len(elements) > 1 else None
-
-    return result
-
-def set_pythonpath_to_qcg_module():
-    # set PYTHONPATH to test sources
-    qcg_module_path = dirname(dirname(qcg.__file__))
-    print("path to the qcg.appscheduler module: {}".format(qcg_module_path))
-
-    # in case where qcg.appscheduler are not installed in library, we must set PYTHONPATH to run a
-    # launcher agnets on other nodes
-    if environ.get('PYTHONPATH', None):
-        environ['PYTHONPATH'] = ':'.join([environ['PYTHONPATH'], qcg_module_path])
-    else:
-        environ['PYTHONPATH'] = qcg_module_path
-
-
-def get_slurm_resources():
-    # get # of nodes from allocation
-    allocation = get_allocation_data()
-
-    # default config
-    config = { }
-
-    resources = get_resources(config)
-    assert not resources is None
-    assert all((resources.rtype == ResourcesType.SLURM,
-                resources.totalNodes == int(allocation.get('NumNodes', '-1')),
-                resources.totalCores == int(allocation.get('NumCPUs', '-1')))), \
-        'resources: {}, allocation: {}'.format(str(resources), str(allocation))
-
-    assert all((resources.freeCores == resources.totalCores,
-                resources.usedCores == 0,
-                resources.totalNodes == len(resources.nodes)))
-
-    return resources, allocation
-
-def get_slurm_resources_binded():
-    resources, allocation = get_slurm_resources()
-
-    assert resources.binding
-    return resources, allocation
+from qcg.appscheduler.tests.utils import SHARED_PATH
 
 
 def test_slurmenv_simple_resources():
@@ -139,7 +82,7 @@ def test_slurmenv_launcher_agents():
 
         finally:
             asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(LauncherExecutionJob.StopAgents()))
-            time.sleep(2)
+            time.sleep(1)
 
             tasks = asyncio.Task.all_tasks(asyncio.get_event_loop())
             print('#{} all tasks in event loop before closing'.format(len(tasks)))
@@ -154,7 +97,7 @@ def test_slurmenv_launcher_agents():
 
             asyncio.get_event_loop().close()
     finally:
-#        rmtree(tmpdir)
+        rmtree(tmpdir)
         pass
 
 
@@ -214,7 +157,7 @@ def test_slurmenv_simple_job():
     with pytest.raises(ValueError):
         check_job_status_in_json([jobName + 'xxx'], workdir=tmpdir, dest_state='SUCCEED')
 
-#    rmtree(tmpdir)
+    rmtree(tmpdir)
 
 
 def test_slurmenv_exceed_nodes():
@@ -263,7 +206,47 @@ def test_slurmenv_exceed_nodes():
     check_job_status_in_json([ jobName ], workdir=tmpdir, dest_state='FAILED')
     assert not isdir(abspath(join(tmpdir, 'date.sandbox')))
 
-#    rmtree(tmpdir)
+    rmtree(tmpdir)
+
+
+def test_slurmenv_exceed_cores():
+    if not in_slurm_allocation() or get_num_slurm_nodes() < 2:
+        pytest.skip('test not run in slurm allocation or allocation is smaller than 2 nodes')
+
+    resources, allocation = get_slurm_resources_binded()
+    resources_node_names = set(n.name for n in resources.nodes)
+
+    set_pythonpath_to_qcg_module()
+    tmpdir = str(tempfile.mkdtemp(dir=SHARED_PATH))
+
+    file_path = join(tmpdir, 'jobs.json')
+    print('tmpdir: {}'.format(tmpdir))
+
+    jobName = 'mdate_failed'
+    jobs = [job.toDict() for job in [
+        Job(jobName,
+            JobExecution(
+                'date',
+                wd = abspath(join(tmpdir, 'date.sandbox')),
+                stdout = 'date.out',
+                stderr = 'date.err'
+            ),
+            JobResources(numCores=ResourceSize(resources.totalCores + 1))
+            )
+    ] ]
+    reqs = [ { 'request': 'submit', 'jobs': jobs },
+             { 'request': 'control', 'command': 'finishAfterAllTasksDone' } ]
+    save_reqs_to_file(reqs, file_path)
+    print('jobs saved to file_path: {}'.format(str(file_path)))
+
+    sys.argv = [ 'QCG-PilotJob', '--log', 'debug', '--file', '--file-path', str(file_path), '--wd', tmpdir,
+                 '--report-format', 'json']
+    QCGPMService().start()
+
+    check_job_status_in_json([ jobName ], workdir=tmpdir, dest_state='FAILED')
+    assert not isdir(abspath(join(tmpdir, 'date.sandbox')))
+
+    rmtree(tmpdir)
 
 
 def test_slurmenv_simple_script():
@@ -320,5 +303,292 @@ def test_slurmenv_simple_script():
     with pytest.raises(ValueError):
         check_job_status_in_json([jobName + 'xxx'], workdir=tmpdir, dest_state='SUCCEED')
 
-#    rmtree(tmpdir)
+    rmtree(tmpdir)
+
+
+def test_slurmenv_many_cores():
+    resources, allocation = get_slurm_resources_binded()
+    resources_node_names = set(n.name for n in resources.nodes)
+
+    set_pythonpath_to_qcg_module()
+    tmpdir = str(tempfile.mkdtemp(dir=SHARED_PATH))
+
+    file_path = join(tmpdir, 'jobs.json')
+    print('tmpdir: {}'.format(tmpdir))
+
+    jobName = 'hostname'
+    jobwdir_base = 'hostname.sandbox'
+    cores_num = 2
+    jobs = [job.toDict() for job in [
+        Job(jobName,
+            JobExecution(
+                exec = 'mpirun',
+                args = [ '--allow-run-as-root', 'hostname' ],
+                wd = abspath(join(tmpdir, jobwdir_base)),
+                stdout = 'hostname.out',
+                stderr = 'hostname.err',
+                modules = [ 'mpi/openmpi-x86_64' ]
+            ),
+            JobResources(numCores=ResourceSize(cores_num) )
+            )
+    ] ]
+    reqs = [ { 'request': 'submit', 'jobs': jobs },
+             { 'request': 'control', 'command': 'finishAfterAllTasksDone' } ]
+    save_reqs_to_file(reqs, file_path)
+    print('jobs saved to file_path: {}'.format(str(file_path)))
+
+    sys.argv = [ 'QCG-PilotJob', '--log', 'debug', '--file', '--file-path', str(file_path), '--wd', tmpdir,
+                 '--report-format', 'json']
+    QCGPMService().start()
+
+    jobEntries = check_job_status_in_json([ jobName ], workdir=tmpdir, dest_state='SUCCEED')
+    assert all((isdir(abspath(join(tmpdir, jobwdir_base))),
+                exists(join(abspath(join(tmpdir, jobwdir_base)), 'hostname.out')),
+                exists(join(abspath(join(tmpdir, jobwdir_base)), 'hostname.err')),
+                stat(join(abspath(join(tmpdir, jobwdir_base)), 'hostname.out')).st_size > 0))
+
+    job_nodes = []
+    allocated_cores = 0
+    for jname, jentry in jobEntries.items():
+        assert all(('runtime' in jentry, 'allocation' in jentry.get('runtime', {})))
+
+        jalloc = jentry['runtime']['allocation']
+        for jalloc_node in jalloc.split(','):
+            node_name = jalloc_node[:jalloc_node.index('[')]
+            job_nodes.append(node_name)
+            print('{} in available nodes ({})'.format(node_name, ','.join(resources_node_names)))
+            assert node_name in resources_node_names, '{} not in nodes ({}'.format(
+                node_name, ','.join(resources_node_names))
+
+            ncores = len(jalloc_node[jalloc_node.index('[') + 1:-1].split(':'))
+            allocated_cores += ncores
+    assert allocated_cores == cores_num, allocated_cores
+
+    # check if hostname is in stdout in two lines
+    with open(abspath(join(tmpdir, join(jobwdir_base, 'hostname.out'))), 'rt') as stdout_file:
+        stdout_content = [line.rstrip() for line in stdout_file.readlines()]
+    assert len(stdout_content) == cores_num, str(stdout_content)
+    assert all(hostname in job_nodes for hostname in stdout_content), str(stdout_content)
+
+    with pytest.raises(ValueError):
+        check_job_status_in_json([jobName + 'xxx'], workdir=tmpdir, dest_state='SUCCEED')
+
+    rmtree(tmpdir)
+
+def test_slurmenv_many_nodes():
+    resources, allocation = get_slurm_resources_binded()
+    resources_node_names = set(n.name for n in resources.nodes)
+
+    set_pythonpath_to_qcg_module()
+    tmpdir = str(tempfile.mkdtemp(dir=SHARED_PATH))
+
+    file_path = join(tmpdir, 'jobs.json')
+    print('tmpdir: {}'.format(tmpdir))
+
+    jobName = 'hostname'
+    jobwdir_base = 'hostname.sandbox'
+    cores_num = 1
+    nodes_num = 2
+    jobs = [job.toDict() for job in [
+        Job(jobName,
+            JobExecution(
+                exec = 'mpirun',
+                args = [ '--allow-run-as-root', 'hostname' ],
+                wd = abspath(join(tmpdir, jobwdir_base)),
+                stdout = 'hostname.out',
+                stderr = 'hostname.err',
+                modules = [ 'mpi/openmpi-x86_64' ]
+            ),
+            JobResources(numCores=ResourceSize(cores_num), numNodes=ResourceSize(nodes_num))
+            )
+    ] ]
+    reqs = [ { 'request': 'submit', 'jobs': jobs },
+             { 'request': 'control', 'command': 'finishAfterAllTasksDone' } ]
+    save_reqs_to_file(reqs, file_path)
+    print('jobs saved to file_path: {}'.format(str(file_path)))
+
+    sys.argv = [ 'QCG-PilotJob', '--log', 'debug', '--file', '--file-path', str(file_path), '--wd', tmpdir,
+                 '--report-format', 'json']
+    QCGPMService().start()
+
+    jobEntries = check_job_status_in_json([ jobName ], workdir=tmpdir, dest_state='SUCCEED')
+    assert all((isdir(abspath(join(tmpdir, jobwdir_base))),
+                exists(join(abspath(join(tmpdir, jobwdir_base)), 'hostname.out')),
+                exists(join(abspath(join(tmpdir, jobwdir_base)), 'hostname.err')),
+                stat(join(abspath(join(tmpdir, jobwdir_base)), 'hostname.out')).st_size > 0))
+
+    job_nodes = []
+    allocated_cores = 0
+    for jname, jentry in jobEntries.items():
+        assert all(('runtime' in jentry, 'allocation' in jentry.get('runtime', {})))
+
+        jalloc = jentry['runtime']['allocation']
+        for jalloc_node in jalloc.split(','):
+            node_name = jalloc_node[:jalloc_node.index('[')]
+            job_nodes.append(node_name)
+            print('{} in available nodes ({})'.format(node_name, ','.join(resources_node_names)))
+            assert node_name in resources_node_names, '{} not in nodes ({}'.format(
+                node_name, ','.join(resources_node_names))
+
+            ncores = len(jalloc_node[jalloc_node.index('[') + 1:-1].split(':'))
+            allocated_cores += ncores
+    assert len(job_nodes) == nodes_num, str(job_nodes)
+    assert allocated_cores == nodes_num * cores_num, allocated_cores
+
+
+    # check if hostname is in stdout in two lines
+    with open(abspath(join(tmpdir, join(jobwdir_base, 'hostname.out'))), 'rt') as stdout_file:
+        stdout_content = [line.rstrip() for line in stdout_file.readlines()]
+    assert len(stdout_content) == nodes_num * cores_num, str(stdout_content)
+    assert all(hostname in job_nodes for hostname in stdout_content), str(stdout_content)
+
+    with pytest.raises(ValueError):
+        check_job_status_in_json([jobName + 'xxx'], workdir=tmpdir, dest_state='SUCCEED')
+
+    rmtree(tmpdir)
+
+
+def test_slurmenv_many_nodes_no_cores():
+    resources, allocation = get_slurm_resources_binded()
+    resources_node_names = set(n.name for n in resources.nodes)
+
+    set_pythonpath_to_qcg_module()
+    tmpdir = str(tempfile.mkdtemp(dir=SHARED_PATH))
+
+    file_path = join(tmpdir, 'jobs.json')
+    print('tmpdir: {}'.format(tmpdir))
+
+    jobName = 'hostname'
+    jobwdir_base = 'hostname.sandbox'
+    nodes_num = 2
+    jobs = [job.toDict() for job in [
+        Job(jobName,
+            JobExecution(
+                exec = 'mpirun',
+                args = [ '--allow-run-as-root', 'hostname' ],
+                wd = abspath(join(tmpdir, jobwdir_base)),
+                stdout = 'hostname.out',
+                stderr = 'hostname.err',
+                modules = [ 'mpi/openmpi-x86_64' ]
+            ),
+            JobResources(numNodes=ResourceSize(nodes_num))
+            )
+    ] ]
+    reqs = [ { 'request': 'submit', 'jobs': jobs },
+             { 'request': 'control', 'command': 'finishAfterAllTasksDone' } ]
+    save_reqs_to_file(reqs, file_path)
+    print('jobs saved to file_path: {}'.format(str(file_path)))
+
+    sys.argv = [ 'QCG-PilotJob', '--log', 'debug', '--file', '--file-path', str(file_path), '--wd', tmpdir,
+                 '--report-format', 'json']
+    QCGPMService().start()
+
+    jobEntries = check_job_status_in_json([ jobName ], workdir=tmpdir, dest_state='SUCCEED')
+    assert all((isdir(abspath(join(tmpdir, jobwdir_base))),
+                exists(join(abspath(join(tmpdir, jobwdir_base)), 'hostname.out')),
+                exists(join(abspath(join(tmpdir, jobwdir_base)), 'hostname.err')),
+                stat(join(abspath(join(tmpdir, jobwdir_base)), 'hostname.out')).st_size > 0))
+
+    job_nodes = []
+    allocated_cores = 0
+    for jname, jentry in jobEntries.items():
+        assert all(('runtime' in jentry, 'allocation' in jentry.get('runtime', {})))
+
+        jalloc = jentry['runtime']['allocation']
+        for jalloc_node in jalloc.split(','):
+            node_name = jalloc_node[:jalloc_node.index('[')]
+            job_nodes.append(node_name)
+            print('{} in available nodes ({})'.format(node_name, ','.join(resources_node_names)))
+            assert node_name in resources_node_names, '{} not in nodes ({}'.format(
+                node_name, ','.join(resources_node_names))
+
+            ncores = len(jalloc_node[jalloc_node.index('[') + 1:-1].split(':'))
+            allocated_cores += ncores
+    assert len(job_nodes) == nodes_num, str(job_nodes)
+    assert allocated_cores > nodes_num, allocated_cores
+
+    # check if hostname is in stdout in two lines
+    with open(abspath(join(tmpdir, join(jobwdir_base, 'hostname.out'))), 'rt') as stdout_file:
+        stdout_content = [line.rstrip() for line in stdout_file.readlines()]
+    assert len(stdout_content) == allocated_cores, str(stdout_content)
+    assert all(hostname in job_nodes for hostname in stdout_content), str(stdout_content)
+
+    with pytest.raises(ValueError):
+        check_job_status_in_json([jobName + 'xxx'], workdir=tmpdir, dest_state='SUCCEED')
+
+    rmtree(tmpdir)
+
+
+def test_slurmenv_many_nodes_many_cores():
+    resources, allocation = get_slurm_resources_binded()
+    resources_node_names = set(n.name for n in resources.nodes)
+
+    set_pythonpath_to_qcg_module()
+    tmpdir = str(tempfile.mkdtemp(dir=SHARED_PATH))
+
+    file_path = join(tmpdir, 'jobs.json')
+    print('tmpdir: {}'.format(tmpdir))
+
+    jobName = 'hostname'
+    jobwdir_base = 'hostname.sandbox'
+    cores_num = resources.nodes[0].free
+    nodes_num = resources.totalNodes
+    jobs = [job.toDict() for job in [
+        Job(jobName,
+            JobExecution(
+                exec = 'mpirun',
+                args = [ '--allow-run-as-root', 'hostname' ],
+                wd = abspath(join(tmpdir, jobwdir_base)),
+                stdout = 'hostname.out',
+                stderr = 'hostname.err',
+                modules = [ 'mpi/openmpi-x86_64' ]
+            ),
+            JobResources(numCores=ResourceSize(cores_num), numNodes=ResourceSize(nodes_num))
+            )
+    ] ]
+    reqs = [ { 'request': 'submit', 'jobs': jobs },
+             { 'request': 'control', 'command': 'finishAfterAllTasksDone' } ]
+    save_reqs_to_file(reqs, file_path)
+    print('jobs saved to file_path: {}'.format(str(file_path)))
+
+    sys.argv = [ 'QCG-PilotJob', '--log', 'debug', '--file', '--file-path', str(file_path), '--wd', tmpdir,
+                 '--report-format', 'json']
+    QCGPMService().start()
+
+    jobEntries = check_job_status_in_json([ jobName ], workdir=tmpdir, dest_state='SUCCEED')
+    assert all((isdir(abspath(join(tmpdir, jobwdir_base))),
+                exists(join(abspath(join(tmpdir, jobwdir_base)), 'hostname.out')),
+                exists(join(abspath(join(tmpdir, jobwdir_base)), 'hostname.err')),
+                stat(join(abspath(join(tmpdir, jobwdir_base)), 'hostname.out')).st_size > 0))
+
+    job_nodes = []
+    allocated_cores = 0
+    for jname, jentry in jobEntries.items():
+        assert all(('runtime' in jentry, 'allocation' in jentry.get('runtime', {})))
+
+        jalloc = jentry['runtime']['allocation']
+        for jalloc_node in jalloc.split(','):
+            node_name = jalloc_node[:jalloc_node.index('[')]
+            job_nodes.append(node_name)
+            print('{} in available nodes ({})'.format(node_name, ','.join(resources_node_names)))
+            assert node_name in resources_node_names, '{} not in nodes ({}'.format(
+                node_name, ','.join(resources_node_names))
+
+            ncores = len(jalloc_node[jalloc_node.index('[') + 1:-1].split(':'))
+            print('#{} cores on node {}'.format(ncores, node_name))
+            allocated_cores += ncores
+    assert len(job_nodes) == nodes_num, str(job_nodes)
+    assert allocated_cores == nodes_num * cores_num, allocated_cores
+
+
+    # check if hostname is in stdout in two lines
+    with open(abspath(join(tmpdir, join(jobwdir_base, 'hostname.out'))), 'rt') as stdout_file:
+        stdout_content = [line.rstrip() for line in stdout_file.readlines()]
+    assert len(stdout_content) == nodes_num * cores_num, str(stdout_content)
+    assert all(hostname in job_nodes for hostname in stdout_content), str(stdout_content)
+
+    with pytest.raises(ValueError):
+        check_job_status_in_json([jobName + 'xxx'], workdir=tmpdir, dest_state='SUCCEED')
+
+    rmtree(tmpdir)
 

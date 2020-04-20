@@ -4,6 +4,7 @@ import json
 import cProfile
 
 from os.path import abspath, join, isdir, exists
+from os import stat
 from shutil import rmtree
 from string import Template
 from datetime import datetime, timedelta
@@ -50,7 +51,46 @@ def test_local_simple_job(tmpdir):
     with pytest.raises(ValueError):
         check_job_status_in_json([jobName + 'xxx'], workdir=str(tmpdir), dest_state='SUCCEED')
 
-    rmtree(str(tmpdir))
+#    rmtree(str(tmpdir))
+
+
+def test_local_simple_script_job(tmpdir):
+    file_path = tmpdir.join('jobs.json')
+
+    print('tmpdir: {}'.format(str(tmpdir)))
+
+    jobName = 'mdate_script'
+    jobs = [job.toDict() for job in [
+        Job(jobName,
+            JobExecution(
+                script = '/bin/date\n/bin/hostname\n',
+                wd = abspath(tmpdir.join('date.sandbox')),
+                stdout = 'date.out',
+                stderr = 'date.err'
+            ),
+            JobResources( numCores=ResourceSize(1) )
+            )
+    ] ]
+    reqs = [ { 'request': 'submit', 'jobs': jobs },
+             { 'request': 'control', 'command': 'finishAfterAllTasksDone' } ]
+    save_reqs_to_file(reqs, file_path)
+    print('jobs saved to file_path: {}'.format(str(file_path)))
+
+    sys.argv = [ 'QCG-PilotJob', '--log', 'debug', '--file', '--file-path', str(file_path), '--nodes', '2', '--wd', str(tmpdir),
+                 '--report-format', 'json']
+    QCGPMService().start()
+
+    check_job_status_in_json([ jobName ], workdir=str(tmpdir), dest_state='SUCCEED')
+    assert all((isdir(abspath(tmpdir.join('date.sandbox'))),
+                exists(join(abspath(tmpdir.join('date.sandbox')), 'date.out')),
+                exists(join(abspath(tmpdir.join('date.sandbox')), 'date.err')),
+                stat(join(abspath(tmpdir.join('date.sandbox')), 'date.out')).st_size > 0,
+                stat(join(abspath(tmpdir.join('date.sandbox')), 'date.err')).st_size == 0))
+
+    with pytest.raises(ValueError):
+        check_job_status_in_json([jobName + 'xxx'], workdir=str(tmpdir), dest_state='SUCCEED')
+
+#    rmtree(str(tmpdir))
 
 
 def test_local_error_duplicate_name_job(tmpdir):
@@ -92,7 +132,7 @@ def test_local_error_duplicate_name_job(tmpdir):
     assert not isdir(abspath(tmpdir.join('date.sandbox')))
     assert not isdir(abspath(tmpdir.join('sleep.sandbox')))
 
-    rmtree(str(tmpdir))
+#    rmtree(str(tmpdir))
 
 
 def test_local_error_duplicate_name_job_separate_reqs(tmpdir):
@@ -141,7 +181,7 @@ def test_local_error_duplicate_name_job_separate_reqs(tmpdir):
     # the second job (sleep) due to the name clash should not execute
     assert not isdir(abspath(tmpdir.join('sleep.sandbox')))
 
-    rmtree(str(tmpdir))
+#    rmtree(str(tmpdir))
 
 
 def test_local_error_job_desc():
@@ -207,16 +247,16 @@ def test_local_simple_iter_job(tmpdir):
 
     print('tmpdir: {}'.format(str(tmpdir)))
 
-    jobName = "echo-iter_${it}"
+    jobName = "echo-iter"
     nits = 10
     jobs = [
         {
             "name": jobName,
-            "iterate": [0, nits],
+            "iteration": { "start": 0, "stop": nits },
             "execution": {
                 "exec": "/bin/echo",
                 "args": ["iteration ${it}"],
-                "wd": abspath(tmpdir.join(jobName)),
+                "wd": abspath(tmpdir.join("{}_$${{it}}".format(jobName))),
                 "stdout": "echo-iter.stdout",
                 "stderr": "echo-iter.stderr"
             },
@@ -232,21 +272,144 @@ def test_local_simple_iter_job(tmpdir):
     save_reqs_to_file(reqs, file_path)
     print('jobs saved to file_path: {}'.format(str(file_path)))
 
-    sys.argv = [ 'QCG-PilotJob', '--file', '--file-path', str(file_path), '--nodes', '2', '--wd', str(tmpdir),
-                 '--report-format', 'json']
+    sys.argv = [ 'QCG-PilotJob', '--log', 'debug', '--file', '--file-path', str(file_path), '--nodes', '2', '--wd',
+                 str(tmpdir), '--report-format', 'json']
     QCGPMService().start()
 
-    check_job_status_in_json([Template(jobName).substitute(it=i) for i in range(0, nits)], workdir=str(tmpdir), dest_state='SUCCEED')
+    check_job_status_in_json([jobName] + ["{}:{}".format(jobName, i) for i in range(0, nits)], workdir=str(tmpdir),
+                             dest_state='SUCCEED')
 
     for i in range(0, nits):
-        jname = Template(jobName).substitute(it=i)
+        wd_path = abspath(tmpdir.join("{}_{}".format(jobName, i)))
+        stdout_path = join(wd_path, 'echo-iter.stdout')
+        stderr_path = join(wd_path, 'echo-iter.stderr')
+        assert all((isdir(wd_path),
+                   exists(stdout_path),
+                   exists(stderr_path))), "stdout({}) and/or stderr({}) doesn't exist".format(stdout_path, stderr_path)
 
-        assert all((isdir(abspath(tmpdir.join(jname))),
-                   exists(join(abspath(tmpdir.join(jname)), 'echo-iter.stdout')),
-                   exists(join(abspath(tmpdir.join(jname)), 'echo-iter.stderr'))))
-
-        with open(join(abspath(tmpdir.join(jname)), 'echo-iter.stdout'), 'r') as f:
+        with open(stdout_path, 'r') as f:
             assert f.read().strip() == Template("iteration ${it}").substitute(it=i)
+
+    rmtree(str(tmpdir))
+
+
+def test_local_simple_uneven_resources_iter_job(tmpdir):
+    file_path = tmpdir.join('jobs.json')
+
+    print('tmpdir: {}'.format(str(tmpdir)))
+
+    jobName = "echo-iter"
+    nits = 10
+    jobs = [
+        {
+            "name": jobName,
+            "iteration": { "start": 0, "stop": nits },
+            "execution": {
+                "exec": "/bin/echo",
+                "args": ["iteration ${it}"],
+                "wd": abspath(tmpdir.join("{}_$${{it}}".format(jobName))),
+                "stdout": "echo-iter.stdout",
+                "stderr": "echo-iter.stderr"
+            },
+            "resources": {
+                "numCores": {
+                    "exact": 2,
+                }
+            }
+        }
+    ]
+    reqs = [ { 'request': 'submit', 'jobs': jobs },
+             { 'request': 'control', 'command': 'finishAfterAllTasksDone' } ]
+    save_reqs_to_file(reqs, file_path)
+    print('jobs saved to file_path: {}'.format(str(file_path)))
+
+    sys.argv = [ 'QCG-PilotJob', '--log', 'debug', '--file', '--file-path', str(file_path), '--nodes', '3', '--wd',
+                 str(tmpdir), '--report-format', 'json']
+    QCGPMService().start()
+
+    check_job_status_in_json([jobName] + ["{}:{}".format(jobName, i) for i in range(0, nits)], workdir=str(tmpdir),
+                             dest_state='SUCCEED')
+
+    for i in range(0, nits):
+        wd_path = abspath(tmpdir.join("{}_{}".format(jobName, i)))
+        stdout_path = join(wd_path, 'echo-iter.stdout')
+        stderr_path = join(wd_path, 'echo-iter.stderr')
+        assert all((isdir(wd_path),
+                    exists(stdout_path),
+                    exists(stderr_path))), "stdout({}) and/or stderr({}) doesn't exist".format(stdout_path, stderr_path)
+
+        with open(stdout_path, 'r') as f:
+            assert f.read().strip() == Template("iteration ${it}").substitute(it=i)
+
+    rmtree(str(tmpdir))
+
+
+def test_local_simple_uneven_resources_many_iter_jobs(tmpdir):
+    file_path = tmpdir.join('jobs.json')
+
+    print('tmpdir: {}'.format(str(tmpdir)))
+
+    bigJobName = "big-echo-iter"
+    smallJobName = "small-echo-iter"
+    nits = 10
+    jobs = [
+        {
+            "name": bigJobName,
+            "iteration": { "start": 0, "stop": nits },
+            "execution": {
+                "exec": "/bin/echo",
+                "args": ["iteration ${it}"],
+                "wd": abspath(tmpdir.join("{}_$${{it}}".format(bigJobName))),
+                "stdout": "echo-iter.stdout",
+                "stderr": "echo-iter.stderr"
+            },
+            "resources": {
+                "numCores": {
+                    "exact": 2,
+                }
+            }
+        },
+        {
+            "name": smallJobName,
+            "iteration": { "start": 0, "stop": nits },
+            "execution": {
+                "exec": "/bin/echo",
+                "args": ["iteration ${it}"],
+                "wd": abspath(tmpdir.join("{}_$${{it}}".format(smallJobName))),
+                "stdout": "echo-iter.stdout",
+                "stderr": "echo-iter.stderr"
+            },
+            "resources": {
+                "numCores": {
+                    "exact": 1,
+                }
+            }
+        }
+    ]
+    reqs = [ { 'request': 'submit', 'jobs': jobs },
+             { 'request': 'control', 'command': 'finishAfterAllTasksDone' } ]
+    save_reqs_to_file(reqs, file_path)
+    print('jobs saved to file_path: {}'.format(str(file_path)))
+
+    sys.argv = [ 'QCG-PilotJob', '--log', 'debug', '--file', '--file-path', str(file_path), '--nodes', '3', '--wd',
+                 str(tmpdir), '--report-format', 'json']
+    QCGPMService().start()
+
+    check_job_status_in_json([bigJobName] + ["{}:{}".format(bigJobName, i) for i in range(0, nits)] +
+                             [smallJobName] + ["{}:{}".format(smallJobName, i) for i in range(0, nits)],
+        workdir=str(tmpdir), dest_state='SUCCEED')
+
+    for jobName in [ bigJobName, smallJobName ]:
+        for i in range(0, nits):
+            wd_path = abspath(tmpdir.join("{}_{}".format(jobName, i)))
+            stdout_path = join(wd_path, 'echo-iter.stdout')
+            stderr_path = join(wd_path, 'echo-iter.stderr')
+            assert all((isdir(wd_path),
+                        exists(stdout_path),
+                        exists(stderr_path))), "stdout({}) and/or stderr({}) doesn't exist".format(stdout_path, stderr_path)
+
+            with open(stdout_path, 'r') as f:
+                assert f.read().strip() == Template("iteration ${it}").substitute(it=i)
 
     rmtree(str(tmpdir))
 
@@ -256,7 +419,7 @@ def test_local_iter_scheduling_job_small(tmpdir):
 
     print('tmpdir: {}'.format(str(tmpdir)))
 
-    jobName = "sleep-iter_${it}"
+    jobName = "sleep-iter"
     nits = 4
     jobSleepTime = 2
     jobCores = 2
@@ -266,11 +429,11 @@ def test_local_iter_scheduling_job_small(tmpdir):
     jobs = [
         {
             "name": jobName,
-            "iterate": [0, nits],
+            "iteration": { "stop": nits },
             "execution": {
                 "exec": "/bin/sleep",
                 "args": ["{}s".format(str(jobSleepTime))],
-                "wd": abspath(tmpdir.join(jobName)),
+                "wd": abspath(tmpdir.join("{}_$${{it}}".format(jobName))),
                 "stdout": "sleep-iter.stdout",
                 "stderr": "sleep-iter.stderr"
             },
@@ -286,23 +449,25 @@ def test_local_iter_scheduling_job_small(tmpdir):
     save_reqs_to_file(reqs, file_path)
     print('jobs saved to file_path: {}'.format(str(file_path)))
 
-    sys.argv = [ 'QCG-PilotJob', '--file', '--file-path', str(file_path), '--nodes', str(availCores), '--wd', str(tmpdir),
-                 '--report-format', 'json']
+    sys.argv = [ 'QCG-PilotJob', '--log', 'debug', '--file', '--file-path', str(file_path), '--nodes', str(availCores),
+                 '--wd', str(tmpdir), '--report-format', 'json']
     QCGPMService().start()
 
-    check_job_status_in_json([Template(jobName).substitute(it=i) for i in range(0, nits)], workdir=str(tmpdir), dest_state='SUCCEED')
+    check_job_status_in_json([jobName] + ["{}:{}".format(jobName, i) for i in range(0, nits)], workdir=str(tmpdir),
+                             dest_state='SUCCEED')
 
     for i in range(0, nits):
-        jname = Template(jobName).substitute(it=i)
-
-        assert all((isdir(abspath(tmpdir.join(jname))),
-                   exists(join(abspath(tmpdir.join(jname)), 'sleep-iter.stdout')),
-                   exists(join(abspath(tmpdir.join(jname)), 'sleep-iter.stderr'))))
+        wd_path = abspath(tmpdir.join("{}_{}".format(jobName, i)))
+        stdout_path = join(wd_path, 'sleep-iter.stdout')
+        stderr_path = join(wd_path, 'sleep-iter.stderr')
+        assert all((isdir(wd_path),
+                    exists(stdout_path),
+                    exists(stderr_path))), "stdout({}) and/or stderr({}) doesn't exist".format(stdout_path, stderr_path)
 
     with open(join(find_single_aux_dir(str(tmpdir)), 'jobs.report'), 'r') as f:
         job_stats = [json.loads(line) for line in f.readlines() ]
 
-    assert len(job_stats) == nits
+    assert len(job_stats) == nits + 1
 
     min_start, max_finish = None, None
 
@@ -349,7 +514,7 @@ def test_local_iter_scheduling_job_large(tmpdir):
 
     print('tmpdir: {}'.format(str(tmpdir)))
 
-    jobName = "sleep-iter_${it}"
+    jobName = "sleep-iter"
     nits = 20
     jobSleepTime = 2
     jobCores = 2
@@ -359,11 +524,11 @@ def test_local_iter_scheduling_job_large(tmpdir):
     jobs = [
         {
             "name": jobName,
-            "iterate": [0, nits],
+            "iteration": { "stop": nits },
             "execution": {
                 "exec": "/bin/sleep",
                 "args": ["{}s".format(str(jobSleepTime))],
-                "wd": abspath(tmpdir.join(jobName)),
+                "wd": abspath(tmpdir.join("{}_$${{it}}".format(jobName))),
                 "stdout": "sleep-iter.stdout",
                 "stderr": "sleep-iter.stderr"
             },
@@ -379,23 +544,25 @@ def test_local_iter_scheduling_job_large(tmpdir):
     save_reqs_to_file(reqs, file_path)
     print('jobs saved to file_path: {}'.format(str(file_path)))
 
-    sys.argv = [ 'QCG-PilotJob', '--file', '--file-path', str(file_path), '--nodes', str(availCores), '--wd', str(tmpdir),
-                 '--report-format', 'json']
+    sys.argv = [ 'QCG-PilotJob', '--log', 'debug', '--file', '--file-path', str(file_path), '--nodes', str(availCores),
+                 '--wd', str(tmpdir), '--report-format', 'json']
     QCGPMService().start()
 
-    check_job_status_in_json([Template(jobName).substitute(it=i) for i in range(0, nits)], workdir=str(tmpdir), dest_state='SUCCEED')
+    check_job_status_in_json([jobName] + ["{}:{}".format(jobName, i) for i in range(0, nits)], workdir=str(tmpdir),
+                             dest_state='SUCCEED')
 
     for i in range(0, nits):
-        jname = Template(jobName).substitute(it=i)
-
-        assert all((isdir(abspath(tmpdir.join(jname))),
-                   exists(join(abspath(tmpdir.join(jname)), 'sleep-iter.stdout')),
-                   exists(join(abspath(tmpdir.join(jname)), 'sleep-iter.stderr'))))
+        wd_path = abspath(tmpdir.join("{}_{}".format(jobName, i)))
+        stdout_path = join(wd_path, 'sleep-iter.stdout')
+        stderr_path = join(wd_path, 'sleep-iter.stderr')
+        assert all((isdir(wd_path),
+                    exists(stdout_path),
+                    exists(stderr_path))), "stdout({}) and/or stderr({}) doesn't exist".format(stdout_path, stderr_path)
 
     with open(join(find_single_aux_dir(str(tmpdir)), 'jobs.report'), 'r') as f:
         job_stats = [json.loads(line) for line in f.readlines() ]
 
-    assert len(job_stats) == nits
+    assert len(job_stats) == nits + 1
 
     min_start, max_finish = None, None
 
@@ -442,7 +609,7 @@ def test_profile_local_iter_scheduling_job_large(tmpdir):
 
     print('tmpdir: {}'.format(str(tmpdir)))
 
-    jobName = "sleep-iter_${it}"
+    jobName = "sleep-iter"
     nits = 100
     jobSleepTime = 2
     jobCores = 2
@@ -452,11 +619,11 @@ def test_profile_local_iter_scheduling_job_large(tmpdir):
     jobs = [
         {
             "name": jobName,
-            "iterate": [0, nits],
+            "iteration": { "stop": nits },
             "execution": {
                 "exec": "/bin/sleep",
                 "args": ["{}s".format(str(jobSleepTime))],
-                "wd": abspath(tmpdir.join(jobName)),
+                "wd": abspath(tmpdir.join("{}_$${{it}}".format(jobName))),
                 "stdout": "sleep-iter.stdout",
                 "stderr": "sleep-iter.stderr"
             },
@@ -475,6 +642,16 @@ def test_profile_local_iter_scheduling_job_large(tmpdir):
     sys.argv = [ 'QCG-PilotJob', '--file', '--file-path', str(file_path), '--nodes', str(availCores), '--wd', str(tmpdir),
                  '--report-format', 'json']
     QCGPMService().start()
+
+    check_job_status_in_json([jobName] + ["{}:{}".format(jobName, i) for i in range(0, nits)], workdir=str(tmpdir),
+                             dest_state='SUCCEED')
+    for i in range(0, nits):
+        wd_path = abspath(tmpdir.join("{}_{}".format(jobName, i)))
+        stdout_path = join(wd_path, 'sleep-iter.stdout')
+        stderr_path = join(wd_path, 'sleep-iter.stderr')
+        assert all((isdir(wd_path),
+                    exists(stdout_path),
+                    exists(stderr_path))), "stdout({}) and/or stderr({}) doesn't exist".format(stdout_path, stderr_path)
 
     rmtree(str(tmpdir))
 
@@ -504,7 +681,7 @@ def test_local_workflows(tmpdir):
                 stderr='err'
             ),
             JobResources(numCores=ResourceSize(1)),
-            dependencies=JobDependencies({'after': ['first']})
+            dependencies=JobDependencies(after=['first'])
             ),
         Job('third',
             JobExecution(
@@ -514,7 +691,7 @@ def test_local_workflows(tmpdir):
                 stderr='err'
             ),
             JobResources(numCores=ResourceSize(1)),
-            dependencies=JobDependencies({'after': ['first', 'second']})
+            dependencies=JobDependencies(after=['first', 'second'])
             )
     ] ]
     reqs = [{'request': 'submit', 'jobs': jobs},
@@ -585,7 +762,7 @@ def test_local_workflows_error(tmpdir):
                 stderr='err'
             ),
             JobResources(numCores=ResourceSize(1)),
-            dependencies = JobDependencies({'after': ['not-existing']})
+            dependencies = JobDependencies(after=['not-existing'])
     ) ] ]
     reqs = [{'request': 'submit', 'jobs': jobs},
             {'request': 'control', 'command': 'finishAfterAllTasksDone'}]
@@ -600,3 +777,6 @@ def test_local_workflows_error(tmpdir):
 
     rmtree(str(tmpdir))
 
+#TODO: dodać testy dla workflowów na poziomie iteracji
+#TODO: dodać testy dla błędnych workflów w tym: brak iteracji wskazanego zadania
+#TODO: dodać testy dla błędnych workflowów: zapętlenie zależności
