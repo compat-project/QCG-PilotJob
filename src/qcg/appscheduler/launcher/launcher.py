@@ -16,6 +16,7 @@ class Launcher:
     MIN_PORT_RANGE = 10000
     MAX_PORT_RANGE = 40000
     START_TIMEOUT_SECS = 20
+    SHUTDOWN_TIMEOUT_SECS = 30
 
     def __init__(self, wdir, auxDir):
         # working directory
@@ -165,6 +166,7 @@ class Launcher:
 
         # kill agent processes
         self.__cancel_agents()
+        logging.debug('launcher agents canceled')
 
         # cancel input interface task
         if self.iface_task:
@@ -172,12 +174,15 @@ class Launcher:
 
             try:
                 await self.iface_task
+                logging.debug('launcher iface receiver closed')
             except asyncio.CancelledError:
                 logging.debug('input interface task finished')
 
         # close input interface socket
         if self.in_socket:
             self.in_socket.close()
+
+        logging.debug('launcher iface socket closed')
 
 
     async def __shutdown_agents(self):
@@ -322,7 +327,8 @@ class Launcher:
         if not 'node' in slurm_data:
             raise ValueError('missing slurm node name')
 
-        slurm_args = [ '-w', slurm_data['node'], '-N', '1', '-n', '1', '-D', self.work_dir ]
+        slurm_args = [ '-J', 'agent-{}'.format(slurm_data['node']), '-w', slurm_data['node'], '-vvv', '--oversubscribe', '--overcommit', '-N', '1', '-n', '1', '-D', self.work_dir ]
+
         slurm_args.extend(slurm_data.get('args', []))
 
         stdoutP = asyncio.subprocess.DEVNULL
