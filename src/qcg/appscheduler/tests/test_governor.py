@@ -94,6 +94,8 @@ def test_register_manager(tmpdir):
     governor_process.join()
     governor_process.terminate()
 
+    rmtree(str(tmpdir))
+
 
 def test_register_manager_resources_single(tmpdir):
     governor_dir = tmpdir.join('governor')
@@ -139,6 +141,8 @@ def test_register_manager_resources_single(tmpdir):
 
         if direct_process:
             direct_process.terminate()
+
+        rmtree(str(tmpdir))
 
 
 def test_register_manager_resources_many(tmpdir):
@@ -201,6 +205,8 @@ def test_register_manager_resources_many(tmpdir):
         for proc in direct_process:
             if proc:
                 proc.terminate()
+
+        rmtree(str(tmpdir))
 
 
 def test_submit_single_direct_single_job(tmpdir):
@@ -277,6 +283,8 @@ def test_submit_single_direct_single_job(tmpdir):
 
         if direct_process:
             direct_process.terminate()
+
+        rmtree(str(tmpdir))
 
 
 def test_governor_wait_for_all_jobs_single(tmpdir):
@@ -356,6 +364,8 @@ def test_governor_wait_for_all_jobs_single(tmpdir):
         if direct_process:
             direct_process.terminate()
 
+        rmtree(str(tmpdir))
+
 
 def test_governor_wait_for_all_jobs_many(tmpdir):
     governor_dir = tmpdir.join('governor')
@@ -392,12 +402,12 @@ def test_governor_wait_for_all_jobs_many(tmpdir):
 
         # submit a bunch of jobs
         njobs = 10
-        jname_tmpl = 'date_${it}'
-        jnames = [ 'date_{}'.format(i) for i in range(0, njobs)]
+        jname = 'date'
+        jnames = [ 'date:{}'.format(i) for i in range(0, njobs)]
         submit_reply = send_request_valid(governor_address, { 'request': 'submit', 'jobs': [
                 {
-                    'name': jname_tmpl,
-                    'iterate': [ 0, njobs ],
+                    'name': jname,
+                    'iteration': { 'stop': njobs },
                     'execution': {
                         'exec': '/usr/bin/env',
                         'args': [ 'date' ],
@@ -409,20 +419,19 @@ def test_governor_wait_for_all_jobs_many(tmpdir):
                 }
             ] })
         assert all((submit_reply['code'] == 0, 'data' in resources_reply))
-        assert all((submit_reply['data'].get('submitted', 0) == njobs,
-                    len(submit_reply['data'].get('jobs', [])) == njobs))
-        assert all(jname in submit_reply['data'].get('jobs', []) for jname in jnames)
+        assert all((submit_reply['data'].get('submitted', 0) == 1,
+                    len(submit_reply['data'].get('jobs', [])) == 1))
+        assert ((jname in submit_reply['data'].get('jobs', [])))
 
-        status_reply = send_request_valid(governor_address, { 'request': 'jobStatus', 'jobNames': jnames })
+        status_reply = send_request_valid(governor_address, { 'request': 'jobStatus', 'jobNames': [ jname ]})
         assert all((status_reply['code'] == 0, 'data' in status_reply))
         assert 'jobs' in status_reply['data']
-        assert len(status_reply['data']['jobs']) == njobs
-        assert all(jname in status_reply['data']['jobs'] for jname in jnames)
+        assert len(status_reply['data']['jobs']) == 1
+        assert ((jname in status_reply['data']['jobs']))
 
-        for jname in jnames:
-            jstatus = status_reply['data']['jobs'][jname]
-            assert all((jstatus['status'] == 0, jstatus['data']['jobName'] == jname,
-                        jstatus['data']['status'] in [ JobState.QUEUED.name, JobState.SUCCEED.name ]))
+        jstatus = status_reply['data']['jobs'][jname]
+        assert all((jstatus['status'] == 0, jstatus['data']['jobName'] == jname,
+                   jstatus['data']['status'] in [ JobState.QUEUED.name, JobState.SUCCEED.name ]))
 
         status_reply = send_request_valid(governor_address, { 'request': 'control', 'command': 'finishAfterAllTasksDone' })
         assert status_reply['code'] == 0
@@ -439,6 +448,8 @@ def test_governor_wait_for_all_jobs_many(tmpdir):
 
         if direct_process:
             direct_process.terminate()
+
+        rmtree(str(tmpdir))
 
 
 def test_governor_submit_many_instances(tmpdir):
@@ -496,13 +507,13 @@ def test_governor_submit_many_instances(tmpdir):
 
         # submit a bunch of jobs
         njobs = 100
-        jname_tmpl = 'date_${it}'
-        jnames = [ 'date_{}'.format(i) for i in range(0, njobs)]
+        jname = 'date'
+        jnames = [ 'date:{}'.format(i) for i in range(0, njobs)]
         wdir_base = 'date.sandbox'
         submit_reply = send_request_valid(governor_address, { 'request': 'submit', 'jobs': [
                 {
-                    'name': jname_tmpl,
-                    'iterate': [ 0, njobs ],
+                    'name': jname,
+                    'iteration': { 'stop': njobs },
                     'execution': {
                         'exec': '/usr/bin/env',
                         'args': [ 'date' ],
@@ -514,20 +525,19 @@ def test_governor_submit_many_instances(tmpdir):
                 }
             ] })
         assert all((submit_reply['code'] == 0, 'data' in resources_reply))
-        assert all((submit_reply['data'].get('submitted', 0) == njobs,
-                    len(submit_reply['data'].get('jobs', [])) == njobs))
-        assert all(jname in submit_reply['data'].get('jobs', []) for jname in jnames)
+        assert all((submit_reply['data'].get('submitted', 0) == 1,
+                    len(submit_reply['data'].get('jobs', [])) == 1,
+                    jname in submit_reply['data'].get('jobs', [])))
 
-        status_reply = send_request_valid(governor_address, { 'request': 'jobStatus', 'jobNames': jnames })
+        status_reply = send_request_valid(governor_address, { 'request': 'jobStatus', 'jobNames': [ jname ] })
         assert all((status_reply['code'] == 0, 'data' in status_reply))
         assert 'jobs' in status_reply['data']
-        assert len(status_reply['data']['jobs']) == njobs
-        assert all(jname in status_reply['data']['jobs'] for jname in jnames)
+        assert len(status_reply['data']['jobs']) == 1
+        assert jname in status_reply['data']['jobs']
 
-        for jname in jnames:
-            jstatus = status_reply['data']['jobs'][jname]
-            assert all((jstatus['status'] == 0, jstatus['data']['jobName'] == jname,
-                        jstatus['data']['status'] in [ JobState.QUEUED.name, JobState.SUCCEED.name ]))
+        jstatus = status_reply['data']['jobs'][jname]
+        assert all((jstatus['status'] == 0, jstatus['data']['jobName'] == jname,
+                    jstatus['data']['status'] in [ JobState.QUEUED.name, JobState.SUCCEED.name ]))
 
         status_reply = send_request_valid(governor_address, { 'request': 'control', 'command': 'finishAfterAllTasksDone' })
         assert status_reply['code'] == 0
@@ -560,6 +570,8 @@ def test_governor_submit_many_instances(tmpdir):
         for process in direct_process:
             if process:
                 process.terminate()
+
+        rmtree(str(tmpdir))
 
 
 def test_slurm_partition_resources(tmpdir):
@@ -597,6 +609,8 @@ def test_slurm_partition_resources(tmpdir):
     finally:
         if governor_process:
             governor_process.terminate()
+
+        rmtree(str(tmpdir))
 
 
 def test_slurm_partition_submit(tmpdir):
@@ -686,3 +700,6 @@ def test_slurm_partition_submit(tmpdir):
     finally:
         if governor_process:
             governor_process.terminate()
+
+        rmtree(str(tmpdir))
+

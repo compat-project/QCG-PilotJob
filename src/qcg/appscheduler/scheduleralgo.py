@@ -91,13 +91,13 @@ class SchedulerAlgorithm:
 
         for node in self.resources.nodes:
             if node.used == 0:
-                #				print("trying to allocate %d cores on on node %s" % (node.total, node.name))
+                #				print("trying to allocate {} cores on on node {}".format(node.total, node.name))
                 nAlloc = node.allocateExact(node.total, crs)
-                #				print("allocated %d cores" % (ncores))
+                #				print("allocated {} cores".format(ncores))
                 if nAlloc.ncores == node.total:
                     allocation.addNode(nAlloc)
 
-                    #					print("already allocated %d nodes from %d maximum" % (len(allocation.nodeAllocations), max_nodes))
+                    #					print("already allocated {} nodes from {} maximum".format(len(allocation.nodeAllocations), max_nodes))
                     if len(allocation.nodeAllocations) == max_nodes:
                         break
                 else:
@@ -128,31 +128,31 @@ class SchedulerAlgorithm:
         """
         allocation = Allocation()
 
-        #		logging.info("allocating (%d,%d) nodes with (%d,%d) cores" %
-        #				(min_nodes, max_nodes, min_cores, max_cores))
+#        logging.info("allocating ({},{}) nodes with ({},{}) cores".format(min_nodes, max_nodes, min_cores, max_cores))
 
         for node in self.resources.nodes:
-            if node.free > min_cores:
+            if node.free >= min_cores:
                 nAlloc = node.allocateMax(max_cores, crs)
 
-                #			logging.info("allocated %d cores on a single node" % (ncores))
+#                logging.info("allocated {} cores on a single node".format(nAlloc.ncores if nAlloc else 0))
+
                 if nAlloc:
                     if nAlloc.ncores >= min_cores:
                         allocation.addNode(nAlloc)
 
                         if len(allocation.nodeAllocations) == max_nodes:
-                            #					logging.info("already allocated enough %d nodes" % (len(allocation.nodeAllocations)))
+#                            logging.info("already allocated enough {} nodes".format(len(allocation.nodeAllocations)))
                             break
                     else:
                         nAlloc.release()
 
         if len(allocation.nodeAllocations) >= min_nodes:
-            logging.info("allocation contains %d nodes which meets requirements (%d min)" %
-                         (len(allocation.nodeAllocations), min_nodes))
+            logging.info("allocation contains {} nodes which meets requirements ({} min)".format(
+                len(allocation.nodeAllocations), min_nodes))
             return allocation
         else:
-            logging.info("allocation contains %d nodes which doesn't meets requirements (%d min)" %
-                         (len(allocation.nodeAllocations), min_nodes))
+            logging.info("allocation contains {} nodes which doesn't meets requirements ({} min)".format(
+                len(allocation.nodeAllocations), min_nodes))
             allocation.release()
             return None
 
@@ -191,7 +191,7 @@ class SchedulerAlgorithm:
 
             if min_nodes > len(self.resources.nodes):
                 raise NotSufficientResources(
-                    "%d exceeds available number of nodes (%d)" % (min_nodes, len(self.resources.nodes)))
+                    "{} exceeds available number of nodes ({})".format(min_nodes, len(self.resources.nodes)))
 
         min_cores = 0
         total_cores = 0
@@ -207,7 +207,7 @@ class SchedulerAlgorithm:
 
             if self.resources.totalCores < total_cores:
                 raise NotSufficientResources(
-                    "%d exceeds available number of cores (%d)" % (total_cores, self.resources.totalCores))
+                    "{} exceeds available number of cores ({})".format(total_cores, self.resources.totalCores))
 
             if self.resources.freeCores < total_cores:
                 return None
@@ -237,7 +237,7 @@ class SchedulerAlgorithm:
                     max_nodes < 1 or \
                     max_nodes < min_nodes:
                 raise InvalidResourceSpec(
-                    "Invalid nodes specification (min: %d, max: %d)" % (min_nodes, max_nodes))
+                    "Invalid nodes specification (min: {}, max: {})".format(min_nodes, max_nodes))
 
             allocation = self.__allocateEntireNodes(min_nodes, max_nodes, r.crs)
         else:
@@ -249,7 +249,7 @@ class SchedulerAlgorithm:
                     max_cores < 1 or \
                     max_cores < min_cores:
                 raise InvalidResourceSpec(
-                    "Invalid cores specification (min: %d, max: %d)" % (min_cores, max_cores))
+                    "Invalid cores specification (min: {}, max: {})".format(min_cores, max_cores))
 
             if r.hasNodes():
                 if r.nodes.isExact():
@@ -257,8 +257,8 @@ class SchedulerAlgorithm:
                 else:
                     max_nodes = r.nodes.max
 
-            #			logging.info("looking for (%d,%d) nodes and (%d,%d) cores" %
-            #					(min_nodes, max_nodes, min_cores, max_cores))
+            #			logging.info("looking for ({},{}) nodes and ({},{}) cores".format(
+            #					min_nodes, max_nodes, min_cores, max_cores))
 
             if min_nodes == 0:
                 # allocate ('min_cores', 'max_cores') on any number of nodes
