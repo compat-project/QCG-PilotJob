@@ -2,7 +2,7 @@
 	"request": "submit",
 	"jobs": [ {
 		"name": "sleep-iter_${it}",
-		"iterate": [ 1, 8 ],
+		"iteration": { "start": 1, "stop": 8 },
 		"execution": {
 		  "exec": "/bin/sleep",
 		  "args": [ "1m" ],
