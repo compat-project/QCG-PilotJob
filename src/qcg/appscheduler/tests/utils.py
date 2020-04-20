@@ -1,4 +1,5 @@
-import os
+from os import environ, remove
+from os.path import dirname, exists, join
 import json
 import re
 import multiprocessing as mp
@@ -6,24 +7,31 @@ import queue
 import zmq
 import time
 from datetime import datetime
+from subprocess import run, PIPE
 
 from json import JSONDecodeError
+
+import qcg
 from qcg.appscheduler.service import QCGPMServiceProcess
 from qcg.appscheduler.joblist import JobState
 from qcg.appscheduler.utils.auxdir import find_single_aux_dir
+from qcg.appscheduler.parseres import get_resources
+from qcg.appscheduler.resources import ResourcesType
+
+SHARED_PATH = '/data'
 
 
 def save_jobs_to_file(jobs, file_path):
-    if os.path.exists(file_path):
-        os.remove(file_path)
+    if exists(file_path):
+        remove(file_path)
 
     with open(file_path, 'w') as f:
         f.write(json.dumps([ job.toDict() for job in jobs ], indent=2))
 
 
 def save_reqs_to_file(reqs, file_path):
-    if os.path.exists(file_path):
-        os.remove(file_path)
+    if exists(file_path):
+        remove(file_path)
 
     with open(file_path, 'w') as f:
         f.write(json.dumps(reqs, indent=2))
@@ -32,7 +40,9 @@ def save_reqs_to_file(reqs, file_path):
 def check_job_status_in_json(jobs, workdir='.', dest_state='SUCCEED'):
     to_check = set(jobs)
 
-    report_path = os.path.join(find_single_aux_dir(workdir), 'jobs.report')
+    entries = {}
+
+    report_path = join(find_single_aux_dir(workdir), 'jobs.report')
     with open(report_path, 'r') as report_f:
         for line, entry in enumerate(report_f, 1):
             try:
@@ -54,6 +64,7 @@ def check_job_status_in_json(jobs, workdir='.', dest_state='SUCCEED'):
                         '(' + msg  + ')' if msg else ''))
 
                 to_check.remove(jName)
+                entries[jName] = job_entry
 
             if len(to_check) == 0:
                 break
@@ -61,9 +72,10 @@ def check_job_status_in_json(jobs, workdir='.', dest_state='SUCCEED'):
     if len(to_check) > 0:
         raise ValueError('missing {} jobs in report'.format(','.join(to_check)))
 
+    return entries
 
 def check_service_log_string(resubstr, workdir='.'):
-    service_log_file = os.path.join(find_single_aux_dir(workdir), 'service.log')
+    service_log_file = join(find_single_aux_dir(workdir), 'service.log')
 
     regex = re.compile(resubstr)
 
@@ -140,3 +152,57 @@ def wait_for_job_finish_success(manager_address, jobnames, timeout_secs=0):
             raise Exception('Timeout occurred')
 
         jobnames = current_jobnames
+
+
+def get_allocation_data():
+    slurm_job_id = environ.get('SLURM_JOB_ID', None)
+    print('slurm job id: {}'.format(slurm_job_id))
+    out_p = run(['scontrol', 'show', 'job', slurm_job_id], shell=False, stdout=PIPE, stderr=PIPE)
+    out_p.check_returncode()
+
+    raw_data = bytes.decode(out_p.stdout).replace('\n', ' ')
+    result = {}
+    for element in raw_data.split(' '):
+        elements = element.split('=', 1)
+        result[elements[0]] = elements[1] if len(elements) > 1 else None
+
+    return result
+
+def set_pythonpath_to_qcg_module():
+    # set PYTHONPATH to test sources
+    qcg_module_path = dirname(dirname(qcg.__file__))
+    print("path to the qcg.appscheduler module: {}".format(qcg_module_path))
+
+    # in case where qcg.appscheduler are not installed in library, we must set PYTHONPATH to run a
+    # launcher agnets on other nodes
+    if environ.get('PYTHONPATH', None):
+        environ['PYTHONPATH'] = ':'.join([environ['PYTHONPATH'], qcg_module_path])
+    else:
+        environ['PYTHONPATH'] = qcg_module_path
+
+
+def get_slurm_resources():
+    # get # of nodes from allocation
+    allocation = get_allocation_data()
+
+    # default config
+    config = { }
+
+    resources = get_resources(config)
+    assert not resources is None
+    assert all((resources.rtype == ResourcesType.SLURM,
+                resources.totalNodes == int(allocation.get('NumNodes', '-1')),
+                resources.totalCores == int(allocation.get('NumCPUs', '-1')))), \
+        'resources: {}, allocation: {}'.format(str(resources), str(allocation))
+
+    assert all((resources.freeCores == resources.totalCores,
+                resources.usedCores == 0,
+                resources.totalNodes == len(resources.nodes)))
+
+    return resources, allocation
+
+def get_slurm_resources_binded():
+    resources, allocation = get_slurm_resources()
+
+    assert resources.binding
+    return resources, allocation
