@@ -178,26 +178,36 @@ class QCGPMService:
 
         self.__wd = Config.EXECUTOR_WD.get(self.__conf)
 
+        self.__logHandler = None
+
         self.__setupAuxDir(self.__conf)
         self.__setupLogging(self.__conf)
-        self.__setupReports(self.__conf)
-        self.__setupEventLoop()
 
-        self.__ifaces = []
-        if self.__args.file:
-            iface = FileInterface()
-            iface.setup(self.__conf)
-            self.__ifaces.append(iface)
+        try:
+            self.__setupReports(self.__conf)
+            self.__setupEventLoop()
 
-        if self.__args.net:
-            iface = ZMQInterface()
-            iface.setup(self.__conf)
-            self.__ifaces.append(iface)
+            self.__ifaces = []
+            if self.__args.file:
+                iface = FileInterface()
+                iface.setup(self.__conf)
+                self.__ifaces.append(iface)
 
-        if self.__args.governor:
-            self.__setupGovernorManager(self.__args.parent)
-        else:
-            self.__setupDirectManager(self.__args.parent)
+            if self.__args.net:
+                iface = ZMQInterface()
+                iface.setup(self.__conf)
+                self.__ifaces.append(iface)
+
+            if self.__args.governor:
+                self.__setupGovernorManager(self.__args.parent)
+            else:
+                self.__setupDirectManager(self.__args.parent)
+        except:
+            if self.__logHandler:
+                logging.getLogger().removeHandler(self.__logHandler)
+                self.__logHandler = None
+
+            raise
 
 
     def __generateDefaultManagerId(self):
@@ -275,9 +285,9 @@ class QCGPMService:
             os.remove(self.__logFile)
 
         rootLogger = logging.getLogger()
-        handler = logging.FileHandler(filename=self.__logFile, mode='a', delay=False)
-        handler.setFormatter(logging.Formatter('%(asctime)-15s: %(message)s'))
-        rootLogger.addHandler(handler)
+        self.__logHandler = logging.FileHandler(filename=self.__logFile, mode='a', delay=False)
+        self.__logHandler.setFormatter(logging.Formatter('%(asctime)-15s: %(message)s'))
+        rootLogger.addHandler(self.__logHandler)
         rootLogger.setLevel(logging._nameToLevel.get(Config.LOG_LEVEL.get(config).upper()))
 
         logging.info('service {} version {} started {} @ {} (with tags {})'.format(Config.MANAGER_ID.get(config),
@@ -286,9 +296,24 @@ class QCGPMService:
 
 
     def __setupEventLoop(self):
+        tasks = asyncio.Task.all_tasks(asyncio.get_event_loop())
+        logging.info('#{} all tasks in event loop before checking for open'.format(len(tasks)))
+        for idx, task in enumerate(tasks):
+            logging.info('\ttask {}: {}'.format(idx, str(task)))
+        #                asyncio.get_event_loop().run_until_complete(task)
+
+        tasks = asyncio.Task.current_task(asyncio.get_event_loop())
+        if tasks:
+            logging.info('#{} current tasks in event loop before checking for open'.format(len(tasks)))
+            for idx, task in enumerate(tasks):
+                logging.info('\ttask {}: {}'.format(idx, str(task)))
+
+        logging.debug('checking event loop')
         if asyncio.get_event_loop() and asyncio.get_event_loop().is_closed():
+            logging.debug('setting new event loop')
             asyncio.set_event_loop(asyncio.new_event_loop())
 
+#        asyncio.get_event_loop().set_debug(True)
         # different child watchers - available in Python >=3.8
         #asyncio.set_child_watcher(asyncio.ThreadedChildWatcher())
 
@@ -319,10 +344,10 @@ class QCGPMService:
 
 
     @profile
-    def __jobNotify(self, jobId, state, manager):
+    def __jobNotify(self, jobId, iteration, state, manager):
         if self.__jobReporter:
             if state.isFinished():
-                self.__jobReporter.reportJob(manager.jobList.get(jobId))
+                self.__jobReporter.reportJob(manager.jobList.get(jobId), iteration)
 
                     
     def getIfaces(self, iface_class=None):
@@ -366,9 +391,9 @@ class QCGPMService:
 
             logging.info('manager stopped')
 
-        usage = self.get_rusage()
-        logging.info('service resource usage: {}'.format(str(usage.get('service', {}))))
-        logging.info('jobs resource usage: {}'.format(str(usage.get('jobs', {}))))
+            usage = self.get_rusage()
+            logging.info('service resource usage: {}'.format(str(usage.get('service', {}))))
+            logging.info('jobs resource usage: {}'.format(str(usage.get('jobs', {}))))
 
 
     @profile
@@ -377,8 +402,28 @@ class QCGPMService:
             asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(self.__runService()))
         finally:
             logging.info('closing event loop')
+
+            tasks = asyncio.Task.all_tasks(asyncio.get_event_loop())
+            logging.info('#{} all tasks in event loop before closing'.format(len(tasks)))
+            for idx, task in enumerate(tasks):
+                logging.info('\ttask {}: {}'.format(idx, str(task)))
+#                asyncio.get_event_loop().run_until_complete(task)
+
+            tasks = asyncio.Task.current_task(asyncio.get_event_loop())
+            if tasks:
+                logging.info('#{} current tasks in event loop before closing after waiting'.format(len(tasks)))
+                for idx, task in enumerate(tasks):
+                    logging.info('\ttask {}: {}'.format(idx, str(task)))
+
+#            asyncio.get_event_loop()._default_executor.shutdown(wait=True)
+#            asyncio.get_event_loop().shutdown_asyncgens()
+            asyncio.get_event_loop().run_until_complete(asyncio.sleep(1))
             asyncio.get_event_loop().close()
             logging.info('event loop closed')
+
+           # remove custom log handler
+            if self.__logHandler:
+                logging.getLogger().removeHandler(self.__logHandler)
 
 
     def get_rusage(self):
