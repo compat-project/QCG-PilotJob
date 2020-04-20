@@ -166,16 +166,6 @@ class Allocation:
         self.__cores = 0
 
 
-    def __updateCores(self):
-        """
-        Compute total number of cores in an allocation.
-        """
-        cores = 0
-        for node in self.__nodes:
-            cores += node.ncores
-        self.__cores = cores
-
-
     def __getCores(self):
         """
         Return total number of cores of an allocation
@@ -217,7 +207,7 @@ class Allocation:
         #print('allocation contains {} nodes'.format(len(self.__nodes)))
         #for node in self.__nodes:
         #    print('node: {}, # cores {}, cores type {}, cores {}, list cores {}'.format(node.node.name, len(node.cores), type(node.cores), str(node.cores), str(list(node.cores))))
-        return ','.join(["{}[{}]".format(node.node.name, ','.join(str(e) for e in list(node.cores))) for node in self.__nodes])
+        return ','.join(["{}[{}]".format(node.node.name, ':'.join(str(e) for e in list(node.cores))) for node in self.__nodes])
 
 
     cores = property(__getCores, None, None, "number of cores")
