@@ -11,6 +11,7 @@ from os.path import exists, join, dirname, abspath
 import multiprocessing as mp
 
 from qcg.appscheduler.api import errors
+from qcg.appscheduler.api.jobinfo import JobInfo
 
 
 class Manager:
@@ -346,6 +347,23 @@ class Manager:
             "request": "jobInfo",
             "jobNames": jNames
         })
+
+
+    def infoParsed(self, names):
+        """
+        Return detailed and parsed information about jobs.
+
+        Args:
+            names (list, str) - a list of job names
+
+        Returns:
+            JobInfo[] - a list of job's detailed information in the format described in 'jobStatus' method of
+              QCG PJM.
+
+        Raises:
+            see __sendAndValidateResult
+        """
+        return { jname: JobInfo(jinfo.get('data', {})) for jname, jinfo in self.info(names).get('jobs', {}).items() }
 
 
     def remove(self, names):
