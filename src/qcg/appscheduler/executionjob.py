@@ -271,8 +271,8 @@ class LocalSchemaExecutionJob(ExecutionJob):
             )
 
             logging.debug("launching job {}: {} {}".format(self.jobIteration.name, je.exec, str(je.args)))
-            logging.debug("launching env: {}".format(','.join(['{}: {}'.format(env_n, env_v)
-                                                               for env_n, env_v in self.env.items()])))
+#            logging.debug("launching env: {}".format(','.join(['{}: {}'.format(env_n, env_v)
+#                                                               for env_n, env_v in self.env.items()])))
 
             logging.info("local process for job {} launched".format(self.jobIteration.name))
 
