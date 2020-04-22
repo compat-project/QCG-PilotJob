@@ -6,6 +6,7 @@ from os.path import exists, join
 from qcg.appscheduler.api.manager import LocalManager
 from qcg.appscheduler.api.job import Jobs
 from qcg.appscheduler.utils.auxdir import find_single_aux_dir
+from qcg.appscheduler.tests.utils import submit_2_manager_and_wait_4_info
 
 
 def test_local_manager_resources(tmpdir):
@@ -119,4 +120,3 @@ def test_local_manager_wait4all(tmpdir):
     m.finish()
     m.stopManager()
     m.cleanup()
-

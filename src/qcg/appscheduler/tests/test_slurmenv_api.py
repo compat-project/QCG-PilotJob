@@ -13,7 +13,7 @@ from qcg.appscheduler.api.job import Jobs
 from qcg.appscheduler.api.errors import ConnectionError
 from qcg.appscheduler.api.jobinfo import JobInfo
 
-from qcg.appscheduler.tests.utils import SHARED_PATH
+from qcg.appscheduler.tests.utils import SHARED_PATH, submit_2_manager_and_wait_4_info
 
 
 def test_slurmenv_api_resources():
@@ -42,7 +42,8 @@ def test_slurmenv_api_resources():
             m.finish()
             m.stopManager()
             m.cleanup()
-        rmtree(tmpdir)
+
+    rmtree(tmpdir)
 
 
 def test_slurmenv_api_submit_simple():
@@ -65,13 +66,14 @@ def test_slurmenv_api_submit_simple():
                          'stdout': 'std.out',
                          'stderr': 'std.err'
                      }})
-        assert submitWaitInfo(m, jobs, 'SUCCEED')
+        assert submit_2_manager_and_wait_4_info(m, jobs, 'SUCCEED')
     finally:
         if m:
             m.finish()
             m.stopManager()
             m.cleanup()
-        rmtree(tmpdir)
+
+    rmtree(tmpdir)
 
 
 def test_slurmenv_api_submit_many_cores():
@@ -95,7 +97,7 @@ def test_slurmenv_api_submit_many_cores():
                      },
                      'resources': { 'numCores': { 'exact': resources.totalCores } }
                      })
-        jinfos = submitWaitInfo(m, jobs, 'SUCCEED')
+        jinfos = submit_2_manager_and_wait_4_info(m, jobs, 'SUCCEED')
 
         # check working directories of job's inside working directory of service
         assert tmpdir == jinfos['host'].wdir, str(jinfos['host'].wdir)
@@ -107,22 +109,8 @@ def test_slurmenv_api_submit_many_cores():
             m.finish()
             m.stopManager()
             m.cleanup()
-        rmtree(tmpdir)
 
-
-def submitWaitInfo(manager, jobs, expected_status):
-    ids = manager.submit(jobs)
-    assert len(ids) == len(jobs.jobNames())
-
-    manager.wait4all()
-    jinfos = manager.infoParsed(ids)
-
-    # check # of jobs is correct
-    assert len(jinfos) == len(ids)
-    # check expected jobs status
-    assert all(jid in jinfos and jinfos[jid].status == expected_status for jid in ids)
-
-    return jinfos
+    rmtree(tmpdir)
 
 
 def test_slurmenv_api_submit_resource_ranges():
@@ -147,7 +135,7 @@ def test_slurmenv_api_submit_resource_ranges():
                      'resources': { 'numCores': { 'min': 1 } }
                      })
         # job should faile because of missing 'max' parameter
-        jinfos = submitWaitInfo(m, jobs, 'FAILED')
+        jinfos = submit_2_manager_and_wait_4_info(m, jobs, 'FAILED')
         jinfo = jinfos['host']
         assert "Both core's range boundaries (min, max) must be defined" in jinfo.messages, str(jinfo)
 
@@ -163,7 +151,7 @@ def test_slurmenv_api_submit_resource_ranges():
                          'numCores': { 'min': 1, 'max': resources.nodes[0].total + 1 } }
                      })
         # job should run on single node (the first free) with all available cores
-        jinfos = submitWaitInfo(m, jobs, 'SUCCEED')
+        jinfos = submit_2_manager_and_wait_4_info(m, jobs, 'SUCCEED')
         jinfo = jinfos['host2']
         assert all((len(jinfo.nodes) == 1, jinfo.totalCores == resources.nodes[0].total)), str(jinfo)
 
@@ -178,7 +166,7 @@ def test_slurmenv_api_submit_resource_ranges():
                          'numCores': { 'min': 1, 'max': resources.nodes[0].total + 1 } }
                      })
         # job should run on at least two nodes with total maximum given cores
-        jinfos = submitWaitInfo(m, jobs, 'SUCCEED')
+        jinfos = submit_2_manager_and_wait_4_info(m, jobs, 'SUCCEED')
         jinfo = jinfos['host3']
         assert all((len(jinfo.nodes) == 2, jinfo.totalCores == resources.nodes[0].total + 1)), str(jinfo)
 
@@ -187,7 +175,8 @@ def test_slurmenv_api_submit_resource_ranges():
             m.finish()
             m.stopManager()
             m.cleanup()
-#        rmtree(tmpdir)
+
+    rmtree(tmpdir)
 
 
 def test_slurmenv_api_submit_exceed_total_cores():
@@ -230,14 +219,15 @@ def test_slurmenv_api_submit_exceed_total_cores():
                      },
                      'resources': { 'numCores': { 'exact': resources.totalCores  } }
                      })
-        jinfos = submitWaitInfo(m, jobs, 'SUCCEED')
+        jinfos = submit_2_manager_and_wait_4_info(m, jobs, 'SUCCEED')
         assert jinfos['date'].totalCores == resources.totalCores
     finally:
         if m:
             m.finish()
             m.stopManager()
             m.cleanup()
-        rmtree(tmpdir)
+
+    rmtree(tmpdir)
 
 
 def test_slurmenv_api_std_streams():
@@ -260,7 +250,7 @@ def test_slurmenv_api_std_streams():
                          'stdout': 'out',
                          'stderr': 'err'
                      }})
-        assert submitWaitInfo(m, jobs, 'SUCCEED')
+        assert submit_2_manager_and_wait_4_info(m, jobs, 'SUCCEED')
 
         assert all((exists(join(tmpdir, 'out')), exists(join(tmpdir, 'err'))))
 
@@ -276,7 +266,8 @@ def test_slurmenv_api_std_streams():
             m.finish()
             m.stopManager()
             m.cleanup()
-        rmtree(tmpdir)
+
+    rmtree(tmpdir)
 
 
 def test_slurmenv_api_std_streams_many_cores():
@@ -303,7 +294,7 @@ def test_slurmenv_api_std_streams_many_cores():
                          'numCores': { 'exact': 2 }
                      }
                      })
-        assert submitWaitInfo(m, jobs, 'SUCCEED')
+        assert submit_2_manager_and_wait_4_info(m, jobs, 'SUCCEED')
 
         assert all((exists(join(tmpdir, 'out')), exists(join(tmpdir, 'err'))))
 
@@ -319,4 +310,102 @@ def test_slurmenv_api_std_streams_many_cores():
             m.finish()
             m.stopManager()
             m.cleanup()
-        rmtree(tmpdir)
+
+    rmtree(tmpdir)
+
+
+def test_slurmenv_api_iteration_simple():
+    if not in_slurm_allocation() or get_num_slurm_nodes() < 2:
+        pytest.skip('test not run in slurm allocation or allocation is smaller than 2 nodes')
+
+    resources, allocation = get_slurm_resources_binded()
+
+    set_pythonpath_to_qcg_module()
+    tmpdir = str(tempfile.mkdtemp(dir=SHARED_PATH))
+
+    try:
+        m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
+
+        its = 2
+        jobs = Jobs(). \
+            addStd({ 'name': 'host',
+                     'iteration': { 'stop': its },
+                     'execution': { 'exec': 'hostname', 'args': [ '--fqdn' ], 'stdout': 'out' },
+                     'resources': { 'numCores': { 'exact': 1 } }
+                     })
+        jinfos = submit_2_manager_and_wait_4_info(m, jobs, 'SUCCEED')
+        assert jinfos
+        jinfo = jinfos['host']
+        print('jinfo: {}'.format(jinfo))
+        assert all((jinfo.iterations, jinfo.iterations.get('start', -1) == 0,
+                    jinfo.iterations.get('stop', 0) == its, jinfo.iterations.get('total', 0) == its,
+                    jinfo.iterations.get('finished', 0) == its, jinfo.iterations.get('failed', -1) == 0))
+
+        its = 2
+        jobs = Jobs(). \
+            addStd({ 'name': 'host2',
+                     'iteration': { 'stop': its },
+                     'execution': { 'exec': 'hostname', 'args': [ '--fqdn' ], 'stdout': 'out' },
+                     'resources': { 'numCores': { 'exact': 1 } }
+                     })
+        jinfos = submit_2_manager_and_wait_4_info(m, jobs, 'SUCCEED', withChilds=True)
+        assert jinfos
+        jinfo = jinfos['host2']
+        print('jinfo: {}'.format(jinfo))
+        assert all((jinfo.iterations, jinfo.iterations.get('start', -1) == 0,
+                    jinfo.iterations.get('stop', 0) == its, jinfo.iterations.get('total', 0) == its,
+                    jinfo.iterations.get('finished', 0) == its, jinfo.iterations.get('failed', -1) == 0))
+        assert len(jinfo.childs) == its
+        for iteration in range(its):
+            job_it = jinfo.childs[iteration]
+            assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format('host2', iteration),
+                        job_it.wdir == tmpdir, job_it.totalCores == 1))
+    finally:
+        if m:
+            m.finish()
+            m.stopManager()
+            m.cleanup()
+
+    rmtree(tmpdir)
+
+
+def test_slurmenv_api_iteration_core_scheduling():
+    if not in_slurm_allocation() or get_num_slurm_nodes() < 2:
+        pytest.skip('test not run in slurm allocation or allocation is smaller than 2 nodes')
+
+    resources, allocation = get_slurm_resources_binded()
+
+    set_pythonpath_to_qcg_module()
+    tmpdir = str(tempfile.mkdtemp(dir=SHARED_PATH))
+
+    try:
+        m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
+
+        jobs = Jobs(). \
+            addStd({ 'name': 'host',
+                     'iteration': { 'stop': 2 },
+                     'execution': { 'exec': 'hostname', 'args': [ '--fqdn' ], 'stdout': 'out' },
+                     'resources': { 'numCores': { 'min': 1,
+                                                  'scheduler': { 'name': 'split-into' } } }
+                     })
+        jinfos = submit_2_manager_and_wait_4_info(m, jobs, 'SUCCEED', withChilds=True)
+        assert jinfos
+        jinfo = jinfos['host']
+        assert all((jinfo.iterations, jinfo.iterations.get('start', -1) == 0,
+                    jinfo.iterations.get('stop', 0) == 2, jinfo.iterations.get('total', 0) == 2,
+                    jinfo.iterations.get('finished', 0) == 2, jinfo.iterations.get('failed', -1) == 0)), str(jinfo)
+        assert len(jinfo.childs) == 2
+        for iteration in range(2):
+            job_it = jinfo.childs[iteration]
+            print('job iteration {}: {}'.format(iteration, str(job_it)))
+            assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format('host', iteration),
+                        job_it.totalCores >= 1, job_it.totalCores < resources.totalCores)), str(job_it)
+        # all iterations has been scheduled across all resources
+        assert sum([ child.totalCores for child in jinfo.childs ]) == resources.totalCores
+    finally:
+        if m:
+            m.finish()
+            m.stopManager()
+            m.cleanup()
+
+    rmtree(tmpdir)

@@ -354,7 +354,7 @@ def test_governor_wait_for_all_jobs_single(tmpdir):
         assert status_reply['code'] == 0
 
         # wait up to 5 seconds
-        governor_process.join(5)
+        governor_process.join(10)
         assert governor_process.exitcode == 0
 
         send_request_valid(direct_address, { 'request': 'finish' })
@@ -439,7 +439,7 @@ def test_governor_wait_for_all_jobs_many(tmpdir):
         assert status_reply['code'] == 0
 
         # wait up to 5 seconds
-        governor_process.join(5)
+        governor_process.join(10)
         assert governor_process.exitcode == 0
 
         send_request_valid(direct_address, { 'request': 'finish' })
@@ -545,7 +545,7 @@ def test_governor_submit_many_instances(tmpdir):
         assert status_reply['code'] == 0
 
         # wait up to 5 seconds
-        governor_process.join(5)
+        governor_process.join(10)
         assert governor_process.exitcode == 0
 
         for i, process in enumerate(direct_process):
@@ -608,7 +608,7 @@ def test_slurm_partition_resources():
             str(resources_reply)
 
         send_request_valid(governor_address, {'request': 'finish'})
-        governor_process.join(5)
+        governor_process.join(10)
         assert governor_process.exitcode == 0
     finally:
         if governor_process:
