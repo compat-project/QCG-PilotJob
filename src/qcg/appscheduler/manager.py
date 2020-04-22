@@ -85,14 +85,14 @@ class SchedulingJob:
         if self.__hasIterations and jobres.hasCores() and jobres.cores.scheduler is not None:
             self.__resCoresGenerator = IterScheduler.GetScheduler(jobres.cores.scheduler['name'])(
                 jobres.cores.toDict(), self.__totalIterations, self.__manager.resources.totalCores,
-                **jobres.cores.scheduler.get('params', {}))
+                **jobres.cores.scheduler.get('params', {})).generate()
             logging.debug('generated cores scheduler {} for job {}'.format(jobres.cores.scheduler['name'], self.job.name))
 
         self.__resNodesGenerator = None
         if self.__hasIterations and jobres.hasNodes() and jobres.nodes.scheduler is not None:
             self.__resNodesGenerator = IterScheduler.GetScheduler(jobres.nodes.scheduler["name"])(
                 jobres.nodes.toDict(), self.__totalIterations, self.__manager.resources.totalNodes,
-                **jobres.nodes.scheduler.get("params", {}))
+                **jobres.nodes.scheduler.get("params", {})).generate()
             logging.debug('generated nodes scheduler {} for job {}'.format(jobres.nodes.scheduler['name'], self.job.name))
 
         # compute minResCores
