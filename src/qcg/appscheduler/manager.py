@@ -1004,6 +1004,25 @@ class DirectManagerHandler:
                     'status': str(job.getStateStr())
                 }
 
+                if job.isIterative():
+                    jobData['iterations'] = { 'start': job.getIteration().start,
+                                              'stop': job.getIteration().stop,
+                                              'total': job.getIteration().iterations(),
+                                              'finished': job.getIteration().iterations() - job.getSubjobsNotfinished(),
+                                              'failed': job.getSubjobsFailed() }
+
+                    if request.includeChilds:
+                        jobData['childs'] = [ ]
+                        for idx, subJob in enumerate(job.getSubjobs()):
+                            info = { 'iteration': idx + job.getIteration().start,
+                                     'state': subJob.getState().name }
+
+                            subruntime = subJob.getRuntime()
+                            if subruntime is not None and len(subruntime) > 0:
+                                info['runtime'] = subruntime
+
+                            jobData['childs'].append(info)
+
                 if job.getMessages() is not None:
                     jobData['messages'] = job.getMessages()
 

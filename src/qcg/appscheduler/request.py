@@ -188,6 +188,10 @@ class JobInfoReq(Request):
         if 'jobNames' not in reqData or not isinstance(reqData['jobNames'], list) or len(reqData['jobNames']) < 1:
             raise InvalidRequest('Wrong job status request - missing job names')
 
+        self.includeChilds = False
+        if reqData.get('params'):
+            if reqData['params'].get('withChilds'):
+                self.includeChilds = True
         self.jobNames = reqData['jobNames']
 
     def toDict(self):

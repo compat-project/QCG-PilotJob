@@ -498,6 +498,15 @@ class Job:
     def resources(self):
         return self.__resources
 
+    def getSubjobs(self):
+        return self.__subjobs
+
+    def getSubjobsNotfinished(self):
+        return self.__subjobs_notFinished
+
+    def getSubjobsFailed(self):
+        return self.__subjobs_failed
+
     def getHistory(self, iteration=None):
         if iteration is None:
             return self.__history

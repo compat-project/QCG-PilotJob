@@ -324,12 +324,13 @@ class Manager:
         })
 
 
-    def info(self, names):
+    def info(self, names, **kwargs):
         """
         Return detailed information about jobs.
 
         Args:
             names (list, str) - a list of job names
+            kwargs - additional arguments to the info method
 
         Returns:
             list - a list of job's detailed information in the format described in 'jobStatus' method of 
@@ -343,13 +344,17 @@ class Manager:
         else:
             jNames = list(names)
 
-        return self.__sendAndValidateResult({
+        req = {
             "request": "jobInfo",
             "jobNames": jNames
-        })
+        }
+        if kwargs:
+            req["params"] = kwargs
+
+        return self.__sendAndValidateResult(req)
 
 
-    def infoParsed(self, names):
+    def infoParsed(self, names, **kwargs):
         """
         Return detailed and parsed information about jobs.
 
@@ -363,7 +368,7 @@ class Manager:
         Raises:
             see __sendAndValidateResult
         """
-        return { jname: JobInfo(jinfo.get('data', {})) for jname, jinfo in self.info(names).get('jobs', {}).items() }
+        return { jname: JobInfo.fromJob(jinfo.get('data', {})) for jname, jinfo in self.info(names, **kwargs).get('jobs', {}).items() }
 
 
     def remove(self, names):
