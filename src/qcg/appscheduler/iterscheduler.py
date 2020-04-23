@@ -2,12 +2,29 @@ import math
 import logging
 
 from qcg.appscheduler.errors import InvalidRequest
+from qcg.appscheduler.joblist import ResourceSize
 
 class IterScheduler:
 
     @classmethod
     def GetScheduler(cls, schedulerName):
         return __SCHEDULERS__.get(schedulerName.lower(), DEFAULT_SCHEDULER)
+
+    @staticmethod
+    def get_exact_iter_plan(iter_plan, exact):
+        target = iter_plan.copy()
+
+        if 'min' in target:
+            del target['min']
+
+        if 'max' in target:
+            del target['max']
+
+        if 'scheduler' in target:
+            del target['scheduler']
+
+        target['exact'] = exact
+        return target
 
 
 class MaximumIters:
@@ -17,6 +34,8 @@ class MaximumIters:
         self.jobResources = jobResources
         self.iterations = iterations
         self.availResources = availResources
+
+
 
     def generate(self):
         logging.debug("iteration scheduler '{}' algorithm called".format(MaximumIters.SCHED_NAME))
@@ -30,58 +49,51 @@ class MaximumIters:
             pmax = self.jobResources['max']
 
         if self.iterations * pmin <= self.availResources:
-            # all self.iterations will fit at one round
-            new_pmax = min(pmax, int(math.floor(self.availResources / (self.iterations))))
-            spare, spare_per_iter = 0, 0
-            if new_pmax * self.iterations < self.availResources:
-                spare = self.availResources - new_pmax * self.iterations
-                spare_per_iter = int(math.ceil(float(spare) / self.iterations))
+            # a single round
+            logging.debug("iterations in single round to schedule: {}, available resources: {}, " +\
+                  "minimum iteration resources: {}".format(self.iterations, self.availResources, pmin))
 
-            logging.debug("maximum-iters: for {} tasks scheduled on {} self.availResources the new min & max is ({},{}), spare {}, sper / iter {}".format(
-                self.iterations, self.availResources, pmin, new_pmax, spare, spare_per_iter))
+            avail_resources = self.availResources
+            for iteration in range(self.iterations):
+                # assign part of round_resources to the iteration_in_round
+                iteration_resources = math.floor(avail_resources / (self.iterations - iteration))
+                avail_resources -= iteration_resources
 
-            for idx in range(0, self.iterations):
-                tmax = new_pmax
-                if spare > 0:
-                    tmax = min(new_pmax + spare_per_iter, pmax)
-                    spare -= tmax - new_pmax
+                logging.debug("iteration: {}/{}, iteration_resources: {}, rest avail_resources: {}".format(
+                    iteration, self.iterations, iteration_resources, avail_resources))
 
-                iterPlan = self.jobResources.copy()
-                iterPlan.update({ 'min': pmin, 'max': tmax })
-                yield iterPlan
+                yield IterScheduler.get_exact_iter_plan(self.jobResources.copy(), iteration_resources)
         else:
             # more than one round
-            rest = self.iterations
-            while rest > 0:
-                if rest * pmin > self.availResources:
-                    curr_iters = int(math.floor(self.availResources / pmin))
-                else:
-                    curr_iters = rest
 
-                rest -= curr_iters
+            # minimum number of needed rounds
+            rounds = math.ceil((self.iterations / math.floor(float(self.availResources) / pmin)))
+            iterations_to_schedule = self.iterations
 
-#                print("curr_iters: {}, rest: {}".format(curr_iters, rest))
+            logging.debug("iterations to schedule: {}, rounds: {}, resources: {}, minimum iteration " +\
+                          "resources: {}".format(iterations_to_schedule, rounds, self.availResources, pmin))
 
-                new_pmax = min(pmax, int(math.floor(self.availResources / (curr_iters))))
-                spare, spare_per_iter = 0, 0
-                if new_pmax * curr_iters < self.availResources and new_pmax < pmax:
-                    spare = self.availResources - new_pmax * curr_iters
-                    spare_per_iter = int(math.ceil(float(spare) / curr_iters))
+            while iterations_to_schedule > 0:
+                for round in range(rounds):
+                    iterations_in_round = math.ceil(iterations_to_schedule / (rounds - round))
+                    round_resources = self.availResources
 
-#                print("maximum-iters: for {} tasks the new min & max is ({},{}), spare {}, sper / iter {}".format(
-#                    curr_iters, pmin, new_pmax, spare, spare_per_iter))
-                logging.debug("maximum-iters: for {} tasks the new min & max is ({},{}), spare {}, sper / iter {}".format(
-                    curr_iters, pmin, new_pmax, spare, spare_per_iter))
+                    logging.debug("round: {}/{}, iterations_in_round: {}".format(round, rounds, iterations_in_round))
 
-                for idx in range(0, curr_iters):
-                    tmax = new_pmax
-                    if spare > 0:
-                        tmax = min(new_pmax + spare_per_iter, pmax)
-                        spare -= tmax - new_pmax
+                    for iteration_in_round in range(iterations_in_round):
+                        # assign part of round_resources to the iteration_in_round
+                        iteration_resources = math.floor(round_resources / (iterations_in_round - iteration_in_round))
+                        round_resources -= iteration_resources
 
-                    iterPlan = self.jobResources.copy()
-                    iterPlan.update({ 'min': pmin, 'max': tmax })
-                    yield iterPlan
+                        logging.debug("round: {}/{}, iteration_in_round: {}/{}, iteration_resources: {}, rest " +\
+                                      "round_resources: {}".format(round, rounds, iteration_in_round,
+                                                                   iterations_in_round, iteration_resources,
+                                                                   round_resources))
+
+                        yield IterScheduler.get_exact_iter_plan(self.jobResources.copy(), iteration_resources)
+
+                    iterations_to_schedule -= iterations_in_round
+                    logging.debug("end of round: {}/{}, iterations_to_schedule: {}".format(round, rounds, iterations_to_schedule))
 
 
 class SplitInto:
@@ -112,9 +124,7 @@ class SplitInto:
             self.iterations, self.splitInto, self.availResources, splitPart))
 
         for idx in range(0, self.iterations):
-            iterPlan = self.jobResources.copy()
-            iterPlan.update({ 'max': splitPart })
-            yield iterPlan
+            yield IterScheduler.get_exact_iter_plan(self.jobResources.copy(), splitPart)
 
 
 DEFAULT_SCHEDULER = MaximumIters

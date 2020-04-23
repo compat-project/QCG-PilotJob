@@ -21,8 +21,7 @@ def test_iterscheduler_splitinto():
     si_sched_gen = IterScheduler.GetScheduler('split-into')({'min': 1}, iters, resources, parts=split_into).generate()
     for i in range(iters):
         job_iter_res = next(si_sched_gen)
-        assert job_iter_res and all(('max' in job_iter_res, 'min' in job_iter_res,
-                                     job_iter_res['min'] == 1, job_iter_res['max'] == resources / iters)),\
+        assert job_iter_res and all(('exact', job_iter_res['exact'] == resources / iters)),\
             str(job_iter_res)
     with pytest.raises(StopIteration):
         next(si_sched_gen)
@@ -32,8 +31,7 @@ def test_iterscheduler_splitinto():
     si_sched_gen = IterScheduler.GetScheduler('split-into')({'min': 1}, iters, resources, parts=split_into).generate()
     for i in range(iters):
         job_iter_res = next(si_sched_gen)
-        assert job_iter_res and all(('max' in job_iter_res, 'min' in job_iter_res,
-                                     job_iter_res['min'] == 1, job_iter_res['max'] == resources / split_into)),\
+        assert job_iter_res and all(('exact' in job_iter_res, job_iter_res['exact'] == resources / split_into)),\
             str(job_iter_res)
     with pytest.raises(StopIteration):
         next(si_sched_gen)
@@ -43,8 +41,7 @@ def test_iterscheduler_splitinto():
     si_sched_gen = IterScheduler.GetScheduler('split-into')({'min': 1}, iters, resources, parts=split_into).generate()
     for i in range(iters):
         job_iter_res = next(si_sched_gen)
-        assert job_iter_res and all(('max' in job_iter_res, 'min' in job_iter_res,
-                                     job_iter_res['min'] == 1, job_iter_res['max'] == resources / split_into)), \
+        assert job_iter_res and all(('exact' in job_iter_res, job_iter_res['exact'] == resources / split_into)), \
             str(job_iter_res)
     with pytest.raises(StopIteration):
         next(si_sched_gen)
@@ -54,8 +51,7 @@ def test_iterscheduler_splitinto():
     si_sched_gen = IterScheduler.GetScheduler('split-into')({'min': 1}, iters, resources).generate()
     for i in range(iters):
         job_iter_res = next(si_sched_gen)
-        assert job_iter_res and all(('max' in job_iter_res, 'min' in job_iter_res,
-                                     job_iter_res['min'] == 1, job_iter_res['max'] == resources / iters)), \
+        assert job_iter_res and all(('exact' in job_iter_res, job_iter_res['exact'] == resources / iters)), \
             str(job_iter_res)
     with pytest.raises(StopIteration):
         next(si_sched_gen)
@@ -67,8 +63,7 @@ def test_iterscheduler_maximum_iters():
     mi_sched_gen = IterScheduler.GetScheduler('maximum-iters')({'min': 1, }, iters, resources).generate()
     for i in range(iters):
         job_iter_res = next(mi_sched_gen)
-        assert job_iter_res and all(('max' in job_iter_res, 'min' in job_iter_res,
-                                     job_iter_res['min'] == 1, job_iter_res['max'] == 1)), \
+        assert job_iter_res and all(('exact' in job_iter_res, job_iter_res['exact'] == 1)), \
             str(job_iter_res)
     with pytest.raises(StopIteration):
         next(mi_sched_gen)
@@ -79,8 +74,7 @@ def test_iterscheduler_maximum_iters():
     mi_sched_gen = IterScheduler.GetScheduler('maximum-iters')({'min': 1, }, iters, resources).generate()
     for i in range(iters):
         job_iter_res = next(mi_sched_gen)
-        assert job_iter_res and all(('max' in job_iter_res, 'min' in job_iter_res,
-                                     job_iter_res['min'] == 1, job_iter_res['max'] == 1)), \
+        assert job_iter_res and all(('exact' in job_iter_res, job_iter_res['exact'] == 1)), \
             str(job_iter_res)
     with pytest.raises(StopIteration):
         next(mi_sched_gen)
@@ -91,8 +85,7 @@ def test_iterscheduler_maximum_iters():
     mi_sched_gen = IterScheduler.GetScheduler('maximum-iters')({'min': 1, }, iters, resources).generate()
     for i in range(iters):
         job_iter_res = next(mi_sched_gen)
-        assert job_iter_res and all(('max' in job_iter_res, 'min' in job_iter_res,
-                                     job_iter_res['min'] == 1, job_iter_res['max'] == 2)), \
+        assert job_iter_res and all(('exact' in job_iter_res, job_iter_res['exact'] == 2)), \
             str(job_iter_res)
     with pytest.raises(StopIteration):
         next(mi_sched_gen)
@@ -100,12 +93,11 @@ def test_iterscheduler_maximum_iters():
     # single rounds, 4, 3, 3
     iters = 3
     resources = 10
-    res = [4, 3, 3]
+    res = [3, 3, 4]
     mi_sched_gen = IterScheduler.GetScheduler('maximum-iters')({'min': 1, }, iters, resources).generate()
     for i in range(iters):
         job_iter_res = next(mi_sched_gen)
-        assert job_iter_res and all(('max' in job_iter_res, 'min' in job_iter_res,
-                                     job_iter_res['min'] == 1, job_iter_res['max'] == res[i])), \
+        assert job_iter_res and all(('exact' in job_iter_res, job_iter_res['exact'] == res[i])), \
             str(job_iter_res)
     with pytest.raises(StopIteration):
         next(mi_sched_gen)
@@ -113,12 +105,11 @@ def test_iterscheduler_maximum_iters():
     # single rounds, 4, 3, 3
     iters = 3
     resources = 10
-    res = [4, 3, 3]
+    res = [3, 3, 4]
     mi_sched_gen = IterScheduler.GetScheduler('maximum-iters')({}, iters, resources).generate()
     for i in range(iters):
         job_iter_res = next(mi_sched_gen)
-        assert job_iter_res and all(('max' in job_iter_res, 'min' in job_iter_res,
-                                     job_iter_res['min'] == 1, job_iter_res['max'] == res[i])), \
+        assert job_iter_res and all(('exact' in job_iter_res, job_iter_res['exact'] == res[i])), \
             str(job_iter_res)
     with pytest.raises(StopIteration):
         next(mi_sched_gen)
@@ -126,12 +117,11 @@ def test_iterscheduler_maximum_iters():
     # single rounds, 4, 4, 3
     iters = 3
     resources = 11
-    res = [4, 4, 3]
+    res = [3, 4, 4]
     mi_sched_gen = IterScheduler.GetScheduler('maximum-iters')({}, iters, resources).generate()
     for i in range(iters):
         job_iter_res = next(mi_sched_gen)
-        assert job_iter_res and all(('max' in job_iter_res, 'min' in job_iter_res,
-                                     job_iter_res['min'] == 1, job_iter_res['max'] == res[i])), \
+        assert job_iter_res and all(('exact' in job_iter_res, job_iter_res['exact'] == res[i])), \
             str(job_iter_res)
     with pytest.raises(StopIteration):
         next(mi_sched_gen)
@@ -139,12 +129,11 @@ def test_iterscheduler_maximum_iters():
     # single rounds, 4, 4, 3
     iters = 3
     resources = 11
-    res = [4, 4, 3]
+    res = [3, 4, 4]
     mi_sched_gen = IterScheduler.GetScheduler('maximum-iters')({'min': 3}, iters, resources).generate()
     for i in range(iters):
         job_iter_res = next(mi_sched_gen)
-        assert job_iter_res and all(('max' in job_iter_res, 'min' in job_iter_res,
-                                     job_iter_res['min'] == 3, job_iter_res['max'] == res[i])), \
+        assert job_iter_res and all(('exact' in job_iter_res, job_iter_res['exact'] == res[i])), \
             str(job_iter_res)
     with pytest.raises(StopIteration):
         next(mi_sched_gen)
@@ -152,12 +141,11 @@ def test_iterscheduler_maximum_iters():
     # two rounds (two jobs in first, single in second), 6, 5, 11
     iters = 3
     resources = 11
-    res = [6, 5, 11]
+    res = [5, 6, 11]
     mi_sched_gen = IterScheduler.GetScheduler('maximum-iters')({'min': 5}, iters, resources).generate()
     for i in range(iters):
         job_iter_res = next(mi_sched_gen)
-        assert job_iter_res and all(('max' in job_iter_res, 'min' in job_iter_res,
-                                     job_iter_res['min'] == 5, job_iter_res['max'] == res[i])), \
+        assert job_iter_res and all(('exact' in job_iter_res, job_iter_res['exact'] == res[i])), \
             "{} - {}".format(i, str(job_iter_res))
     with pytest.raises(StopIteration):
         next(mi_sched_gen)
@@ -165,12 +153,11 @@ def test_iterscheduler_maximum_iters():
     # two rounds (2 jobs in single), 6, 5, 6, 5
     iters = 4
     resources = 11
-    res = [6, 5, 6, 5]
+    res = [5, 6, 5, 6]
     mi_sched_gen = IterScheduler.GetScheduler('maximum-iters')({'min': 5}, iters, resources).generate()
     for i in range(iters):
         job_iter_res = next(mi_sched_gen)
-        assert job_iter_res and all(('max' in job_iter_res, 'min' in job_iter_res,
-                                     job_iter_res['min'] == 5, job_iter_res['max'] == res[i])), \
+        assert job_iter_res and all(('exact' in job_iter_res, job_iter_res['exact'] == res[i])), \
             "{} - {}".format(i, str(job_iter_res))
     with pytest.raises(StopIteration):
         next(mi_sched_gen)
@@ -182,8 +169,7 @@ def test_iterscheduler_maximum_iters():
     mi_sched_gen = IterScheduler.GetScheduler('maximum-iters')({'min': 6}, iters, resources).generate()
     for i in range(iters):
         job_iter_res = next(mi_sched_gen)
-        assert job_iter_res and all(('max' in job_iter_res, 'min' in job_iter_res,
-                                     job_iter_res['min'] == 6, job_iter_res['max'] == res[i])), \
+        assert job_iter_res and all(('exact' in job_iter_res, job_iter_res['exact'] == res[i])), \
             "{} - {}".format(i, str(job_iter_res))
     with pytest.raises(StopIteration):
         next(mi_sched_gen)
