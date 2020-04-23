@@ -686,24 +686,24 @@ def test_job_description_resources_schedulers():
     with pytest.raises(IllegalResourceRequirements):
         jobd = """{ "name": "job1", 
                   "execution": { "exec": "/bin/date" },
-                  "resources": { "numCores": { "exact": 2, "scheduler": { "name": "split-into", "params": { "split-into": 8  } } } } }"""
+                  "resources": { "numCores": { "exact": 2, "scheduler": { "name": "split-into", "params": { "parts": 8  } } } } }"""
         Job(**json.loads(jobd))
 
     jobd = """{ "name": "job1", 
               "execution": { "exec": "/bin/date" },
-              "resources": { "numCores": { "min": 2, "scheduler": { "name": "split-into", "params": { "split-into": 8  } } } } }"""
+              "resources": { "numCores": { "min": 2, "scheduler": { "name": "split-into", "params": { "parts": 8  } } } } }"""
     job = Job(**json.loads(jobd))
     assert job
 
     jobd = """{ "name": "job1", 
               "execution": { "exec": "/bin/date" },
-              "resources": { "numCores": { "max": 3, "scheduler": { "name": "split-into", "params": { "split-into": 8  } } } } }"""
+              "resources": { "numCores": { "max": 3, "scheduler": { "name": "split-into", "params": { "parts": 8  } } } } }"""
     job = Job(**json.loads(jobd))
     assert job
 
     jobd = """{ "name": "job1", 
               "execution": { "exec": "/bin/date" },
-              "resources": { "numCores": { "min": 2, "max": 3, "scheduler": { "name": "split-into", "params": { "split-into": 8  } } } } }"""
+              "resources": { "numCores": { "min": 2, "max": 3, "scheduler": { "name": "split-into", "params": { "parts": 8  } } } } }"""
     job = Job(**json.loads(jobd))
     assert job
 
