@@ -185,8 +185,9 @@ class QCGPMService:
         print('log level set to: {}'.format(Config.LOG_LEVEL.get(config).upper()))
 
     def __setupEventLoop(self):
-        if asyncio.get_event_loop() and asyncio.get_event_loop().is_closed():
-            asyncio.set_event_loop(asyncio.new_event_loop())
+        pass
+#        if asyncio.get_event_loop() and asyncio.get_event_loop().is_closed():
+#            asyncio.set_event_loop(asyncio.new_event_loop())
 
 
     def __setupAddressFile(self):
@@ -257,7 +258,7 @@ class QCGPMService:
         if self.__manager:
             self.__manager.stop()
 
-        asyncio.get_event_loop().close()
+#        asyncio.get_event_loop().close()
 
 
 class QCGPMServiceProcess(Process):
