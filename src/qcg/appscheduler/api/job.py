@@ -1,4 +1,5 @@
 import json
+import uuid
 
 from qcg.appscheduler.api.errors import *
 
@@ -6,7 +7,8 @@ from qcg.appscheduler.api.errors import *
 # top level job description attributes
 JOB_TOP_ATTRS = {
     "name":    { 'req': True,  'types': [ str ]       },
-    "exec":    { 'req': True,  'types': [ str ]       },
+    "exec":    { 'req': False, 'types': [ str ]       },
+    "script":  { 'req': False, 'types': [ str ]       },
     "args":    { 'req': False, 'types': [ list, str ] },
     "stdin":   { 'req': False, 'types': [ str ]       },
     "stdout":  { 'req': False, 'types': [ str ]       },
@@ -14,10 +16,10 @@ JOB_TOP_ATTRS = {
     "wd":      { 'req': False, 'types': [ str ]       },
     "modules": { 'req': False, 'types': [ list, str ] },
     "venv":    { 'req': False, 'types': [ str ]       },
-    "numNodes":{ 'req': False, 'types': [ dict ]      },
-    "numCores":{ 'req': False, 'types': [ dict ]      },
+    "numNodes":{ 'req': False, 'types': [ int, dict ] },
+    "numCores":{ 'req': False, 'types': [ int, dict ] },
     "wt":      { 'req': False, 'types': [ str ]       },
-    "iterate": { 'req': False, 'types': [ list ]      },
+    "iterate": { 'req': False, 'types': [ int, dict ] },
     "after":   { 'req': False, 'types': [ list, str ] }
 }
 
@@ -30,6 +32,13 @@ JOB_RES_ATTRS = {
     "scheduler":  { 'req': False,  'types': [ str ] }
 }
 
+ITERATE_ATTRS = {
+    "start":     { 'req': False, 'types': [ int ]  },
+    "stop":      { 'req': True,  'types': [ int ]  }
+}
+
+MAX_ITERATIONS = 64 * 1024
+
 
 class Jobs:
 
@@ -39,6 +48,10 @@ class Jobs:
         """
         self.__list = {}
         self.__jobIdx = 0
+
+
+    def __generate_default_name(self):
+        return str(uuid.uuid4())
 
 
     def __validateSmplJob(self, attrs):
@@ -53,14 +66,14 @@ class Jobs:
             InvalidJobDescriptionError - in case of invalid job description
         """
         if 'name' not in attrs:
-            raise InvalidJobDescriptionError("Missing job name")
+            attrs['name'] = self.__generate_default_name()
 
         if attrs['name'] in self.__list:
-            raise InvalidJobDescriptionError("Job %s already in list" % attrs['name'])
+            raise InvalidJobDescriptionError("Job {} already in list".format(attrs['name']))
 
         for attr in attrs:
             if attr not in JOB_TOP_ATTRS:
-                raise InvalidJobDescriptionError("Unknown attribute '%s'" % attr)
+                raise InvalidJobDescriptionError("Unknown attribute {}".format(attr))
 
             typeValid = False
             for t in JOB_TOP_ATTRS[attr]['types']:
@@ -69,7 +82,7 @@ class Jobs:
                     break
 
             if not typeValid:
-                raise InvalidJobDescriptionError("Invalid attribute '%s' type '%" % (attr, type(attrs[attr])))
+                raise InvalidJobDescriptionError("Invalid attribute {} type {}".format(attr, type(attrs[attr])))
 
         if 'after' in attrs and isinstance(attrs['after'], str):
             # convert after string to single element list
@@ -79,28 +92,55 @@ class Jobs:
             if JOB_TOP_ATTRS[reqAttr]['req'] and reqAttr not in attrs:
                 raise InvalidJobDescriptionError("Required attribute '%s' not defined" % reqAttr)
 
-        for res in [ 'numNodes', 'numCores' ]:
-            if res in attrs:
-                for nattr in attrs[res]:
-                    if nattr not in JOB_RES_ATTRS:
-                        raise InvalidJobDescriptionError("Unknown attribute %s->'%s'" % (res, nattr))
+        if not 'exec' in attrs and not 'script' in attrs:
+            raise InvalidJobDescriptionError("No 'exec' nor 'script' defined")
+
+        if 'exec' in attrs and 'script' in attrs:
+            raise InvalidJobDescriptionError("Both 'exec' and 'script' defined")
+
+        if 'numCores' in attrs and isinstance(attrs['numCores'], int):
+            attrs['numCores'] = { 'exact': attrs['numCores'] }
+
+        if 'numNodes' in attrs and isinstance(attrs['numNodes'], int):
+            attrs['numNodes'] = { 'exact': attrs['numNodes'] }
+
+        self.__validateSmplElementDefinition(['numNodes', 'numCores'], attrs, JOB_RES_ATTRS)
+
+        if 'iterate' in attrs:
+            if isinstance(attrs['iterate'], int):
+                attrs['iterate'] = {'start': 0, 'stop': attrs['iterate']}
+
+            self.__validateSmplElementDefinition(['iterate'], attrs, ITERATE_ATTRS)
+
+            iter_start = attrs['iterate']['start'] if 'start' in attrs['iterate'] else 0
+            niters = attrs['iterate']['stop'] - iter_start
+
+            if niters < 0 or niters > MAX_ITERATIONS:
+                raise InvalidJobDescriptionError("Wrong number of iterations - outside range (0, {})".format(
+                    MAX_ITERATIONS))
+
+
+    def __validateSmplElementDefinition(self, element_names, element_attributes, element_definition):
+        for element_name in element_names:
+            if element_name in element_attributes:
+                for element_attr in element_attributes[element_name]:
+                    if element_attr not in element_definition:
+                        raise InvalidJobDescriptionError("Unknown {} attribute {}".format(element_name, element_attr))
 
                     typeValid = False
-                    for t in JOB_RES_ATTRS[nattr]['types']:
-                        if isinstance(attrs[res][nattr], t):
+                    for t in element_definition[element_attr]['types']:
+                        if isinstance(element_attributes[element_name][element_attr], t):
                             typeValid = True
                             break
 
                 if not typeValid:
-                    raise InvalidJobDescriptionError("Invalid attribute %s->'%s' type '%" % (res, nattr, type(attrs[res][attr])))
+                    raise InvalidJobDescriptionError("Invalid {} attribute {} type {}".format(
+                        element_name, element_attr, type(element_attributes[element_name][element_attr])))
 
-                for reqAttr in JOB_RES_ATTRS:
-                    if JOB_RES_ATTRS[reqAttr]['req'] and reqAttr not in attrs[res]:
-                        raise InvalidJobDescriptionError("Required attribute %s->'%s' not defined" % (res, reqAttr))
-
-        if 'iterate' in attrs:
-            if len(attrs['iterate']) < 2 or len(attrs['iterate']) > 3:
-                raise InvalidJobDescriptionError("The iterate must contain 2 or 3 element list")
+                for req_attr in element_definition:
+                    if element_definition[req_attr]['req'] and req_attr not in element_attributes[element_name]:
+                        raise InvalidJobDescriptionError("Required attribute {} of element {} not defined".format(
+                            req_attr, element_name))
 
 
     def __validateStdJob(self, stdJob):
@@ -114,13 +154,13 @@ class Jobs:
             InvalidJobDescriptionError - in case of invalid job description
         """
         if 'name' not in stdJob:
-            raise InvalidJobDescriptionError('Missing "name" key')
+            stdJob['name'] = self.__generate_default_name()
 
         if 'execution' not in stdJob or ('exec' not in stdJob['execution'] and 'script' not in stdJob['execution']):
             raise InvalidJobDescriptionError('Missing "execution/exec" key')
 
         if stdJob['name'] in self.__list:
-            raise InvalidJobDescriptionError("Job %s already in list" % (stdJob['name']))
+            raise InvalidJobDescriptionError("Job {} already in list".format(stdJob['name']))
 
 
     def __convertSimpleToStd(self, smplJob):
@@ -165,39 +205,6 @@ class Jobs:
             stdJob['dependencies'] = { 'after': smplJob['after'] }
 
         return stdJob
-
-
-    def convertStdToSimple(self, stdJob):
-        """
-        Convert standard job description to a simple format.
-
-        Args:
-            stdJob (dict) - standard job description
-
-        Returns:
-            dict - simple job description
-        """
-        smplJob = { }
-
-        name = stdJob['name']
-
-        for key in [ 'iterate', 'after' ]:
-            if key in stdJob:
-                smplJob[key] = stdJob[key]
-
-        for eKey in [ 'exec', 'args', 'stdin', 'stdout', 'stderr', 'wd', 'modules', 'venv' ]:
-            if eKey in stdJob['execution']:
-                smplJob[eKey] = stdJob['execution'][eKey]
-
-        if 'resources' in stdJob:
-            for rKey in [ 'numCores', 'numNodes', 'wt' ]:
-                if rKey in stdJob['resources']:
-                    smplJob[rKey] = stdJob['resources'][rKey]
-
-        if 'dependencies' in stdJob and 'after' in stdJob['dependencies']:
-            smplJob['after'] = stdJob['dependencies']['after']
-
-        return (name, smplJob)
 
 
     """
@@ -283,6 +290,18 @@ class Jobs:
         del self.__list[name]
 
 
+    def clear(self):
+        """
+        Remove all jobs from the group.
+
+        Returns:
+            int - number of removed elements
+        """
+        njobs = len(self.__list)
+        self.__list.clear()
+        return njobs
+
+
     def jobNames(self):
         """
         Return a list with job names in grup.
@@ -304,7 +323,7 @@ class Jobs:
         Returns:
             list - a list of jobs in the format acceptable by the QCG PJM (standard format)
         """
-        return [j['jdata'] for j in list(self.__list.values())]
+        return [j['data'] for j in list(self.__list.values())]
 
 
     def orderedJobs(self):
@@ -334,13 +353,13 @@ class Jobs:
 
                     name = job['name']
                     if name in self.__list:
-                        raise InvalidJobDescriptionError('Job "%s" already defined"' % (name))
+                        raise InvalidJobDescriptionError('Job "{}" already defined"'.format(name))
 
                     self.__appendJob(name, job)
         except QCGPJMAError as qe:
             raise qe
         except Exception as e:
-            raise FileError('File to open/write file "%s": %s', filePath, e.args[0])
+            raise FileError('File to open/write file "{}": {}'.format(filePath, e.args[0]))
 
 
     def saveToFile(self, filePath):
@@ -357,4 +376,4 @@ class Jobs:
             with open(filePath, 'w') as f:
                 f.write(json.dumps(self.orderedJobs(), indent=2))
         except Exception as e:
-            raise FileError('File to open/write file "%s": %s', filepath, e.args[0])
+            raise FileError('File to open/write file "%s": %s', filePath, e.args[0])
