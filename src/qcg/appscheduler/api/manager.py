@@ -263,7 +263,8 @@ class Manager:
         in the QCG PJM.
 
         Returns:
-            list - list of jobs with additional data in format described in 'listJobs' method in QCG PJM.
+            dict - dictionary with job names as keys and additional data, such as 'status', position in queue
+                   'inQueue' etc.
 
         Raises:
             InternalError - in case of unexpected result format
@@ -524,10 +525,10 @@ class LocalManager(Manager):
 
         self.qcgpm_queue = mp.Queue()
         self.qcgpm_process = QCGPMServiceProcess(server_args, self.qcgpm_queue)
-        print('manager process created')
+        logging.debug('manager process created')
 
         self.qcgpm_process.start()
-        print('manager process started')
+        logging.debug('manager process started')
 
         try:
             self.qcgpm_conf = self.qcgpm_queue.get(block=True, timeout=10)
@@ -536,12 +537,12 @@ class LocalManager(Manager):
         except Exception as e:
             raise errors.ServiceError('Service not started: {}'.format(str(e)))
 
-        print('got manager configuration: {}'.format(str(self.qcgpm_conf)))
+        logging.debug('got manager configuration: {}'.format(str(self.qcgpm_conf)))
         if not self.qcgpm_conf.get('zmq_addresses', None):
             raise errors.ConnectionError('Missing QCGPM network interface address')
 
         zmq_iface_address = self.qcgpm_conf['zmq_addresses'][0]
-        print('manager zmq iface address: {}'.format(zmq_iface_address))
+        logging.info('manager zmq iface address: {}'.format(zmq_iface_address))
 
         super(LocalManager, self).__init__(zmq_iface_address, cfg)
 
