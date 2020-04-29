@@ -177,9 +177,10 @@ class Jobs:
         stdJob = {}
 
         stdJob['name'] = smplJob['name']
-        stdJob['execution'] = {
-            'exec': smplJob['exec']
-        }
+        if 'exec' in smplJob:
+            stdJob.setdefault('execution', {})['exec'] = smplJob['exec']
+        else:
+            stdJob.setdefault('execution', {})['script'] = smplJob['script']
 
         for key in [ 'args', 'stdin', 'stdout', 'stderr', 'wd', 'modules', 'venv' ]:
             if key in smplJob:
@@ -199,7 +200,7 @@ class Jobs:
 
         for key in [ 'iterate' ]:
             if key in smplJob:
-                stdJob[key] = smplJob[key]
+                stdJob['iteration'] = smplJob[key]
 
         if 'after' in smplJob:
             stdJob['dependencies'] = { 'after': smplJob['after'] }
