@@ -149,6 +149,7 @@ class PartitionManager:
     def terminate(self):
         if self.process:
             logging.info('terminating partition manager {} @ {}'.format(self.mid, self.startNode))
+            self.process.join(5)
             self.process.terminate()
 
 
