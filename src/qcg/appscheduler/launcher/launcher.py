@@ -240,6 +240,7 @@ class Launcher:
             if agent.get('process', None):
                 logging.debug('killing agent {} ...'.format(agent_id))
                 try:
+                    agent['process'].join(5)
 #                    agent['process'].kill()
                     agent['process'].terminate()
                 except:
