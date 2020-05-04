@@ -93,16 +93,10 @@ class Executor:
 
             self.__notFinished[execJobIt.id] = execJobIt
 
-            if Config.PROGRESS.get(self.__config):
-                print("executing job {} ...".format(jobIteration.name))
-
             await execJobIt.run()
-
-            if Config.PROGRESS.get(self.__config):
-                print("job {} finished".format(jobIteration.name))
         except Exception as e:
             if Config.PROGRESS.get(self.__config):
-                print("job {} failed".format(jobIteration.name))
+                print("failed to start job {}".format(jobIteration.name))
 
             logging.exception("Failed to launch job {}".format(jobIteration.name))
             self.__manager.jobFinished(jobIteration, allocation, -1, str(e))
@@ -120,6 +114,9 @@ class Executor:
         Args:
             execJob (ExecutorJob): execution job iteration data
         """
+        if Config.PROGRESS.get(self.__config):
+            print("executing job {} ...".format(execJob.jobIteration.name))
+
         if self.__manager is not None:
             self.__manager.jobExecuting(execJob.jobIteration)
 
@@ -132,6 +129,9 @@ class Executor:
         Args:
             execJob (ExecutorJob): execution job iteration data
         """
+        if Config.PROGRESS.get(self.__config):
+            print("job {} finished".format(execJob.jobIteration.name))
+
         del self.__notFinished[execJob.id]
 
         if self.__manager is not None:
