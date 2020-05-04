@@ -636,7 +636,7 @@ class JobList:
 
     def parse_jobname(self, jobname):
         parts = jobname.split(':', 1)
-        return parts[0], parts[1] if len(parts) > 1 else None
+        return parts[0], int(parts[1]) if len(parts) > 1 else None
 
     def add(self, job):
         assert isinstance(job, Job), "Wrong job type '%s'" % (type(job).__name__)

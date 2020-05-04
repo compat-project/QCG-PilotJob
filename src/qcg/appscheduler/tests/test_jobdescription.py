@@ -911,7 +911,9 @@ def test_joblist():
 
     # parsing job iteration names
     assert jlist.parse_jobname('j1') == ('j1', None)
-    assert jlist.parse_jobname('j1:1') == ('j1', '1')
-    assert jlist.parse_jobname('j1:2:1') == ('j1', '2:1')
-    assert jlist.parse_jobname('j1:') == ('j1', '')
+    assert jlist.parse_jobname('j1:1') == ('j1', 1)
+    with pytest.raises(ValueError):
+        assert jlist.parse_jobname('j1:2:1') == ('j1', '2:1')
+    with pytest.raises(ValueError):
+        assert jlist.parse_jobname('j1:') == ('j1', '')
 
