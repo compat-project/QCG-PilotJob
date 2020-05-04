@@ -994,17 +994,23 @@ class DirectManagerHandler:
 
         for jobName in request.jobNames:
             try:
-                job = self.__manager.jobList.get(jobName)
+                realJobName, jobIteration = self.__manager.jobList.parse_jobname(jobName)
+
+                job = self.__manager.jobList.get(realJobName)
 
                 if job is None:
                     return Response.Error('Job {} doesn\'t exist'.format(request.jobName))
 
+                if not jobIteration is None:
+                    if not job.getIteration().inRange(jobIteration):
+                        return Response.Error('Unknown iteration {} for job {}'.format(jobIteration, realJobName))
+
                 jobData = {
                     'jobName': jobName,
-                    'status': str(job.getStateStr())
+                    'status': str(job.getStateStr(jobIteration))
                 }
 
-                if job.isIterative():
+                if jobIteration is None and job.isIterative():
                     jobData['iterations'] = { 'start': job.getIteration().start,
                                               'stop': job.getIteration().stop,
                                               'total': job.getIteration().iterations(),
@@ -1023,14 +1029,14 @@ class DirectManagerHandler:
 
                             jobData['childs'].append(info)
 
-                if job.getMessages() is not None:
+                if job.getMessages(jobIteration) is not None:
                     jobData['messages'] = job.getMessages()
 
-                jruntime = job.getRuntime()
+                jruntime = job.getRuntime(jobIteration)
                 if jruntime is not None and len(jruntime) > 0:
                     jobData['runtime'] = jruntime
 
-                jhistory = job.getHistory()
+                jhistory = job.getHistory(jobIteration)
                 if jhistory is not None and len(jhistory) > 0:
                     history_str = ''
 
