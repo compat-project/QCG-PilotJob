@@ -156,6 +156,9 @@ def test_slurmenv_simple_script():
 
 
 def test_slurmenv_many_cores():
+    if not in_slurm_allocation() or get_num_slurm_nodes() < 2:
+        pytest.skip('test not run in slurm allocation or allocation is smaller than 2 nodes')
+
     resources, allocation = get_slurm_resources_binded()
     resources_node_names = set(n.name for n in resources.nodes)
 
@@ -225,6 +228,9 @@ def test_slurmenv_many_cores():
     rmtree(tmpdir)
 
 def test_slurmenv_many_nodes():
+    if not in_slurm_allocation() or get_num_slurm_nodes() < 2:
+        pytest.skip('test not run in slurm allocation or allocation is smaller than 2 nodes')
+
     resources, allocation = get_slurm_resources_binded()
     resources_node_names = set(n.name for n in resources.nodes)
 
@@ -298,6 +304,9 @@ def test_slurmenv_many_nodes():
 
 
 def test_slurmenv_many_nodes_no_cores():
+    if not in_slurm_allocation() or get_num_slurm_nodes() < 2:
+        pytest.skip('test not run in slurm allocation or allocation is smaller than 2 nodes')
+
     resources, allocation = get_slurm_resources_binded()
     resources_node_names = set(n.name for n in resources.nodes)
 
@@ -369,6 +378,9 @@ def test_slurmenv_many_nodes_no_cores():
 
 
 def test_slurmenv_many_nodes_many_cores():
+    if not in_slurm_allocation() or get_num_slurm_nodes() < 2:
+        pytest.skip('test not run in slurm allocation or allocation is smaller than 2 nodes')
+
     resources, allocation = get_slurm_resources_binded()
     resources_node_names = set(n.name for n in resources.nodes)
 
