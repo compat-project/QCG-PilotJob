@@ -85,6 +85,9 @@ class QCGPMService:
         parser.add_argument('--disable-nl',
                             help='disable custom launching method',
                             default=Config.DISABLE_NL.value['default'], action='store_true')
+        parser.add_argument('--show-progress',
+                            help='print information about executing tasks',
+                            default=Config.PROGRESS.value['default'], action='store_true')
         parser.add_argument('--governor',
                             help='run manager in the governor mode, where jobs will be scheduled to execute to the dependant managers',
                             default=Config.GOVERNOR.value['default'], action='store_true')
@@ -167,6 +170,7 @@ class QCGPMService:
             Config.LOG_LEVEL: self.__args.log,
             Config.SYSTEM_CORE: self.__args.system_core,
             Config.DISABLE_NL: self.__args.disable_nl,
+            Config.PROGRESS: self.__args.show_progress,
             Config.GOVERNOR: self.__args.governor,
             Config.PARENT_MANAGER: self.__args.parent,
             Config.MANAGER_ID: manager_id,

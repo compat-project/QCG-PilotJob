@@ -92,8 +92,18 @@ class Executor:
                 execJobIt = LocalSchemaExecutionJob(self, self.jobEnvs, allocation, jobIteration, self.schema)
 
             self.__notFinished[execJobIt.id] = execJobIt
+
+            if Config.PROGRESS.get(self.__conf):
+                print("executing job {} ...".format(jobIteration.name))
+
             await execJobIt.run()
+
+            if Config.PROGRESS.get(self.__conf):
+                print("job {} finished".format(jobIteration.name))
         except Exception as e:
+            if Config.PROGRESS.get(self.__conf):
+                print("job {} failed".format(jobIteration.name))
+
             logging.exception("Failed to launch job {}".format(jobIteration.name))
             self.__manager.jobFinished(jobIteration, allocation, -1, str(e))
 

@@ -98,6 +98,11 @@ class Config(Enum):
         'default': False
     }
 
+    PROGRESS = {
+        'name': 'progress',
+        'default': False
+    }
+
     GOVERNOR = {
         'name': 'governor',
         'default': False
