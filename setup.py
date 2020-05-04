@@ -11,7 +11,7 @@ setup(
 
 	packages=["qcg.appscheduler", "qcg.appscheduler.api", "qcg.appscheduler.launcher"],
 	package_dir={
-		"qcg.appscheduler": "src/qcg",
+		"qcg.appscheduler": "src/qcg/appscheduler",
 		"qcg.appscheduler.api": "src/qcg/appscheduler/api",
 		"qcg.appscheduler.launcher": "src/qcg/appscheduler/launcher",
 	},

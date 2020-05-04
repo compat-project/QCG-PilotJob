@@ -291,7 +291,7 @@ class QCGPMService:
         rootLogger.setLevel(logging._nameToLevel.get(Config.LOG_LEVEL.get(config).upper()))
 
         logging.info('service {} version {} started {} @ {} (with tags {})'.format(Config.MANAGER_ID.get(config),
-            qcg.__version__, str(datetime.now()), socket.gethostname(), ','.join(Config.MANAGER_TAGS.get(config))))
+            qcg.appscheduler.__version__, str(datetime.now()), socket.gethostname(), ','.join(Config.MANAGER_TAGS.get(config))))
         logging.info('log level set to: {}'.format(Config.LOG_LEVEL.get(config).upper()))
 
 
