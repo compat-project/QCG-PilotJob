@@ -4,7 +4,7 @@ import qcg
 setup(
 	name="QCGPilotManager",
 
-	version=qcg.__version__,
+	version="0.8.0",
 
 	author="Piotr Kopta",
 	author_email="pkopta@man.poznan.pl",
