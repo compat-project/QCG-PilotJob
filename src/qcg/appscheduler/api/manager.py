@@ -547,10 +547,27 @@ class LocalManager(Manager):
         super(LocalManager, self).__init__(zmq_iface_address, cfg)
 
 
+    def finish(self):
+        """
+        Send a finish control message to the manager and stop the manager's process.
+        If the manager process won't stop in 10 seconds it will be terminated.
+        """
+        super(LocalManager, self).finish()
+
+        self.qcgpm_process.join(10)
+        self.stopManager()
+
+
     def wait4ManagerFinish(self):
+        """
+        Wait until manager process finish.
+        """
         self.qcgpm_process.join()
 
 
     def stopManager(self):
+        """
+        Terminate the manager's process with the SIGTERM signal.
+        """
         self.qcgpm_process.terminate()
 

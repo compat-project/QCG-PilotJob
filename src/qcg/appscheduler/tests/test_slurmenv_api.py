@@ -40,7 +40,6 @@ def test_slurmenv_api_resources():
     finally:
         if m:
             m.finish()
-            m.wait4ManagerFinish()
             # stopManager is using 'terminate' method on service process, which is not a best option when using
             # pytest and gathering code coverage
 #            m.stopManager()
@@ -73,7 +72,6 @@ def test_slurmenv_api_submit_simple():
     finally:
         if m:
             m.finish()
-            m.wait4ManagerFinish()
 #            m.stopManager()
             m.cleanup()
 
@@ -111,7 +109,6 @@ def test_slurmenv_api_submit_many_cores():
     finally:
         if m:
             m.finish()
-            m.wait4ManagerFinish()
 #            m.stopManager()
             m.cleanup()
 
@@ -178,7 +175,6 @@ def test_slurmenv_api_submit_resource_ranges():
     finally:
         if m:
             m.finish()
-            m.wait4ManagerFinish()
 #            m.stopManager()
             m.cleanup()
 
@@ -230,7 +226,6 @@ def test_slurmenv_api_submit_exceed_total_cores():
     finally:
         if m:
             m.finish()
-            m.wait4ManagerFinish()
 #            m.stopManager()
             m.cleanup()
 
@@ -271,7 +266,6 @@ def test_slurmenv_api_std_streams():
     finally:
         if m:
             m.finish()
-            m.wait4ManagerFinish()
 #            m.stopManager()
             m.cleanup()
 
@@ -316,7 +310,6 @@ def test_slurmenv_api_std_streams_many_cores():
     finally:
         if m:
             m.finish()
-            m.wait4ManagerFinish()
 #            m.stopManager()
             m.cleanup()
 
@@ -372,7 +365,6 @@ def test_slurmenv_api_iteration_simple():
     finally:
         if m:
             m.finish()
-            m.wait4ManagerFinish()
 #            m.stopManager()
             m.cleanup()
 
@@ -659,7 +651,6 @@ def test_slurmenv_api_iteration_core_scheduling():
     finally:
         if m:
             m.finish()
-            m.wait4ManagerFinish()
 #            m.stopManager()
             m.cleanup()
 
@@ -767,7 +758,6 @@ def test_slurmenv_api_iteration_node_scheduling():
     finally:
         if m:
             m.finish()
-            m.wait4ManagerFinish()
 #            m.stopManager()
             m.cleanup()
 

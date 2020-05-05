@@ -320,10 +320,9 @@ def test_api_submit_simple(tmpdir):
 
     finally:
         m.finish()
-        m.wait4ManagerFinish()
         m.cleanup()
 
-    rmtree(tmpdir)
+#    rmtree(tmpdir)
 
 
 def test_api_submit_iterate(tmpdir):
@@ -359,7 +358,6 @@ def test_api_submit_iterate(tmpdir):
         m.remove(jid)
     finally:
         m.finish()
-        m.wait4ManagerFinish()
         m.cleanup()
 
     rmtree(tmpdir)
@@ -386,7 +384,6 @@ def test_api_submit_resources(tmpdir):
                     jinfos[ids[0]].totalCores == 2))
     finally:
         m.finish()
-        m.wait4ManagerFinish()
         m.cleanup()
 
     rmtree(tmpdir)
@@ -420,7 +417,6 @@ def test_api_submit_slurm_resources():
 
     finally:
         m.finish()
-        m.wait4ManagerFinish()
         m.cleanup()
 
     rmtree(tmpdir)

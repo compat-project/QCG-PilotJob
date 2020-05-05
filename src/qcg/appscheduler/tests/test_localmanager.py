@@ -20,7 +20,6 @@ def test_local_manager_resources(tmpdir):
     assert all(('totalNodes' in res, 'totalCores' in res, res['totalNodes'] == 1, res['totalCores'] == cores))
 
     m.finish()
-    m.wait4ManagerFinish()
 #    m.stopManager()
     m.cleanup()
 
@@ -38,7 +37,6 @@ def test_local_manager_resources_nodes(tmpdir):
     assert all(('totalNodes' in res, 'totalCores' in res, res['totalNodes'] == 2, res['totalCores'] == cores_per_node * nodes))
 
     m.finish()
-    m.wait4ManagerFinish()
 #    m.stopManager()
     m.cleanup()
 
@@ -80,7 +78,6 @@ def test_local_manager_submit_simple(tmpdir):
                     exists(tmpdir.join('date.stdout'))))
     finally:
         m.finish()
-        m.wait4ManagerFinish()
 #        m.stopManager()
         m.cleanup()
 
@@ -121,7 +118,6 @@ def test_local_manager_wait4all(tmpdir):
                 exists(tmpdir.join('date.stdout'))))
 
     m.finish()
-    m.wait4ManagerFinish()
 #    m.stopManager()
     m.cleanup()
 
