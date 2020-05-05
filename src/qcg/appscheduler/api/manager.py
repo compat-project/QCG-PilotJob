@@ -523,6 +523,8 @@ class LocalManager(Manager):
         elif not '--net' in server_args:
             server_args.append('--net')
 
+        server_args = [str(arg) for arg in server_args]
+
         self.qcgpm_queue = mp.Queue()
         self.qcgpm_process = QCGPMServiceProcess(server_args, self.qcgpm_queue)
         logging.debug('manager process created')
@@ -551,11 +553,14 @@ class LocalManager(Manager):
         """
         Send a finish control message to the manager and stop the manager's process.
         If the manager process won't stop in 10 seconds it will be terminated.
+        We also call the 'cleanup' method.
         """
         super(LocalManager, self).finish()
 
         self.qcgpm_process.join(10)
         self.stopManager()
+
+        super(LocalManager, self).cleanup()
 
 
     def wait4ManagerFinish(self):
