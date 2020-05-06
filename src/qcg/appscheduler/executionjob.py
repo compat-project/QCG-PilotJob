@@ -246,6 +246,8 @@ class LocalSchemaExecutionJob(ExecutionJob):
                     stderr_path = je.stderr if os.path.isabs(je.stderr) else os.path.join(self.wdPath, je.stderr)
                     stderrP = open(stderr_path, 'w')
 
+            logging.debug("launching job {}: {} {}".format(self.job.name, je.exec, str(je.args)))
+
             process = await asyncio.create_subprocess_exec(
                 je.exec, *je.args,
                 stdin=stdinP,
@@ -257,8 +259,6 @@ class LocalSchemaExecutionJob(ExecutionJob):
                 shell=False,
             )
 
-            logging.debug("launching job {}: {} {}".format(self.job.name, je.exec, str(je.args)))
-
             logging.info("local process {} for job {} launched".format(process.pid, self.job.name))
 
             await process.wait()
@@ -269,7 +269,7 @@ class LocalSchemaExecutionJob(ExecutionJob):
 
             self.postprocess(exitCode)
         except Exception as e:
-            logging.error("execution failed: {}".format(str(e)))
+            logging.exception("execution failed: {}".format(str(e)))
             self.postprocess(-1, str(e))
         finally:
             try:
