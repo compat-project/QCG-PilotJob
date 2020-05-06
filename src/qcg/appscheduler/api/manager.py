@@ -187,7 +187,44 @@ class Manager:
         return response['data']
 
 
-    def __sendAndValidateResult(self, data):
+    def __validateResponseWoData(self, response):
+        """
+        Validate the response from the QCG PJM.
+        This method checks the format of the response and exit code.
+        Unlike the '__validateReponse' this method not checks existence of the 'data' element and returns the full
+        reponse.
+
+        Returns:
+            dict - response message
+
+        Raises:
+            InternalError - in case the response format is invalid
+            ConnectionError - in case of non zero exit code
+        """
+        if not isinstance(response, dict) or 'code' not in response:
+            raise errors.InternalError('Invalid reply from the service')
+
+        if response['code'] != 0:
+            if 'message' in response:
+                raise errors.ConnectionError('Request failed - %s' % response['message'])
+
+            raise errors.ConnectionError('Request failed')
+
+        return response
+
+
+    def sendRequest(self, request):
+        """
+        Method for testing purposes - allows to send any request to the QCG PJM.
+        The received response is validated for correct format.
+
+        :param request: the reuest data to send
+        :return: validated response
+        """
+        return self.__sendAndValidateResult(request, validyMethod=self.__validateResponseWoData)
+
+
+    def __sendAndValidateResult(self, data, validyMethod=None):
         """
         Send syncronically request to the QCG-PJM and validate response
         The input data is encoded in the JSON format and send to the QCG PJM. After receiving response,
@@ -195,6 +232,7 @@ class Manager:
 
         Args:
             data - data to send as a JSON document
+            validyMethod - the method should be used to validate response
 
         Returns:
             data - received data from the QCG PJM service
@@ -202,6 +240,9 @@ class Manager:
         Raises:
             see __assureConnected, __validateResponse
         """
+        if not validyMethod:
+            validyMethod = self.__validateResponse
+
         self.__assureConnected()
 
         msg = str.encode(json.dumps( data ))
@@ -212,7 +253,7 @@ class Manager:
         reply = bytes.decode(self.__zmqSock.recv())
 
         logging.debug("got reply: %s" % reply)
-        return self.__validateResponse(json.loads(reply))
+        return validyMethod(json.loads(reply))
 
 
     def resources(self):
