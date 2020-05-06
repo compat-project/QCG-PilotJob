@@ -133,12 +133,12 @@ class SubmitReq(Request):
             # look for 'iterate' directive
             if 'iteration' in reqJob:
                 if not isinstance(reqJob['iteration'], dict) or 'stop' not in reqJob['iteration']:
-                    raise InvalidRequest('Wrong format of iterative directive: not a two-element list')
+                    raise InvalidRequest('Wrong format of iteration directive: not a dictionary')
 
                 start = reqJob['iteration'].get('start', 0)
                 end = reqJob['iteration']['stop']
                 if start > end:
-                    raise InvalidRequest('Wrong format of iterative directive: start index larger then stop one')
+                    raise InvalidRequest('Wrong format of iteration directive: start index larger then stop one')
 
             # default value for missing 'resources' definition
             if 'resources' not in reqJob:
@@ -152,7 +152,7 @@ class SubmitReq(Request):
     def toDict(self):
         res = {'request': self.REQ_NAME, 'jobs': []}
         for job in self.jobReqs:
-            res['jobs'].append(job['req'].toDict())
+            res['jobs'].append(job['req'])
 
         return res
 
@@ -186,7 +186,7 @@ class JobInfoReq(Request):
         assert reqData is not None
 
         if 'jobNames' not in reqData or not isinstance(reqData['jobNames'], list) or len(reqData['jobNames']) < 1:
-            raise InvalidRequest('Wrong job status request - missing job names')
+            raise InvalidRequest('Wrong job info request - missing job names')
 
         self.includeChilds = False
         if reqData.get('params'):
@@ -195,7 +195,11 @@ class JobInfoReq(Request):
         self.jobNames = reqData['jobNames']
 
     def toDict(self):
-        return {'request': self.REQ_NAME, 'jobNames': self.jobNames}
+        result = {'request': self.REQ_NAME, 'jobNames': self.jobNames}
+        if self.includeChilds:
+            params = {'withChilds': True}
+            result['params'] = params
+        return result
 
     def toJSON(self):
         return json.dumps(self.toDict())
@@ -207,13 +211,13 @@ class CancelJobReq(Request):
     def __init__(self, reqData, env=None):
         assert reqData is not None
 
-        if 'jobName' not in reqData or not isinstance(reqData['jobName'], str) or not reqData['jobName']:
-            raise InvalidRequest('Wrong job status request - missing job name')
+        if 'jobNames' not in reqData or not isinstance(reqData['jobNames'], list) or len(reqData['jobNames']) < 1:
+            raise InvalidRequest('Wrong cancel job request - missing job names')
 
-        self.jobName = reqData['jobName']
+        self.jobNames = reqData['jobNames']
 
     def toDict(self):
-        return {'request': self.REQ_NAME, 'jobName': self.jobName}
+        return {'request': self.REQ_NAME, 'jobNames': self.jobNames}
 
     def toJSON(self):
         return json.dumps(self.toDict())
