@@ -63,6 +63,7 @@ class SlurmExecution(ExecutionSchema):
             "-n", str(exJob.ncores),
             "-m", "arbitrary",
             "--overcommit",
+            "--exclusive",
             "--mem-per-cpu=0",
             cpu_bind,
             "--multi-prog" ]
