@@ -210,6 +210,7 @@ The Job description is a dictionary with the following keys:
     standard input , standard output and standard error files respectively. 
   - `modules` (optional) `Array of String` - the list of environment modules that should be loaded before start of the job
   - `venv` (optional) `String` - the path to the virtual environment inside in job should be started
+  - `model` (optional) `String` - the model of execution, currently only *threads* explicit model is supported which should be used for OpenMP jobs; if not defined - the default, dedicated to the multi processes execution model is used 
 - `resources` (optional) `Dict` - resource requirements, a dictionary with the following keys: 
   - `numCores` (optional) `Dict` - number of cores,
   - `numNodes` (optional) `Dict`- number of nodes,
@@ -757,7 +758,10 @@ The simplified job description format contains the following keys:
 * `stdout` (required - `False`, allowed types - `str`) - a path to the standard output file,
 * `stderr` (required - `False`, allowed types - `str`) - a path to the standard error file,
 * `wd` (required - `False`, allowed types - `str`) - a path to the working directory,
+* `modules` (required - `False`, allowed types - 'list`, `str`) - the list of environment modules that should be loaded before start of the job 
 * `numNodes` (required - `False`, allowed types - `dict`) - number of nodes requirements (described in [section](#job-description-format)),
+* `venv` (required - `False`, allowed types - `str`) - the path to the virtual environment inside in job should be started
+* `model` (required - `False`, allowed types - `str`) - the model of execution, currently only *threads* explicit model is supported which should be used for OpenMP jobs; if not defined - the default, dedicated to the multi processes execution model is used
 * `numCores` (required - `False`, allowed types - `dict`) - number of cores requirements (described in [section](#job-description-format)),
 * `wt` (required - `False`, allowed types - `str`) - a wall-time specification,
 * `iterate` (required - `False`, allowed types - `list`) - a list describing iterations, it should contain two or three elements: `start iteration`, `end iteration` and optionally, `the step iteration`,
@@ -940,6 +944,7 @@ $ kernprof -v -l qcg/appscheduler/tests/profile_local_sleep.py
 With the *-v* argument the statistics will be printed directly to standard output.
 
 ## Performance issues
+ * For executing OpenMP job's the `model` element in `execution` description should be set to `threads` - this will setup correctly execution environment for the multi-thread jobs.
  * It's recommended to use `--system-core` parameter for workflows that contains many small jobs or bigger allocations (>256 cores). This will reserve a single core in allocation for QCG PilogJob Manager service.
  * The logging level *debug* may cause decrease in performance due to the have usage of file system. 
 
