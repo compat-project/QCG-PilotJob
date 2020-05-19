@@ -35,38 +35,54 @@ class SlurmExecution(ExecutionSchema):
         job_exec = exJob.jobExecution.exec
         job_args = exJob.jobExecution.args
 
+        job_model = exJob.jobExecution.model
+
         # create run configuration
-        runConfFile = os.path.join(exJob.wdPath, ".%s.runconfig" % exJob.job.name)
-        with open(runConfFile, 'w') as f:
-            f.write("0\t%s %s\n" % (
-                job_exec,
-                ' '.join('{0}'.format(str(arg).replace(" ", "\ ")) for arg in job_args)))
-            if exJob.ncores > 1:
-                if exJob.ncores > 2:
-                    f.write("1-%d /bin/true\n" % (exJob.ncores - 1))
-                else:
-                    f.write("1 /bin/true\n")
+        if job_model != "threads":
+            runConfFile = os.path.join(exJob.wdPath, ".%s.runconfig" % exJob.job.name)
+            with open(runConfFile, 'w') as f:
+                f.write("0\t%s %s\n" % (
+                    job_exec,
+                    ' '.join('{0}'.format(str(arg).replace(" ", "\ ")) for arg in job_args)))
+                if exJob.ncores > 1:
+                    if exJob.ncores > 2:
+                        f.write("1-%d /bin/true\n" % (exJob.ncores - 1))
+                    else:
+                        f.write("1 /bin/true\n")
 
-        #        exJob.modifiedArgs = [ "-n", str(exJob.ncores), "--export=NONE", "-m", "arbitrary", "--multi-prog", runConfFile ]
-        #        exJob.modifiedArgs = [ "-n", str(exJob.ncores), "-m", "arbitrary", "--mem-per-cpu=0", "--slurmd-debug=verbose", "--multi-prog", runConfFile ]
+            if self.resources.binding:
+                core_ids = []
+                for nodeAllocation in exJob.allocation.nodeAllocations:
+                    core_ids.extend([str(core) for core in nodeAllocation.cores])
+                cpu_bind = "--cpu-bind=verbose,map_cpu:{}".format(','.join(core_ids))
+            else:
+                cpu_bind = "--cpu-bind=verbose,cores"
 
-        if self.resources.binding:
-            core_ids = []
-            for nodeAllocation in exJob.allocation.nodeAllocations:
-                core_ids.extend([str(core) for core in nodeAllocation.cores])
-            cpu_bind = "--cpu-bind=verbose,map_cpu:{}".format(','.join(core_ids))
+            exJob.jobExecution.args = [
+                "-n", str(exJob.ncores),
+                "--overcommit",
+                "--mem-per-cpu=0",
+                cpu_bind,
+                "--multi-prog" ]
         else:
-            cpu_bind = "--cpu-bind=verbose,cores"
+            cpu_mask = 0
+            if self.resources.binding:
+                core_ids = []
+                for nodeAllocation in exJob.allocation.nodeAllocations:
+                    for core in nodeAllocation.cores:
+                        cpu_mask = cpu_mask | 1 <<  core
+                cpu_bind = "--cpu-bind=verbose,mask_cpu:{}".format(hex(cpu_mask))
+            else:
+                cpu_bind = "--cpu-bind=verbose,cores"
+
+            exJob.jobExecution.args = [
+                "-n", "1",
+                "--cpus-per-task", str(exJob.ncores),
+                "--overcommit",
+                "--mem-per-cpu=0",
+                cpu_bind ]
 
         exJob.jobExecution.exec = 'srun'
-        exJob.jobExecution.args = [
-            "-n", str(exJob.ncores),
-            "-m", "arbitrary",
-            "--overcommit",
-            "--exclusive",
-            "--mem-per-cpu=0",
-            cpu_bind,
-            "--multi-prog" ]
 
         if exJob.jobExecution.stdin:
             exJob.jobExecution.args.extend(["-i", os.path.join(exJob.wdPath, exJob.jobExecution.stdin)])
@@ -83,7 +99,10 @@ class SlurmExecution(ExecutionSchema):
         if exJob.job.resources.wt:
             exJob.jobExecution.args.extend(["--time", "0:{}".format(int(exJob.job.resources.wt.total_seconds()))])
 
-        exJob.jobExecution.args.append(runConfFile)
+        if job_model != "threads":
+            exJob.jobExecution.args.append(runConfFile)
+        else:
+            exJob.jobExecution.args.extend([job_exec, *job_args])
 
 
 class DirectExecution(ExecutionSchema):
