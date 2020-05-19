@@ -1,7 +1,7 @@
 # QCG-PilotJob
 The QCG Pilot Job service for execution of many computing tasks inside one allocation
 =======
-# The QCG Pilot Manager v 0.7.1
+# The QCG Pilot Manager v 0.7.2
 
 
 Author: Piotr Kopta <pkopta@man.poznan.pl>, Tomasz Piontek <piontek@man.poznan.pl>, Bartosz Bosak <bbosak@man.poznan.pl>
