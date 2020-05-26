@@ -16,8 +16,9 @@ JOB_TOP_ATTRS = {
     "wd":      { 'req': False, 'types': [ str ]       },
     "modules": { 'req': False, 'types': [ list, str ] },
     "venv":    { 'req': False, 'types': [ str ]       },
-    "numNodes":{ 'req': False, 'types': [ int, dict ] },
-    "numCores":{ 'req': False, 'types': [ int, dict ] },
+    "model":   { 'req': False, 'types': [ str ]       },
+    "numNodes":{ 'req': False, 'types': [ dict ]      },
+    "numCores":{ 'req': False, 'types': [ dict ]      },
     "wt":      { 'req': False, 'types': [ str ]       },
     "iterate": { 'req': False, 'types': [ int, dict ] },
     "after":   { 'req': False, 'types': [ list, str ] }
@@ -182,7 +183,7 @@ class Jobs:
         else:
             stdJob.setdefault('execution', {})['script'] = smplJob['script']
 
-        for key in [ 'args', 'stdin', 'stdout', 'stderr', 'wd', 'modules', 'venv' ]:
+        for key in [ 'args', 'stdin', 'stdout', 'stderr', 'wd', 'modules', 'venv', 'model' ]:
             if key in smplJob:
                 stdJob['execution'][key] = smplJob[key]
 

@@ -15,7 +15,8 @@ class Launcher:
 
     MIN_PORT_RANGE = 10000
     MAX_PORT_RANGE = 40000
-    START_TIMEOUT_SECS = 20
+    # due to eagle node wake up issues
+    START_TIMEOUT_SECS = 600
     SHUTDOWN_TIMEOUT_SECS = 30
 
     def __init__(self, wdir, auxDir):
@@ -328,7 +329,10 @@ class Launcher:
         if not 'node' in slurm_data:
             raise ValueError('missing slurm node name')
 
-        slurm_args = [ '-J', 'agent-{}'.format(slurm_data['node']), '-w', slurm_data['node'], '-vvv', '--oversubscribe', '--overcommit', '-N', '1', '-n', '1', '-D', self.work_dir ]
+        slurm_args = [ '-J', 'agent-{}'.format(slurm_data['node']), '-w', slurm_data['node'], '-vvv', '--oversubscribe', '--overcommit', '-N', '1', '-n', '1', '-D', self.work_dir, '-u' ]
+        
+        if logging.root.level == logging.DEBUG:
+            slurm_args.extend(['--slurmd-debug=verbose', '-vvvvv'])
 
         slurm_args.extend(slurm_data.get('args', []))
 
