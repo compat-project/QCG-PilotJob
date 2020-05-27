@@ -17,8 +17,8 @@ JOB_TOP_ATTRS = {
     "modules": { 'req': False, 'types': [ list, str ] },
     "venv":    { 'req': False, 'types': [ str ]       },
     "model":   { 'req': False, 'types': [ str ]       },
-    "numNodes":{ 'req': False, 'types': [ dict ]      },
-    "numCores":{ 'req': False, 'types': [ dict ]      },
+    "numNodes":{ 'req': False, 'types': [ int, dict ] },
+    "numCores":{ 'req': False, 'types': [ int, dict ] },
     "wt":      { 'req': False, 'types': [ str ]       },
     "iterate": { 'req': False, 'types': [ int, dict ] },
     "after":   { 'req': False, 'types': [ list, str ] }

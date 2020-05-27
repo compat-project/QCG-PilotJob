@@ -45,7 +45,7 @@ class SlurmExecution(ExecutionSchema):
 
         # create run configuration
         if job_model != "threads":
-            runConfFile = os.path.join(exJob.wdPath, ".%s.runconfig" % exJob.job.name)
+            runConfFile = os.path.join(exJob.wdPath, ".{}.runconfig".format(exJob.jobIteration.name))
             with open(runConfFile, 'w') as f:
                 f.write("0\t%s %s\n" % (
                     job_exec,

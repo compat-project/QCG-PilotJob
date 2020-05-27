@@ -260,7 +260,7 @@ class LocalSchemaExecutionJob(ExecutionJob):
                     stderr_path = je.stderr if os.path.isabs(je.stderr) else os.path.join(self.wdPath, je.stderr)
                     stderrP = open(stderr_path, 'w')
 
-            logging.debug("launching job {}: {} {}".format(self.job.name, je.exec, str(je.args)))
+            logging.debug("launching job {}: {} {}".format(self.jobIteration.name, je.exec, str(je.args)))
 
             process = await asyncio.create_subprocess_exec(
                 je.exec, *je.args,
@@ -272,7 +272,7 @@ class LocalSchemaExecutionJob(ExecutionJob):
                 shell=False,
             )
 
-            logging.info("local process {} for job {} launched".format(process.pid, self.job.name))
+            logging.info("local process {} for job {} launched".format(process.pid, self.jobIteration.name))
 
             await process.wait()
 
