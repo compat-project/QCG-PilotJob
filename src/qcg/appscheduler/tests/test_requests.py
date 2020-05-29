@@ -29,8 +29,8 @@ def test_request_general(tmpdir):
 def test_request_control(tmpdir):
     # raw control request test
     req = ControlReq({'request': 'control', 'command': 'finishAfterAllTasksDone'})
-    req_clone = ControlReq(json.loads(req.toJSON()))
-    assert req.toJSON() == req_clone.toJSON()
+    req_clone = ControlReq(json.loads(req.to_json()))
+    assert req.to_json() == req_clone.to_json()
 
     m = LocalManager(['--wd', str(tmpdir), '--nodes', 2], {'wdir': str(tmpdir)})
 
@@ -65,8 +65,8 @@ def test_request_submit(tmpdir):
                                                      'execution': {'script': 'date'},
                                                      'resources': { 'numCores': {'exact': 1}}}
                                                     ]})
-    req_clone = SubmitReq(json.loads(req.toJSON()))
-    assert req.toJSON() == req_clone.toJSON()
+    req_clone = SubmitReq(json.loads(req.to_json()))
+    assert req.to_json() == req_clone.to_json()
 
     m = LocalManager(['--wd', str(tmpdir), '--nodes', 2], {'wdir': str(tmpdir)})
 
@@ -114,8 +114,8 @@ def test_request_submit(tmpdir):
 def test_request_job_status(tmpdir):
     # raw jobStatus request test
     req = JobStatusReq({'request': 'jobStatus', 'jobNames': ['job1', 'job1:2', 'job3']})
-    req_clone = JobStatusReq(json.loads(req.toJSON()))
-    assert req.toJSON() == req_clone.toJSON()
+    req_clone = JobStatusReq(json.loads(req.to_json()))
+    assert req.to_json() == req_clone.to_json()
 
     m = LocalManager(['--wd', str(tmpdir), '--nodes', 2], {'wdir': str(tmpdir)})
 
@@ -138,12 +138,12 @@ def test_request_job_status(tmpdir):
 def test_request_job_info(tmpdir):
     # raw jobInfo request test
     req = JobInfoReq({'request': 'jobInfo', 'jobNames': ['job1', 'job2'], 'params': { 'withChilds': True }})
-    req_clone = JobInfoReq(json.loads(req.toJSON()))
-    assert req.toJSON() == req_clone.toJSON()
+    req_clone = JobInfoReq(json.loads(req.to_json()))
+    assert req.to_json() == req_clone.to_json()
 
     req = JobInfoReq({'request': 'jobInfo', 'jobNames': ['job1', 'job2'] })
-    req_clone = JobInfoReq(json.loads(req.toJSON()))
-    assert req.toJSON() == req_clone.toJSON()
+    req_clone = JobInfoReq(json.loads(req.to_json()))
+    assert req.to_json() == req_clone.to_json()
 
     m = LocalManager(['--wd', str(tmpdir), '--nodes', 2], {'wdir': str(tmpdir)})
 
@@ -166,8 +166,8 @@ def test_request_job_info(tmpdir):
 def test_request_cancel_job(tmpdir):
     # raw cancelJob request test
     req = CancelJobReq({'request': 'cancelJob', 'jobNames': ['job1', 'job2']})
-    req_clone = CancelJobReq(json.loads(req.toJSON()))
-    assert req.toJSON() == req_clone.toJSON()
+    req_clone = CancelJobReq(json.loads(req.to_json()))
+    assert req.to_json() == req_clone.to_json()
 
     m = LocalManager(['--wd', str(tmpdir), '--nodes', 2], {'wdir': str(tmpdir)})
 
@@ -190,8 +190,8 @@ def test_request_cancel_job(tmpdir):
 def test_request_remove_job(tmpdir):
     # raw removeJob request test
     req = RemoveJobReq({'request': 'removeJob', 'jobNames': ['job1', 'job2']})
-    req_clone = RemoveJobReq(json.loads(req.toJSON()))
-    assert req.toJSON() == req_clone.toJSON()
+    req_clone = RemoveJobReq(json.loads(req.to_json()))
+    assert req.to_json() == req_clone.to_json()
 
     m = LocalManager(['--wd', str(tmpdir), '--nodes', 2], {'wdir': str(tmpdir)})
 
@@ -214,34 +214,34 @@ def test_request_remove_job(tmpdir):
 def test_request_list_jobs(tmpdir):
     # raw listJobs request test
     req = ListJobsReq({'request': 'listJobs'})
-    req_clone = ListJobsReq(json.loads(req.toJSON()))
-    assert req.toJSON() == req_clone.toJSON()
+    req_clone = ListJobsReq(json.loads(req.to_json()))
+    assert req.to_json() == req_clone.to_json()
 
 
 def test_request_resources_info(tmpdir):
     # raw resourcesInfo request test
     req = ResourcesInfoReq({'request': 'resourcesInfo'})
-    req_clone = ResourcesInfoReq(json.loads(req.toJSON()))
-    assert req.toJSON() == req_clone.toJSON()
+    req_clone = ResourcesInfoReq(json.loads(req.to_json()))
+    assert req.to_json() == req_clone.to_json()
 
 def test_request_finish(tmpdir):
     # raw finish request test
     req = FinishReq({'request': 'finish'})
-    req_clone = FinishReq(json.loads(req.toJSON()))
-    assert req.toJSON() == req_clone.toJSON()
+    req_clone = FinishReq(json.loads(req.to_json()))
+    assert req.to_json() == req_clone.to_json()
 
 def test_request_status(tmpdir):
     # raw status request test
     req = StatusReq({'request': 'status'})
-    req_clone = StatusReq(json.loads(req.toJSON()))
-    assert req.toJSON() == req_clone.toJSON()
+    req_clone = StatusReq(json.loads(req.to_json()))
+    assert req.to_json() == req_clone.to_json()
 
 def test_request_notify(tmpdir):
     # raw notify request test
     req = NotifyReq({'request': 'notify', 'entity': 'job', 'params': { 'name': 'j1', 'state': 'FINISHED',
                                                                        'attributes': { 'a1': True }}})
-    req_clone = NotifyReq(json.loads(req.toJSON()))
-    assert req.toJSON() == req_clone.toJSON()
+    req_clone = NotifyReq(json.loads(req.to_json()))
+    assert req.to_json() == req_clone.to_json()
 
     m = LocalManager(['--wd', str(tmpdir), '--nodes', 2], {'wdir': str(tmpdir)})
 
@@ -280,8 +280,8 @@ def test_request_register(tmpdir):
     req = RegisterReq({'request': 'register', 'entity': 'manager', 'params': { 'id': 'm1',
                                                                                'address': '0.0.0.0',
                                                                                'resources': { 'nodes': 2 }}})
-    req_clone = RegisterReq(json.loads(req.toJSON()))
-    assert req.toJSON() == req_clone.toJSON()
+    req_clone = RegisterReq(json.loads(req.to_json()))
+    assert req.to_json() == req_clone.to_json()
 
     m = LocalManager(['--wd', str(tmpdir), '--nodes', 2], {'wdir': str(tmpdir)})
 

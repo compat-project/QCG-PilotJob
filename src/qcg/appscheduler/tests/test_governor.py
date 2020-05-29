@@ -601,10 +601,10 @@ def test_slurm_partition_resources():
         # as 1 core is reserved for each partition manager, total number of allocated cores
         # will be the same as number of partition managers - in our case 1 partition manager
         # per node
-        assert all((resources_reply['data'].get('totalNodes', 0) == resources.totalNodes,
-                    resources_reply['data'].get('totalCores', 0) == resources.totalCores,
-                    resources_reply['data'].get('usedCores', -1) == resources.totalNodes,
-                    resources_reply['data'].get('freeCores', 0) == resources.totalCores - resources.totalNodes)),\
+        assert all((resources_reply['data'].get('totalNodes', 0) == resources.total_nodes,
+                    resources_reply['data'].get('totalCores', 0) == resources.total_cores,
+                    resources_reply['data'].get('usedCores', -1) == resources.total_nodes,
+                    resources_reply['data'].get('freeCores', 0) == resources.total_cores - resources.total_nodes)),\
             str(resources_reply)
 
         send_request_valid(governor_address, {'request': 'finish'})
@@ -643,10 +643,10 @@ def test_slurm_partition_submit():
         # as 1 core is reserved for each partition manager, total number of allocated cores
         # will be the same as number of partition managers - in our case 1 partition manager
         # per node
-        assert all((resources_reply['data'].get('totalNodes', 0) == resources.totalNodes,
-                    resources_reply['data'].get('totalCores', 0) == resources.totalCores,
-                    resources_reply['data'].get('usedCores', -1) == resources.totalNodes,
-                    resources_reply['data'].get('freeCores', 0) == resources.totalCores - resources.totalNodes)), str(resources_reply)
+        assert all((resources_reply['data'].get('totalNodes', 0) == resources.total_nodes,
+                    resources_reply['data'].get('totalCores', 0) == resources.total_cores,
+                    resources_reply['data'].get('usedCores', -1) == resources.total_nodes,
+                    resources_reply['data'].get('freeCores', 0) == resources.total_cores - resources.total_nodes)), str(resources_reply)
 
         # submit a bunch of jobs
         njobs = 100

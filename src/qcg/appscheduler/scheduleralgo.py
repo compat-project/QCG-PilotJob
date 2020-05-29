@@ -1,19 +1,27 @@
 import logging
 
-from qcg.appscheduler.allocation import Allocation, NodeAllocation
-from qcg.appscheduler.errors import *
+from qcg.appscheduler.allocation import Allocation
+from qcg.appscheduler.errors import InternalError, InvalidResourceSpec, NotSufficientResources
 from qcg.appscheduler.joblist import JobResources
 
 
 class SchedulerAlgorithm:
+    """Scheduling algorithm.
+
+    Attributes:
+        resources (Resources): available resources
+    """
 
     def __init__(self, resources=None):
+        """Initialize scheduling algorithm
+
+        Args:
+            resources (Resources, optional): available resources
+        """
         self.resources = resources
 
-
-    def __checkResources(self):
-        """
-        Validate if the resources has been set.
+    def _check_resources(self):
+        """Validate if the resources has been set.
 
         Raises:
             InternalError: when resources has not been set
@@ -21,10 +29,9 @@ class SchedulerAlgorithm:
         if self.resources is None:
             raise InternalError("Missing resources in scheduler algorithm")
 
+    def allocate_cores(self, min_cores, max_cores=None):
+        """Create allocation with maximum number of cores from given range.
 
-    def allocateCores(self, min_cores, max_cores=None):
-        """
-        Create allocation with maximum number of cores from given range.
         The cores will be allocated in a linear method.
 
         Args:
@@ -39,44 +46,42 @@ class SchedulerAlgorithm:
             NotSufficientResources: when there are not enough resources avaiable
             InvalidResourceSpec: when the min_cores < 0 or min_cores > max_cores
         """
-        self.__checkResources()
+        self._check_resources()
 
-        if max_cores == None:
+        if max_cores is None:
             max_cores = min_cores
 
         if min_cores <= 0 or min_cores > max_cores:
             raise InvalidResourceSpec()
 
-        if self.resources.totalCores < min_cores:
+        if self.resources.total_cores < min_cores:
             raise NotSufficientResources()
 
-        if self.resources.freeCores < min_cores:
+        if self.resources.free_cores < min_cores:
             return None
 
         allocation = Allocation()
-        allocatedCores = 0
+        allocated_cores = 0
         for node in self.resources.nodes:
-            nodeAlloc = node.allocateMax(max_cores - allocatedCores)
+            node_alloc = node.allocate_max(max_cores - allocated_cores)
 
-            if nodeAlloc:
-                allocation.addNode(nodeAlloc)
+            if node_alloc:
+                allocation.add_node(node_alloc)
 
-                allocatedCores += nodeAlloc.ncores
+                allocated_cores += node_alloc.ncores
 
-                if allocatedCores == max_cores:
+                if allocated_cores == max_cores:
                     break
 
         # this should never happen
-        if allocatedCores < min_cores or allocatedCores > max_cores:
-            allocation.releaseAllocation()
+        if allocated_cores < min_cores or allocated_cores > max_cores:
+            allocation.release()
             raise NotSufficientResources()
 
         return allocation
 
-
-    def __allocateEntireNodes(self, min_nodes, max_nodes, crs):
-        """
-        Create allocation with specified number of entire nodes (will all available cores).
+    def _allocate_entire_nodes(self, min_nodes, max_nodes, crs):
+        """Create allocation with specified number of entire nodes (will all available cores).
 
         Args:
             min_nodes (int) - minimum number of nodes
@@ -84,35 +89,29 @@ class SchedulerAlgorithm:
             crs (dict(CRType,int)) - consumable resources requirements per node
 
         Returns:
-            Allocation: created allocation
-            None: not enough free resources
+            Allocation: created allocation or None if not enough free resources
         """
         allocation = Allocation()
 
         for node in self.resources.nodes:
             if node.used == 0:
-                #				print("trying to allocate {} cores on on node {}".format(node.total, node.name))
-                nAlloc = node.allocateExact(node.total, crs)
-                #				print("allocated {} cores".format(ncores))
-                if nAlloc.ncores == node.total:
-                    allocation.addNode(nAlloc)
+                node_alloc = node.allocate_exact(node.total, crs)
+                if node_alloc.ncores == node.total:
+                    allocation.add_node(node_alloc)
 
-                    #					print("already allocated {} nodes from {} maximum".format(len(allocation.nodeAllocations), max_nodes))
-                    if len(allocation.nodeAllocations) == max_nodes:
+                    if len(allocation.nodes) == max_nodes:
                         break
                 else:
-                    nAlloc.release()
+                    node_alloc.release()
 
-        if len(allocation.nodeAllocations) >= min_nodes:
+        if len(allocation.nodes) >= min_nodes:
             return allocation
-        else:
-            allocation.releaseAllocation()
-            return None
 
+        allocation.release()
+        return None
 
-    def __allocateCoresOnNodes(self, min_nodes, max_nodes, min_cores, max_cores, crs):
-        """
-        Create allocation with specified number of nodes, where on each node should be
+    def _allocate_cores_on_nodes(self, min_nodes, max_nodes, min_cores, max_cores, crs):
+        """Create allocation with specified number of nodes, where on each node should be
         given number of allocated cores.
 
         Args:
@@ -132,62 +131,58 @@ class SchedulerAlgorithm:
 
         for node in self.resources.nodes:
             if node.free >= min_cores:
-                nAlloc = node.allocateMax(max_cores, crs)
+                node_alloc = node.allocate_max(max_cores, crs)
 
-#                logging.info("allocated {} cores on a single node".format(nAlloc.ncores if nAlloc else 0))
+#                logging.info("allocated {} cores on a single node".format(node_alloc.ncores if node_alloc else 0))
 
-                if nAlloc:
-                    if nAlloc.ncores >= min_cores:
-                        allocation.addNode(nAlloc)
+                if node_alloc:
+                    if node_alloc.ncores >= min_cores:
+                        allocation.add_node(node_alloc)
 
-                        if len(allocation.nodeAllocations) == max_nodes:
-#                            logging.info("already allocated enough {} nodes".format(len(allocation.nodeAllocations)))
+                        if len(allocation.nodes) == max_nodes:
                             break
                     else:
-                        nAlloc.release()
+                        node_alloc.release()
 
-        if len(allocation.nodeAllocations) >= min_nodes:
-            logging.info("allocation contains {} nodes which meets requirements ({} min)".format(
-                len(allocation.nodeAllocations), min_nodes))
+        if len(allocation.nodes) >= min_nodes:
+            logging.info("allocation contains %d nodes which meets requirements (%d min)", len(allocation.nodes),
+                         min_nodes)
             return allocation
-        else:
-            logging.info("allocation contains {} nodes which doesn't meets requirements ({} min)".format(
-                len(allocation.nodeAllocations), min_nodes))
-            allocation.release()
-            return None
 
+        logging.info("allocation contains %d nodes which doesn't meets requirements (%d min)", len(allocation.nodes),
+                     min_nodes)
+        allocation.release()
+        return None
 
-    def allocateJob(self, r):
-        """
-        Create allocation for job with given resource requirements.
+    def allocate_job(self, reqs):
+        """Create allocation for job with given resource requirements.
 
         Args:
-            r (JobResources): job's resource requirements
+            reqs (JobResources): job's resource requirements
 
         Returns:
-            Allocation: created allocation
-            None: not enough free resources
+            Allocation: created allocation or None if not enough free resources
 
         Raises:
             NotSufficientResources: when there are not enough resources avaiable
             InvalidResourceSpec: when resource requirements are not valid
         """
-        self.__checkResources()
+        self._check_resources()
 
-        if r is None or not isinstance(r, JobResources):
+        if reqs is None or not isinstance(reqs, JobResources):
             raise InvalidResourceSpec("Missing resource requirements")
 
-        if not r.hasNodes() and not r.hasCores():
+        if not reqs.has_nodes and not reqs.has_cores:
             raise InvalidResourceSpec("No resources specified")
 
         min_nodes = 0
-        if r.hasNodes():
-            if r.nodes.isExact():
-                min_nodes = r.nodes.exact
+        if reqs.has_nodes:
+            if reqs.nodes.is_exact():
+                min_nodes = reqs.nodes.exact
             else:
-                if r.nodes.min is None or r.nodes.max is None:
+                if reqs.nodes.min is None or reqs.nodes.max is None:
                     raise InvalidResourceSpec("Both node's range boundaries (min, max) must be defined")
-                min_nodes = r.nodes.min
+                min_nodes = reqs.nodes.min
 
             if min_nodes > len(self.resources.nodes):
                 raise NotSufficientResources(
@@ -195,43 +190,43 @@ class SchedulerAlgorithm:
 
         min_cores = 0
         total_cores = 0
-        if r.hasCores():
-            if r.cores.isExact():
-                min_cores = r.cores.exact
+        if reqs.has_cores:
+            if reqs.cores.is_exact():
+                min_cores = reqs.cores.exact
             else:
-                if r.cores.min is None or r.cores.max is None:
+                if reqs.cores.min is None or reqs.cores.max is None:
                     raise InvalidResourceSpec("Both core's range boundaries (min, max) must be defined")
-                min_cores = r.cores.min
+                min_cores = reqs.cores.min
 
             total_cores = min_nodes * min_cores
 
-            if self.resources.totalCores < total_cores:
+            if self.resources.total_cores < total_cores:
                 raise NotSufficientResources(
-                    "{} exceeds available number of cores ({})".format(total_cores, self.resources.totalCores))
+                    "{} exceeds available number of cores ({})".format(total_cores, self.resources.total_cores))
 
-            if self.resources.freeCores < total_cores:
+            if self.resources.free_cores < total_cores:
                 return None
 
         if min_nodes == 0 and min_cores == 0:
             raise InvalidResourceSpec("Missing node and cores specification")
 
-        if r.hasNodeCrs() and min_nodes == 0:
+        if reqs.has_crs and min_nodes == 0:
             raise InvalidResourceSpec("Number of nodes is required when CR are used")
 
-        if r.hasNodeCrs():
-            for cr, count in r.crs.items():
-                if cr not in self.resources.maxCrs or count > self.resources.maxCrs[cr] or \
-                        min_nodes * count > self.resources.totalCrs[cr]:
-                    raise NotSufficientResources(
-                        "CR {} exceeds maximum available resources on node ({})".format(cr.name, self.resources.maxCrs[cr]))
+        if reqs.has_crs:
+            for cr, count in reqs.crs.items():
+                if cr not in self.resources.max_crs or count > self.resources.max_crs[cr] or \
+                        min_nodes * count > self.resources.total_crs[cr]:
+                    raise NotSufficientResources("CR {} exceeds maximum available resources on node ({})".format(
+                        cr.name, self.resources.max_crs[cr]))
 
         allocation = Allocation()
 
         if min_cores == 0:
             # allocate ('min_nodes', 'max_nodes') whole nodes
             max_nodes = min_nodes
-            if not r.nodes.isExact():
-                max_nodes = r.nodes.max
+            if not reqs.nodes.is_exact():
+                max_nodes = reqs.nodes.max
 
             if (min_nodes == 0 and max_nodes == 0) or \
                     max_nodes < 1 or \
@@ -239,11 +234,11 @@ class SchedulerAlgorithm:
                 raise InvalidResourceSpec(
                     "Invalid nodes specification (min: {}, max: {})".format(min_nodes, max_nodes))
 
-            allocation = self.__allocateEntireNodes(min_nodes, max_nodes, r.crs)
+            allocation = self._allocate_entire_nodes(min_nodes, max_nodes, reqs.crs)
         else:
             max_cores = min_cores
-            if not r.cores.isExact():
-                max_cores = r.cores.max
+            if not reqs.cores.is_exact():
+                max_cores = reqs.cores.max
 
             if (min_cores == 0 and max_cores == 0) or \
                     max_cores < 1 or \
@@ -251,22 +246,18 @@ class SchedulerAlgorithm:
                 raise InvalidResourceSpec(
                     "Invalid cores specification (min: {}, max: {})".format(min_cores, max_cores))
 
-            if r.hasNodes():
-                if r.nodes.isExact():
+            max_nodes = 1
+            if reqs.has_nodes:
+                if reqs.nodes.is_exact():
                     max_nodes = min_nodes
                 else:
-                    max_nodes = r.nodes.max
-
-            #			logging.info("looking for ({},{}) nodes and ({},{}) cores".format(
-            #					min_nodes, max_nodes, min_cores, max_cores))
+                    max_nodes = reqs.nodes.max
 
             if min_nodes == 0:
                 # allocate ('min_cores', 'max_cores') on any number of nodes
-                allocation = self.allocateCores(min_cores, max_cores)
+                allocation = self.allocate_cores(min_cores, max_cores)
             else:
-                #print("allocateCoresOnNodes - nodes ({} - {}), cores ({} - {}), crs ({})".format(min_nodes, max_nodes, min_cores, max_cores, str(r.crs)))
                 # allocate ('min_cores', 'max_cores') on ('min_nodes', 'max_nodes') each
-                allocation = self.__allocateCoresOnNodes(min_nodes, max_nodes,
-                                                         min_cores, max_cores, r.crs)
+                allocation = self._allocate_cores_on_nodes(min_nodes, max_nodes, min_cores, max_cores, reqs.crs)
 
         return allocation

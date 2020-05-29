@@ -1,4 +1,3 @@
-import zmq
 import sys
 import asyncio
 import logging
@@ -6,142 +5,151 @@ import os
 import socket
 import json
 from datetime import datetime
-from datetime import datetime
 from os.path import join
+
+import zmq
 from zmq.asyncio import Context
 
 
-
 class Agent:
+    """The node agent class.
+    This class is responsible for launching jobs on local resources.
+
+    Attributes:
+        agent_id (str): agent identifier
+        options (dict): agent options
+        _finish (bool): true if agent should finish
+        context (zmq.Context): ZMQ context
+        in_socket (zmq.Socket): agent listening socket
+        local_port (int): the local listening socket port
+        local_address (str): the local listening socket address (proto://ip:port)
+        remote_address (str): the launcher address
+        local_export_address (str):
+    """
 
     MIN_PORT_RANGE = 10000
     MAX_PORT_RANGE = 40000
 
-    def __init__(self, agent_id, options):
-        """
-        The node agent class.
-        This class is responsible for launching jobs on local resources.
+    def __init__(self, a_id, opts):
+        """Initialize instance.
 
         Args:
-            agent_id - agent identifier
-            options - agent options
-            context - ZMQ context
-            in_socket - agent listening socket
-            local_port - the local listening socket port
-            local_address - the local listening socket address (proto://ip:port)
-            remote_address - the launcher address
+            a_id - agent identifier
+            opt - agent options
         """
-        self.agent_id = agent_id
-        self.__finish = False
+        self.agent_id = a_id
+        self._finish = False
 
-        self.options = options
+        self.options = opts
 
         # set default options
         self.options.setdefault('binding', False)
 
-        logging.info('agent options: {}'.format(str(self.options)))
+        logging.info('agent options: %s', str(self.options))
 
-        self.__clear()
-
-
-    def __clear(self):
-        """
-        Reset runtime settings.
-        """
         self.context = None
         self.in_socket = None
         self.local_port = None
         self.local_address = None
         self.remote_address = None
+        self.local_export_address = None
 
+    def _clear(self):
+        """Reset runtime settings. """
+        self.context = None
+        self.in_socket = None
+        self.local_port = None
+        self.local_address = None
+        self.remote_address = None
+        self.local_export_address = None
 
-    async def agent(self, remote_address, ip='0.0.0.0', proto='tcp', min_port=MIN_PORT_RANGE, max_port=MAX_PORT_RANGE):
-        """
-        The agent handler method.
+    async def agent(self, remote_address, ip_addr='0.0.0.0', proto='tcp', min_port=MIN_PORT_RANGE,
+                    max_port=MAX_PORT_RANGE):
+        """The agent handler method.
         The agent will listen on local incoming socket until it receive the EXIT command.
         At the start, the agent will sent to the launcher (on launcher's remote address) the READY message
         with the local incoming address.
 
         Args:
-            remote_address - the launcher address where information about job finish will be sent
-            ip - the local IP where incoming socket will be bineded
-            proto - the protocol of the incoming socket
+            remote_address (str): the launcher address where information about job finish will be sent
+            ip_addr (str): the local IP where incoming socket will be bineded
+            proto (str): the protocol of the incoming socket
+            min_port (int): minimum port number to listen on
+            max_port (int): maximum port number to listen on
         """
         self.remote_address = remote_address
         self.context = Context.instance()
 
-        logging.debug('agent with id ({}) run to report to ({})'.format(self.agent_id, self.remote_address))
+        logging.debug('agent with id (%s) run to report to (%s)', self.agent_id, self.remote_address)
 
-        self.in_socket = self.context.socket(zmq.REP)
+        self.in_socket = self.context.socket(zmq.REP) #pylint: disable=maybe-no-member
 
-        laddr = '{}://{}'.format(proto, ip)
+        laddr = '{}://{}'.format(proto, ip_addr)
 
         self.local_port = self.in_socket.bind_to_random_port(laddr, min_port=min_port, max_port=max_port)
         self.local_address = '{}:{}'.format(laddr, self.local_port)
-        self.local_export_address = '{}://{}:{}'.format(proto, socket.gethostbyname(socket.gethostname()), self.local_port)
+        self.local_export_address = '{}://{}:{}'.format(proto, socket.gethostbyname(socket.gethostname()),
+                                                        self.local_port)
 
-        logging.debug('agent with id ({}) listen at address ({}), export address ({})'.format(self.agent_id, self.local_address, self.local_export_address))
+        logging.debug('agent with id (%s) listen at address (%s), export address (%s)',
+                      self.agent_id, self.local_address, self.local_export_address)
 
         try:
-            await self.__send_ready()
-        except:
-            logging.error('failed to signaling ready to manager: {}'.format(sys.exc_info()))
-            self.__cleanup()
-            self.__clear()
+            await self._send_ready()
+        except Exception:
+            logging.error('failed to signaling ready to manager: %s', sys.exc_info())
+            self._cleanup()
+            self._clear()
             raise
-        
-        while not self.__finish:
+
+        while not self._finish:
             message = await self.in_socket.recv_json()
 
             cmd = message.get('cmd', 'UNKNOWN')
 
-            await self.in_socket.send_json({ 'status': 'OK' })
+            await self.in_socket.send_json({'status': 'OK'})
 
             cmd = message.get('cmd', 'unknown').lower()
             if cmd == 'exit':
-                self.__cmd_exit(message)
+                self._cmd_exit(message)
             elif cmd == 'run':
-                self.__cmd_run(message)
+                self._cmd_run(message)
             else:
-                logging.error('unknown command received from launcher: {}'.format(message))
+                logging.error('unknown command received from launcher: %s', message)
 
         try:
-            await self.__send_finishing()
-        except Exception as e:
-            logging.error('failed to signal shuting down: {}'.format(str(e)))
+            await self._send_finishing()
+        except Exception as exc:
+            logging.error('failed to signal shuting down: %s', str(exc))
 
-        self.__cleanup()
-        self.__clear()
+        self._cleanup()
+        self._clear()
 
-
-    def __cleanup(self):
+    def _cleanup(self):
+        """Close sockets."""
         if self.in_socket:
             self.in_socket.close()
 
-
-    def __cmd_exit(self, message):
-        """
-        Handler of EXIT command.
+    def _cmd_exit(self, message):
+        """Handler of EXIT command.
 
         Args:
             message - message from the launcher
         """
-        logging.debug('handling finish cmd with message ({})'.format(str(message)))
-        self.__finish = True
+        logging.debug('handling finish cmd with message (%s)', str(message))
+        self._finish = True
 
-
-    def __cmd_run(self, message):
-        """
-        Handler of RUN application command.
+    def _cmd_run(self, message):
+        """Handler of RUN application command.
 
         Args:
             message - message with the following attributes:
                 appid - application identifier
                 args - the application arguments
         """
-        logging.debug('running app {} with args {} ...'.format(message.get('appid', 'UNKNOWN'), str(message.get('args', []))))
+        logging.debug('running app %s with args %s ...', message.get('appid', 'UNKNOWN'), str(message.get('args', [])))
 
-        asyncio.ensure_future(self.__launch_app(
+        asyncio.ensure_future(self._launch_app(
             message.get('appid', 'UNKNOWN'),
             args=message.get('args', []),
             stdin=message.get('stdin', None),
@@ -150,12 +158,10 @@ class Agent:
             env=message.get('env', None),
             wdir=message.get('wdir', None),
             cores=message.get('cores', None)
-            ))
+        ))
 
-
-    async def __launch_app(self, appid, args, stdin, stdout, stderr, env, wdir, cores):
-        """
-        Run application.
+    async def _launch_app(self, appid, args, stdin, stdout, stderr, env, wdir, cores):
+        """Run application.
 
         Args:
             appid - application identifier
@@ -167,12 +173,11 @@ class Agent:
             wdir - working directory
             cores - a list of cores application should be binded to
         """
-        stdinP = None
-        stdoutP = asyncio.subprocess.DEVNULL
-        stderrP = asyncio.subprocess.DEVNULL
-        startedDt = datetime.now()
+        stdin_p = None
+        stdout_p = asyncio.subprocess.DEVNULL
+        stderr_p = asyncio.subprocess.DEVNULL
 
-        exitCode = -1
+        exit_code = -1
 
         starttime = datetime.now()
 
@@ -182,13 +187,14 @@ class Agent:
 
             if cores and self.options.get('binding', False):
                 app_exec = 'taskset'
-                app_args = [ '-c', ','.join([str(c) for c in cores]), *args ]
+                app_args = ['-c', ','.join([str(c) for c in cores]), *args]
             else:
                 app_exec = args[0]
-                app_args = args[1:] if len(args) > 1 else [ ]
+                app_args = args[1:] if len(args) > 1 else []
 
-            logging.info("creating process for job {} with executable ({}) and args ({})".format(appid, app_exec, str(app_args)))
-            logging.debug("process env: {}".format(str(env)))
+            logging.info("creating process for job %s with executable (%s) and args (%s)",
+                         appid, app_exec, str(app_args))
+            logging.debug("process env: %s", str(env))
 
             if stdin and wdir and not os.path.isabs(stdin):
                 stdin = os.path.join(wdir, stdin)
@@ -199,78 +205,76 @@ class Agent:
             if stderr and wdir and not os.path.isabs(stderr):
                 stderr = os.path.join(wdir, stderr)
 
-
             if stdin:
-                stdinP = open(stdin, 'r')
+                stdin_p = open(stdin, 'r')
 
             if stdout and stderr and stdout == stderr:
-                stdoutP = stderrP = open(stdout, 'w')
+                stdout_p = stderr_p = open(stdout, 'w')
             else:
-                 if stdout:
-                     stdoutP = open(stdout, 'w')
+                if stdout:
+                    stdout_p = open(stdout, 'w')
 
-                 if stderr:
-                     stderrP = open(stderr, 'w')
+                if stderr:
+                    stderr_p = open(stderr, 'w')
 
-            process = await asyncio.create_subprocess_exec(app_exec, *app_args,
-                    stdin=stdinP, stdout=stdoutP, stderr=stderrP, cwd=wdir, env=env)
+            process = await asyncio.create_subprocess_exec(
+                app_exec, *app_args, stdin=stdin_p, stdout=stdout_p, stderr=stderr_p, cwd=wdir, env=env)
 
-            logging.debug("process for job {} launched".format(appid))
+            logging.debug("process for job %s launched", appid)
 
             await process.wait()
 
             runtime = (datetime.now() - starttime).total_seconds()
 
-            exitCode = process.returncode
-        
-            logging.info("process for job {} finished with exit code {}".format(appid, exitCode))
+            exit_code = process.returncode
+
+            logging.info("process for job %s finished with exit code %d", appid, exit_code)
 
             status_data = {
-                    'appid': appid,
-                    'agent_id': self.agent_id,
-                    'date': datetime.now().isoformat(),
-                    'status': 'APP_FINISHED',
-                    'ec': exitCode, 'runtime': runtime }
-        except Exception as e:
-            logging.error('launching process for job {} finished with error - {}'.format(appid, str(e)))
+                'appid': appid,
+                'agent_id': self.agent_id,
+                'date': datetime.now().isoformat(),
+                'status': 'APP_FINISHED',
+                'ec': exit_code,
+                'runtime': runtime}
+        except Exception as exc:
+            logging.error('launching process for job %s finished with error - %s', appid, str(exc))
             status_data = {
-                    'appid': appid,
-                    'agent_id': self.agent_id,
-                    'date': datetime.now().isoformat(),
-                    'status': 'APP_FAILED',
-                    'message': str(e) }
+                'appid': appid,
+                'agent_id': self.agent_id,
+                'date': datetime.now().isoformat(),
+                'status': 'APP_FAILED',
+                'message': str(exc)}
         finally:
-            if stdinP:
-                stdinP.close()
-            if stdoutP != asyncio.subprocess.DEVNULL:
-                stdoutP.close()
-            if stderrP != asyncio.subprocess.DEVNULL and stderrP != stdoutP:
-                stderrP.close()
+            if stdin_p:
+                stdin_p.close()
+            if stdout_p != asyncio.subprocess.DEVNULL:
+                stdout_p.close()
+            if stderr_p not in (asyncio.subprocess.DEVNULL, stdout_p):
+                stderr_p.close()
 
-        out_socket = self.context.socket(zmq.REQ)
-        out_socket.setsockopt(zmq.LINGER, 0)
+        out_socket = self.context.socket(zmq.REQ) #pylint: disable=maybe-no-member
+        out_socket.setsockopt(zmq.LINGER, 0) #pylint: disable=maybe-no-member
 
         try:
             out_socket.connect(self.remote_address)
 
             await out_socket.send_json(status_data)
             msg = await out_socket.recv_json()
-            logging.debug("got confirmation for process finish {}".format(str(msg)))
+            logging.debug("got confirmation for process finish %s", str(msg))
         finally:
             if out_socket:
                 try:
                     out_socket.close()
-                except:
+                except Exception:
                     pass
 
-
-    async def __send_ready(self):
-        """
-        Send READY message to the launcher.
+    async def _send_ready(self):
+        """Send READY message to the launcher.
         The message will contain also the local listening address.
         """
-        out_socket = self.context.socket(zmq.REQ)
-        out_socket.setsockopt(zmq.LINGER, 0)
+        out_socket = self.context.socket(zmq.REQ) #pylint: disable=maybe-no-member
+        out_socket.setsockopt(zmq.LINGER, 0) #pylint: disable=maybe-no-member
 
         try:
             out_socket.connect(self.remote_address)
@@ -279,31 +283,29 @@ class Agent:
                 'status': 'READY',
                 'date': datetime.now().isoformat(),
                 'agent_id': self.agent_id,
-                'local_address': self.local_export_address })
+                'local_address': self.local_export_address})
 
             msg = await out_socket.recv_json()
 
-            logging.debug('received ready message confirmation: {}'.format(str(msg)))
+            logging.debug('received ready message confirmation: %s', str(msg))
 
             if not msg.get('status', 'UNKNOWN') == 'CONFIRMED':
-                logging.error('agent {} not registered successfully in launcher: {}'.format(self.agent_id, str(msg)))
+                logging.error('agent %s not registered successfully in launcher: %s', self.agent_id, str(msg))
                 raise Exception('not successfull registration in launcher: {}'.format(str(msg)))
         finally:
             if out_socket:
                 try:
                     out_socket.close()
-                except:
+                except Exception:
                     pass
 
-
-    async def __send_finishing(self):
-        """
-        Send FINISHING message to the launcher.
+    async def _send_finishing(self):
+        """Send FINISHING message to the launcher.
         This message is the last message sent by the agent to the launcher before
         shuting down.
         """
-        out_socket = self.context.socket(zmq.REQ)
-        out_socket.setsockopt(zmq.LINGER, 0)
+        out_socket = self.context.socket(zmq.REQ) #pylint: disable=maybe-no-member
+        out_socket.setsockopt(zmq.LINGER, 0) #pylint: disable=maybe-no-member
 
         logging.debug("sending finishing message")
         try:
@@ -313,16 +315,16 @@ class Agent:
                 'status': 'FINISHING',
                 'date': datetime.now().isoformat(),
                 'agent_id': self.agent_id,
-                'local_address': self.local_address })
+                'local_address': self.local_address})
             logging.debug("finishing message sent, waiting for confirmation")
             msg = await out_socket.recv_json()
 
-            logging.debug('received finishing message confirmation: {}'.format(str(msg)))
+            logging.debug('received finishing message confirmation: %s', str(msg))
         finally:
             if out_socket:
                 try:
                     out_socket.close()
-                except:
+                except Exception:
                     pass
 
 
@@ -331,22 +333,22 @@ if __name__ == '__main__':
         print('error: wrong arguments\n\n\tagent {id} {remote_address} [options_in_json]\n\n')
         sys.exit(1)
 
-    agent_id, raddress = sys.argv[1:3]
+    agent_id = sys.argv[1]
+    raddress = sys.argv[2]
     options_arg = sys.argv[3] if len(sys.argv) > 3 else None
 
     options = {}
     if options_arg:
         try:
             options = json.loads(options_arg)
-        except Exception as e:
-            print('failed to parse options: {}'.format(str(e)))
+        except Exception as exc:
+            print('failed to parse options: {}'.format(str(exc)))
             sys.exit(1)
 
     logging.basicConfig(
-            level=logging.DEBUG,
-#            level=logging.INFO,
-            filename=join(options.get('auxDir', '.'), 'nl-agent-{}.log'.format(agent_id)),
-            format='%(asctime)-15s: %(message)s')
+        level=logging.DEBUG,  # level=logging.INFO
+        filename=join(options.get('auxDir', '.'), 'nl-agent-{}.log'.format(agent_id)),
+        format='%(asctime)-15s: %(message)s')
 
     if asyncio.get_event_loop() and asyncio.get_event_loop().is_closed():
         asyncio.set_event_loop(asyncio.new_event_loop())
@@ -356,5 +358,5 @@ if __name__ == '__main__':
     asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(agent.agent(raddress)))
     asyncio.get_event_loop().close()
 
-    logging.info('node agent {} exiting'.format(agent_id))
+    logging.info('node agent %s exiting', agent_id)
     sys.exit(0)

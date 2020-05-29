@@ -7,28 +7,39 @@ from qcg.appscheduler.resources import CRType
 
 
 class Environment:
+    """Base class for setting job's environment variables.
+
+    Attributes:
+        NAME (str): name of environment class
+
+    All parent classes must implement ``update_env`` method.
+    """
+    NAME = 'abstract'
+
     def __init__(self):
         pass
 
-    def updateEnv(self, job, env, opts={}):
-        """
-        Update job environment.
+    def update_env(self, job, env, opts=None):
+        """Update job environment.
 
-        :param job (ExecutionJob): job data
-        :param env (dict): environment to update
-        :param opts (dict): optional preferences for generating environment
+        Args:
+            job (ExecutionJob): job data
+            env (dict(str,str)): environment to update
+            opts (dict(str,str), optional): optional preferences for generating environment
         """
         raise NotImplementedError()
 
 
 class CommonEnvironment(Environment):
+    """The common environment for all execution schemas."""
+
     NAME = 'common'
 
     def __init__(self):
         super(CommonEnvironment, self).__init__()
         logging.info('initializing COMMON environment')
 
-    def updateEnv(self, job, env, opts={}):
+    def update_env(self, job, env, opts=None):
         logging.debug('updating common environment')
 
         env.update({
@@ -42,57 +53,59 @@ class CommonEnvironment(Environment):
 
 
 class SlurmEnvironment(Environment):
+    """The environment compatible with Slurm execution environments."""
+
     NAME = 'slurm'
 
     def __init__(self):
         super(SlurmEnvironment, self).__init__()
         logging.info('initializing SLURM environment')
 
-    def __mergePerNodeSpec(self, strList):
+    @staticmethod
+    def _merge_per_node_spec(str_list):
         prev_value = None
-        result = [ ]
-        n = 1
+        result = []
+        times = 1
 
-        for t in strList.split(','):
+        for elem in str_list.split(','):
             if prev_value is not None:
-                if prev_value == t:
-                    n += 1
+                if prev_value == elem:
+                    times += 1
                 else:
-                    if n > 1:
-                        result.append("%s(x%d)" % (prev_value, n))
+                    if times > 1:
+                        result.append("%s(x%d)" % (prev_value, times))
                     else:
                         result.append(prev_value)
 
-                    prev_value = t
-                    n = 1
+                    prev_value = elem
+                    times = 1
             else:
-                prev_value = t
-                n = 1
+                prev_value = elem
+                times = 1
 
         if prev_value is not None:
-            if n > 1:
-                result.append("%s(x%d)" % (prev_value, n))
+            if times > 1:
+                result.append("%s(x%d)" % (prev_value, times))
             else:
                 result.append(prev_value)
 
         return ','.join([str(el) for el in result])
 
-
-    def __checkSameCores(self, tasksList):
+    @staticmethod
+    def _check_same_cores(tasks_list):
         same = None
 
-        for t in tasksList.split(','):
+        for elem in tasks_list.split(','):
             if same is not None:
-                if t != same:
+                if elem != same:
                     return None
             else:
-                same = t
+                same = elem
 
         return same
 
-
-    def updateEnv(self, job, env, opts={}):
-        merged_tasks_per_node = self.__mergePerNodeSpec(job.tasks_per_node)
+    def update_env(self, job, env, opts=None):
+        merged_tasks_per_node = SlurmEnvironment._merge_per_node_spec(job.tasks_per_node)
 
         job.env.update({
             'SLURM_NNODES': str(job.nnodes),
@@ -106,28 +119,30 @@ class SlurmEnvironment(Environment):
             'SLURM_STEP_NUM_TASKS': str(job.ncores),
             'SLURM_JOB_CPUS_PER_NODE': merged_tasks_per_node,
             'SLURM_STEP_TASKS_PER_NODE': merged_tasks_per_node,
-            'SLURM_TASKS_PER_NODE': merged_tasks_per_node 
+            'SLURM_TASKS_PER_NODE': merged_tasks_per_node
         })
 
-        same_cores = self.__checkSameCores(job.tasks_per_node)
+        same_cores = SlurmEnvironment._check_same_cores(job.tasks_per_node)
         if same_cores is not None:
-            job.env.update({ 'SLURM_NTASKS_PER_NODE': same_cores })
+            job.env.update({'SLURM_NTASKS_PER_NODE': same_cores})
 
-        if not opts.get('nohostfile', False):
+        if opts and not opts.get('nohostfile', False):
             # create host file
             hostfile = os.path.join(job.wdPath, ".{}.hostfile".format(job.jobIteration.name))
-            with open(hostfile, 'w') as f:
-                for node in job.allocation.nodeAllocations:
-                    for i in range(0, node.ncores):
-                        f.write("%s\n" % node.node.name)
+            with open(hostfile, 'w') as hostfile_h:
+                for node in job.allocation.nodes:
+                    for _ in range(0, node.ncores):
+                        hostfile_h.write("{}\n".format(node.node.name))
             job.env.update({
                 'SLURM_HOSTFILE': hostfile
             })
 
-        node_with_gpu_crs = [node for node in job.allocation.nodeAllocations if node.crs != None and CRType.GPU in node.crs]
+        node_with_gpu_crs = [node for node in job.allocation.nodes
+                             if node.crs is not None and CRType.GPU in node.crs]
         if node_with_gpu_crs:
-            # as currenlty we have no way to specify allocated GPU's per node, we assume that all nodes has the same settings
-            job.env.update({ 'CUDA_VISIBLE_DEVICES': ','.join(node_with_gpu_crs[0].crs[CRType.GPU].instances)})
+            # as currenlty we have no way to specify allocated GPU's per node, we assume that all
+            # nodes has the same settings
+            job.env.update({'CUDA_VISIBLE_DEVICES': ','.join(node_with_gpu_crs[0].crs[CRType.GPU].instances)})
         else:
             # remote CUDA_VISIBLE_DEVICES for allocations without GPU's
             if 'CUDA_VISIBLE_DEVICES' in job.env:
@@ -135,23 +150,42 @@ class SlurmEnvironment(Environment):
 
 
 def __select_auto_environment():
+    """Select proper job execution environment.
+
+    When QCG-PilotJob manager is executed inside Slurm allocation, the same execution environment is returned.
+    For local modes, the base (common) environment is used.
+
+    Returns:
+        Environment: the selected job execution environment
+    """
     if in_slurm_allocation():
         return SlurmEnvironment
-    else:
-        return CommonEnvironment
+
+    return CommonEnvironment
 
 
 _available_envs = {
+    """List of all available environments."""
     'auto': __select_auto_environment,
     CommonEnvironment.NAME: CommonEnvironment,
     SlurmEnvironment.NAME: SlurmEnvironment
 }
 
 
-def getEnvironment(envName):
-    if envName not in _available_envs:
-        raise ValueError('environment {} not available'.format(envName))
+def get_environment(env_name):
+    """Return job execution environment based on the name.
 
-    envType = _available_envs[envName]
-#    logging.info('checking if {} is an function type {}'.format(str(envType), isinstance(envType, types.FunctionType)))
-    return envType() if isinstance(envType, types.FunctionType) else envType
+    Args:
+        env_name (str): environment name
+
+    Returns:
+        Environment: the environment with selected name
+
+    Raises:
+        ValueError: if environment with given name is not available
+    """
+    if env_name not in _available_envs:
+        raise ValueError('environment {} not available'.format(env_name))
+
+    env_type = _available_envs[env_name]
+    return env_type() if isinstance(env_type, types.FunctionType) else env_type

@@ -1,9 +1,17 @@
-import logging
-
 from enum import Enum
 
 
 class Config(Enum):
+    """Configuration description for QCG-PilotJob
+
+    Each entry contains:
+      name (str): name of the configuration entry
+      default (str): default value for the entry
+      get (lambda, optional): custom function that based on passed configuration dict return proper value
+
+    By default the 'get' method for this class return value in dictionary related to the selected entry. In case
+    where entry contains 'get' attribute, this method will be used to return the final configuration value.
+    """
 
     EXECUTOR_WD = {
         'name': 'wd',
@@ -48,19 +56,19 @@ class Config(Enum):
     ZMQ_PORT_MIN_RANGE = {
         'name': 'zmq.port.min',
         'default': 2222,
-    }            
+    }
 
     ZMQ_PORT_MAX_RANGE = {
         'name': 'zmq.port.max',
         'default': 9999,
-    }            
+    }
 
     ZMQ_IFACE_ADDRESS = {
         'name': 'zmq.address',
-        'get': lambda conf: 'tcp://{}:{}'.format(
-            str(Config.ZMQ_IP_ADDRESS.get(conf)),
-            str(Config.ZMQ_PORT.get(conf))) if Config.ZMQ_PORT.get(conf) else \
-            'tcp://{}'.format(str(Config.ZMQ_IP_ADDRESS.get(conf)))
+        'get': lambda conf:
+               'tcp://{}:{}'.format(str(Config.ZMQ_IP_ADDRESS.get(conf)), str(Config.ZMQ_PORT.get(conf)))
+               if Config.ZMQ_PORT.get(conf) else
+               'tcp://{}'.format(str(Config.ZMQ_IP_ADDRESS.get(conf)))
     }
 
     REPORT_FORMAT = {
@@ -139,7 +147,12 @@ class Config(Enum):
     }
 
     def get(self, config):
+        """Return configuration entry value from dictionary
+
+        Args:
+            config (dict(str,str)) - configuration values
+        """
         if 'get' in self.value:
             return self.value['get'](config)
-        else:
-            return config.get(self, self.value['default'])
+
+        return config.get(self, self.value['default'])

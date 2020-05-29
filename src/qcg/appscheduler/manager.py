@@ -6,12 +6,12 @@ import getpass
 import socket
 import os
 import sys
-import zmq
 import json
 import traceback
 from string import Template
+import zmq
 
-from qcg.appscheduler.errors import NotSufficientResources, InvalidResourceSpec, IllegalJobDescription
+from qcg.appscheduler.errors import NotSufficientResources, InvalidResourceSpec
 from qcg.appscheduler.errors import GovernorConnectionError, JobAlreadyExist
 from qcg.appscheduler.executor import Executor
 from qcg.appscheduler.joblist import JobList, JobState, JobResources
@@ -20,7 +20,6 @@ import qcg.appscheduler.profile
 from qcg.appscheduler.config import Config
 from qcg.appscheduler.parseres import get_resources
 from qcg.appscheduler.request import ControlReq
-from qcg.appscheduler.request import JobStatusReq, JobInfoReq
 from qcg.appscheduler.response import Response, ResponseCode
 from qcg.appscheduler.errors import InvalidRequest
 from qcg.appscheduler.iterscheduler import IterScheduler
@@ -28,817 +27,846 @@ from qcg.appscheduler.joblist import Job
 
 
 class SchedulingJob:
+    """Data necessary for scheduling job.
+
+    Dependencies.
+    The SchedulingJob contains two set of dependencies - the common for all subjobs, and specific for each
+    subjob (these dependencies are stored in SchedulingIteration). The execution of individual subjob might start
+    only after all common dependencies has been meet, and those specific for each subjob.
+
+    Attributes:
+        manager (Manager): manager instance
+        job (Job): job instance
+        _is_feasible (bool): does the job has chance to meet dependencies
+        _after_jobs (set): list of dependant jobs (without individual for each subjob) - common for all iterations
+        _after_iteration_jobs (set): list of dependant individual subjobs for each subjob - specific for each iteration
+        _iteration_sub_jobs (list): data of iteration subjobs
+        _has_iterations (bool): flag for iterative jobs
+        _total_iterations (int): total number of iterations
+        _current_solved_iterations (int): number of currently solved iterations
+        _res_cores_gen (Generator): generator for job iterations to compute # of cores for each iteration
+        _res_nodes_gen (Generator): generator for job iterations to compute # of nodes for each iteration
+        _min_res_cores (int): minimum number of cores required by single job iteration
+    """
 
     # how many iterations should be resolved at each scheduling step
     ITERATIONS_SPLIT = 100
 
     def __init__(self, manager, job):
-        """
-        Data necessary for scheduling job.
+        """Initialize instance.
 
-        Dependencies.
-        The SchedulingJob contains two set of dependencies - the common for all subjobs, and specific for each
-        subjob (these dependencies are stored in SchedulingIteration). The execution of individual subjob might start
-        only after all common dependencies has been meet, and those specific for each subjob.
+        Args:
+            manager (Manager): the manager instance
+            job (Job): job to schedule
         """
-        assert job is not None
-        assert manager is not None
-
-        self.__manager = manager
+        self.manager = manager
         self.job = job
 
         # does the job chance to meet dependencies
-        self.__isFeasible = True
+        self._is_feasible = True
 
         # list of dependant jobs (without individual for each subjob) - common for all iterations
-        self.__afterJobs = set()
+        self._after_jobs = set()
 
         # list of dependant individual subjobs for each subjob - specific for each iteration
-        self.__afterIterationJobs = set()
+        self._after_iteration_jobs = set()
 
         # data of iteration subjobs
-        self.__iterationSubJobs = []
+        self._iteration_sub_jobs = []
 
         # flag for iterative jobs
-        self.__hasIterations = self.job.isIterative()
+        self._has_iterations = self.job.has_iterations
 
         # total number of iterations
-        self.__totalIterations = self.job.getIteration().iterations() if self.__hasIterations else 1
+        self._total_iterations = self.job.iteration.iterations() if self._has_iterations else 1
 
         # number of currently solved iterations
-        self.__currentSolvedIterations = 0
+        self._current_solved_iterations = 0
 
         # general dependencies
-        if job.hasDependencies():
-            for jobId in job.dependencies.after:
-                if '${it}' in jobId:
-                    self.__afterIterationJobs.add(jobId)
+        if job.has_dependencies:
+            for job_id in job.dependencies.after:
+                if '${it}' in job_id:
+                    self._after_iteration_jobs.add(job_id)
                 else:
-                    self.__afterJobs.add(jobId)
+                    self._after_jobs.add(job_id)
 
-            self.checkDependencies()
+            self.check_dependencies()
 
-       # job resources
+        # job resources
         # in case of job iterations, there are schedulers which generates # of cores/nodes specific for each iteration
-        self.__resCoresGenerator = None
+        self._res_cores_gen = None
         jobres = self.job.resources
-        if self.__hasIterations and jobres.hasCores() and jobres.cores.scheduler is not None:
-            self.__resCoresGenerator = IterScheduler.GetScheduler(jobres.cores.scheduler['name'])(
-                jobres.cores.toDict(), self.__totalIterations, self.__manager.resources.totalCores,
+        if self._has_iterations and jobres.has_cores and jobres.cores.scheduler is not None:
+            self._res_cores_gen = IterScheduler.get_scheduler(jobres.cores.scheduler['name'])(
+                jobres.cores.to_dict(), self._total_iterations, self.manager.resources.total_cores,
                 **jobres.cores.scheduler.get('params', {})).generate()
-            logging.debug('generated cores scheduler {} for job {}'.format(jobres.cores.scheduler['name'], self.job.name))
+            logging.debug('generated cores scheduler %s for job %s', jobres.cores.scheduler['name'], self.job.name)
 
-        self.__resNodesGenerator = None
-        if self.__hasIterations and jobres.hasNodes() and jobres.nodes.scheduler is not None:
-            self.__resNodesGenerator = IterScheduler.GetScheduler(jobres.nodes.scheduler["name"])(
-                jobres.nodes.toDict(), self.__totalIterations, self.__manager.resources.totalNodes,
+        self._res_nodes_gen = None
+        if self._has_iterations and jobres.has_nodes and jobres.nodes.scheduler is not None:
+            self._res_nodes_gen = IterScheduler.get_scheduler(jobres.nodes.scheduler["name"])(
+                jobres.nodes.to_dict(), self._total_iterations, self.manager.resources.total_nodes,
                 **jobres.nodes.scheduler.get("params", {})).generate()
-            logging.debug('generated nodes scheduler {} for job {}'.format(jobres.nodes.scheduler['name'], self.job.name))
+            logging.debug('generated nodes scheduler %s for job %s', jobres.nodes.scheduler['name'], self.job.name)
 
         # compute minResCores
-        self.__minResCores = jobres.getMinimumNumberOfCores()
-        logging.debug('minimum # of cores for job {} is {}'.format(self.job.name, self.__minResCores))
+        self._min_res_cores = jobres.get_min_num_cores()
+        logging.debug('minimum # of cores for job %s is %d', self.job.name, self._min_res_cores)
 
         # generate only part of whole set of iterations
-        self.setupIterations()
+        self.setup_iterations()
 
-
-    def checkDependencies(self):
-        """
-        Update dependency state.
+    def check_dependencies(self):
+        """Update dependency state.
         Check all dependent jobs and update job's ready (and possible feasible) status.
         """
         finished = set()
 
         # check job dependencies
-        for jobId in self.__afterJobs:
-            jobName = jobId
-            jobIt = None
+        for job_id in self._after_jobs:
+            job_name = job_id
+            job_it = None
 
-            if ":" in jobName:
-                jobName, jobIt = self.__manager.jobList.parse_jobname(jobName)
+            if ":" in job_name:
+                job_name, job_it = JobList.parse_jobname(job_name)
 
-            depJob = self.__manager.jobList.get(jobName)
-            if depJob is None:
-                logging.warning("Dependency job \'{}\' not registered".format(jobId))
-                self.__isFeasible = False
+            dep_job = self.manager.job_list.get(job_name)
+            if dep_job is None:
+                logging.warning("Dependency job \'%s\' not registered", job_id)
+                self._is_feasible = False
                 break
 
-            depJobState = depJob.getState(jobIt)
-            if depJobState.isFinished():
-                if depJob.getState() != JobState.SUCCEED:
-                    self.__isFeasible = False
+            dep_job_state = dep_job.state(job_it)
+            if dep_job_state.is_finished():
+                if dep_job.state() != JobState.SUCCEED:
+                    self._is_feasible = False
                     break
-                else:
-                    finished.add(jobId)
 
-        self.__afterJobs -= finished
+                finished.add(job_id)
 
-        if self.__iterationSubJobs and self.__afterIterationJobs:
+        self._after_jobs -= finished
+
+        if self._iteration_sub_jobs and self._after_iteration_jobs:
             # check single iteration job dependencies
-            toRemove = []
-            for iterationJob in self.__iterationSubJobs:
-                iterationJob.checkDependencies()
+            to_remove = []
+            for iteration_job in self._iteration_sub_jobs:
+                iteration_job.check_dependencies()
 
-                if not iterationJob.isFeasible():
-                    self.__manager.__changeJobState(self.job, iteration=iterationJob.iteration,
-                                                    state=JobState.OMITTED)
-                    logging.debug('iteration {} not feasible - removing'.format(iterationJob.name))
-                    toRemove.append(iterationJob)
+                if not iteration_job.is_feasible:
+                    self.manager.change_job_state(self.job, iteration=iteration_job.iteration,
+                                                  state=JobState.OMITTED)
+                    logging.debug('iteration %s not feasible - removing', iteration_job.name)
+                    to_remove.append(iteration_job)
 
-            if toRemove:
-                map(lambda job: self.__iterationSubJobs.remove(job), toRemove)
+            if to_remove:
+                map(lambda job: self._iteration_sub_jobs.remove(job), to_remove)
 
-        logging.debug("#{} dependency ({} feasible) jobs after update of job {}".format(
-            len(self.__afterJobs), str(self.__isFeasible), self.job.name))
+        logging.debug("#%d dependency (%s feasible) jobs after update of job %s",
+                      len(self._after_jobs), str(self._is_feasible), self.job.name)
 
-
-    def setupIterations(self):
-        """
-        Resolve next part of iterations.
-        """
-        niters = min(self.__totalIterations - self.__currentSolvedIterations, SchedulingJob.ITERATIONS_SPLIT)
-        logging.debug('solving {} iterations in job {}'.format(niters, self.job.name))
-        for iteration in range(self.__currentSolvedIterations, self.__currentSolvedIterations + niters):
+    def setup_iterations(self):
+        """Resolve next part of iterations."""
+        niters = min(self._total_iterations - self._current_solved_iterations, SchedulingJob.ITERATIONS_SPLIT)
+        logging.debug('solving %d iterations in job %s', niters, self.job.name)
+        for iteration in range(self._current_solved_iterations, self._current_solved_iterations + niters):
             # prepare resources, dependencies
-            subJobIteration = iteration + self.job.getIteration().start if self.__hasIterations else None
-            subJobResources = self.job.resources
+            subjob_iteration = iteration + self.job.iteration.start if self._has_iterations else None
+            subjob_resources = self.job.resources
 
-            if self.__resCoresGenerator or self.__resNodesGenerator:
-                jobResources = subJobResources.toDict()
+            if self._res_cores_gen or self._res_nodes_gen:
+                job_resources = subjob_resources.to_dict()
 
-                if self.__resCoresGenerator:
-                    jobResources['numCores'] = next(self.__resCoresGenerator)
+                if self._res_cores_gen:
+                    job_resources['numCores'] = next(self._res_cores_gen)
 
-                if self.__resNodesGenerator:
-                    jobResources['numNodes'] = next(self.__resNodesGenerator)
+                if self._res_nodes_gen:
+                    job_resources['numNodes'] = next(self._res_nodes_gen)
 
-                subJobResources = JobResources(**jobResources)
+                subjob_resources = JobResources(**job_resources)
 
-            subJobAfter = None
-            if self.__afterIterationJobs:
-                subJobAfter = set()
-                for jobName in self.__afterIterationJobs:
-                    subJobAfter.add(jobName.replace('${it}', subJobIteration))
+            subjob_after = None
+            if self._after_iteration_jobs:
+                subjob_after = set()
+                for job_name in self._after_iteration_jobs:
+                    subjob_after.add(job_name.replace('${it}', subjob_iteration))
 
-            self.__iterationSubJobs.append(SchedulingIteration(self, subJobIteration, subJobResources, subJobAfter))
+            self._iteration_sub_jobs.append(SchedulingIteration(self, subjob_iteration, subjob_resources, subjob_after))
 
-        self.__currentSolvedIterations += niters
-        logging.debug('{} currently iterations solved in job {}'.format(self.__currentSolvedIterations, self.job.name))
+        self._current_solved_iterations += niters
+        logging.debug('%d currently iterations solved in job %s', self._current_solved_iterations, self.job.name)
 
+    @property
+    def is_feasible(self):
+        """bool: Check if job can be executed. Job that dependency will never be satisfied (dependent jobs failed)
+            should never be run."""
+        return self._is_feasible
 
-    def isFeasible(self):
-        """
-        Check if job can be executed.
-        Job that dependency will never be satisfied (dependent jobs failed) should never be run.
+    @property
+    def is_ready(self):
+        """bool: Check if job can be scheduled and executed. Jobs with not met dependencies can not be scheduled."""
+        return len(self._after_jobs) == 0
+
+    def get_ready_iteration(self, prev_iteration=None):
+        """Return SchedulingIteration describing next ready iteration.
+
+        Args:
+            prev_iteration (int): if defined the next iteration should be after specified one
 
         Returns:
-            bool: does the job can be run in future
+            SchedulingIteration: next ready iteration to allocate resources and execute or None - if none of iteration
+                is ready to execute
         """
-        return self.__isFeasible
+        if self.is_ready:
+            if self._has_iterations and not self._iteration_sub_jobs and \
+                    self._current_solved_iterations < self._total_iterations:
+                self.setup_iterations()
 
+            start_pos = 0
 
-    def isReady(self):
-        """
-        Check if job can be scheduled and executed.
-        Jobs with not met dependencies can not be scheduled.
+            if prev_iteration:
+                start_pos = self._iteration_sub_jobs.index(prev_iteration) + 1
 
-        Returns:
-            bool: is job ready for scheduling and executing
-        """
-        return len(self.__afterJobs) == 0
-
-
-    def getReadyIteration(self, prevIteration=None):
-        """
-        Return SchedulingIteration describing next ready iteration.
-
-        :param prevIteration: if defined the next iteration should be after specified one
-
-        :return:
-            SchedulingIteration - next ready iteration to allocate resources and execute
-            None - none of iteration is ready to execute
-        """
-        if self.isReady():
-            if self.__hasIterations and not self.__iterationSubJobs and \
-                    self.__currentSolvedIterations < self.__totalIterations:
-                self.setupIterations()
-
-            startPos = 0
-
-            if prevIteration:
-                startPos = self.__iterationSubJobs.index(prevIteration) + 1
-
-            logging.debug('job {} is ready, looking for next to ({}) iteration, startPos set to {}'.format(
-                self.job.name, prevIteration, startPos))
+            logging.debug('job %d is ready, looking for next to (%d) iteration, start_pos set to %d',
+                          self.job.name, prev_iteration, start_pos)
 
             repeats = 2
             while repeats > 0:
-                for i in range(startPos, len(self.__iterationSubJobs)):
-                    iterationJob = self.__iterationSubJobs[i]
-                    if iterationJob.isReady():
-                        return iterationJob
+                for i in range(start_pos, len(self._iteration_sub_jobs)):
+                    iteration_job = self._iteration_sub_jobs[i]
+                    if iteration_job.is_ready:
+                        return iteration_job
 
-                if self.__currentSolvedIterations < self.__totalIterations and repeats > 1:
-                    startPos = len(self.__iterationSubJobs)
-                    self.setupIterations()
+                if self._current_solved_iterations < self._total_iterations and repeats > 1:
+                    start_pos = len(self._iteration_sub_jobs)
+                    self.setup_iterations()
                     repeats = repeats - 1
                 else:
                     break
 
         return None
 
+    @property
+    def has_more_iterations(self):
+        """bool: Check if job has more pending iterations, True - there are pending iterations, False - no more
+            iterations, all iterations already scheduled"""
+        return self._iteration_sub_jobs or self._current_solved_iterations < self._total_iterations
 
-    def hasMoreIterations(self):
-        """
-        Check if job has more pending iterations.
-
-        :return:
-            True - there are pending iterations
-            False - no more iterations, all iterations already scheduled
-        """
-        return self.__iterationSubJobs or self.__currentSolvedIterations < self.__totalIterations
-
-
-    def removeIteration(self, iterationJob):
-        """
-        Called by the manager when iteration returned by the getReadyIteration has been allocated resources and
+    def remove_iteration(self, iteration_job):
+        """Called by the manager when iteration returned by the get_ready_iteration has been allocated resources and
         will be executed or it's resorce requirements exceedes available resources. This iteration should not be
-        returned another time by the getReadyIteration.
+        returned another time by the get_ready_iteration.
         """
-        logging.debug('iteration {} processed - removing from list'.format(iterationJob.name))
-        self.__iterationSubJobs.remove(iterationJob)
+        logging.debug('iteration %s processed - removing from list', iteration_job.name)
+        self._iteration_sub_jobs.remove(iteration_job)
 
-
-    def getIterationsMinResourceRequirements(self):
-        """
-        The function returns a minimum number of cores that any iteration in the job requires. Such information
+    def get_minimum_require_cores(self):
+        """The function returns a minimum number of cores that any iteration in the job requires. Such information
         can optimize scheduler.
 
-        :return: minCores - the minimum required number of cores by the iterations
+        Returns:
+            int: the minimum required number of cores by the iterations
         """
-        return self.__minResCores
+        return self._min_res_cores
 
 
 class SchedulingIteration:
-    def __init__(self, schedulingJob, iteration, resources, afterSubJobs):
+    """A single job iteration to schedule.
+
+    Attributes:
+        _scheduling_job (SchedulingJob): parent job
+        _iteration (int): iteration index
+        _resources (JobResources): resource requirements
+        _after_subjobs (list): subjob dependencies
+        _name (str): iteration name, if it's main job iteration the name is the same as job's name
+        _is_feasible (bool): does the subjob has chance to execute
+    """
+
+    def __init__(self, scheduling_job, iteration, resources, after_subjobs):
+        """Initialize instance.
+
+        Args:
+            scheduling_job (SchedulingJob): parent job
+            iteration (int): iteration index
+            resources (JobResources): resource requirements
+            after_subjobs (list): iteration dependencies
+        """
         # link to the parent job
-        self.__schedulingJob = schedulingJob
+        self._scheduling_job = scheduling_job
 
         # iteration identifier
-        self.__iteration = iteration
+        self._iteration = iteration
 
         # resource requirements
-        self.__resources = resources
+        self._resources = resources
 
         # individual subjob dependencies
-        self.__afterSubJobs = afterSubJobs
+        self._after_subjobs = after_subjobs
 
         # name of the subjob
-        self.__name = self.__schedulingJob.job.name + (':{}'.format(self.__iteration) \
-                                                           if not self.__iteration is None else '')
+        self._name = self._scheduling_job.job.name + (':{}'.format(self._iteration)
+                                                      if self._iteration is not None else '')
 
         # does the subjob has chance to execute
-        self.__isFeasible = True
+        self._is_feasible = True
 
-        if self.__afterSubJobs:
-            self.checkDependencies()
+        if self._after_subjobs:
+            self.check_dependencies()
 
-    def checkDependencies(self):
-        """
-        Update individual subjob dependency state.
+    def check_dependencies(self):
+        """Update individual subjob dependency state.
         Check all dependent jobs and update job's ready (and possible feasible) status.
         """
-        if self.__afterSubJobs:
+        if self._after_subjobs:
             finished = set()
 
-            for jobId in self.__afterSubJobs:
-                jobName = jobId
-                jobIt = None
+            for job_id in self._after_subjobs:
+                job_name = job_id
+                job_it = None
 
-                if ":" in jobName:
-                    jobName, jobIt = self.__manager.jobList.parse_jobname(jobName)
+                if ":" in job_name:
+                    job_name, job_it = JobList.parse_jobname(job_name)
 
-                depJob = self.__manager.jobList.get(jobName)
-                if depJob is None:
-                    logging.warning("Dependency {} job not registered - {} not feasible".format(jobName, self.name))
-                    self.__isFeasible = False
+                dep_job = self._scheduling_job.manager.job_list.get(job_name)
+                if dep_job is None:
+                    logging.warning("Dependency %s job not registered - %s not feasible", job_name, self.name)
+                    self._is_feasible = False
                     break
 
-                depJobState = depJob.getState(jobIt)
-                if depJobState.isFinished():
-                    if depJob.getState() != JobState.SUCCEED:
-                        self.__isFeasible = False
+                dep_job_state = dep_job.state(job_it)
+                if dep_job_state.is_finished():
+                    if dep_job.state() != JobState.SUCCEED:
+                        self._is_feasible = False
                         break
-                    else:
-                        finished.add(jobId)
 
-            self.__afterSubJobs -= finished
+                    finished.add(job_id)
 
-            logging.debug("#{} dependency ({} feasible) jobs after update of job {}".format(
-                len(self.__afterSubJobs), str(self.__isFeasible), self.name))
+            self._after_subjobs -= finished
 
-    def isFeasible(self):
-        """
-        Return the subjob 'health' status - does the subjob has a chance to execute.
+            logging.debug("#%d dependency (%s feasible) jobs after update of job %s", len(self._after_subjobs),
+                          str(self._is_feasible), self.name)
 
-        :return:
-            True - yes
-            False - subjob will never execute it should change status to OMMITED
-        """
-        return self.__isFeasible
+    @property
+    def is_feasible(self):
+        """bool: return the subjob 'health' status - does the subjob has a chance to execute."""
+        return self._is_feasible
 
-    def isReady(self):
-        """
-        Return the subjob readiness status - is it ready for execution (the all dependencies has been met).
-
-        :return:
-            True - the job may be executed
-            False - not all dependent jobs has been finished
-        """
-        return not self.__afterSubJobs
+    @property
+    def is_ready(self):
+        """bool: Return the subjob readiness status - is it ready for execution (the all dependencies has been met),
+            True - the job may be executed, False - not all dependent jobs has been finished """
+        return not self._after_subjobs
 
     @property
     def name(self):
-        return self.__name
+        """str: subjob name"""
+        return self._name
 
     @property
     def job(self):
-        return self.__schedulingJob.job
+        """SchedulingJob: subjob parent job"""
+        return self._scheduling_job.job
 
     @property
     def iteration(self):
-        return self.__iteration
+        """int: iteration index"""
+        return self._iteration
 
     @property
     def resources(self):
-        return self.__resources
+        """JobResources: resource requirements"""
+        return self._resources
 
 
 class JobStateCB:
+    """Information about job status change callback.
 
-    def __init__(self, cb, *args):
-        self.cb = cb
+    Attributes:
+        callback (def): callback function
+        args (list): callback function arugments
+    """
+
+    def __init__(self, callback, *args):
+        """Initialize instance.
+
+        Args:
+            callback (def): callback function
+            args (list): callback function arugments
+        """
+        self.callback = callback
         self.args = args
 
 
 class DirectManager:
+    """Manager of jobs to execution.
+    The incoming jobs are scheduled and executed.
 
-    def __init__(self, config={}, parentManager=None):
-        """
-        Manager of jobs to execution.
-        The incoming jobs are scheduled and executed.
+    Attributes:
+        resources (Resources): available resources
+        _executor (Executor): executor instance used to execute job iterations
+        _scheduler (Scheduler): scheduler instance used to allocate resources for job iterations
+        job_list (JobList): list of all submited jobs
+        _schedule_queue (list(SchedulingJob)): list of currently scheduled jobs
+        _job_states_cbs (dict): list of registered job status change callbacks
+        zmq_address (str): address of ZMQ interface
+        manager_id (str): manager instance identifier
+        manager_tags (str): manager instance tags
+        _parent_manager (str): address of governor manager interface
+    """
+
+    def __init__(self, config=None, parent_manager=None):
+        """Initialize instance.
 
         Args:
-            config - configuration
-            receiver - the receiver class that contains information about interfaces
+            config (dict): QCG-PilotJob configuration
+            parent_manager (str): address of the governor manager
         """
-        self.resources = get_resources(config)
+        conf = config or None
+        self.resources = get_resources(conf)
 
-        if Config.SYSTEM_CORE.get(config):
-            self.resources.allocate4System()
+        if Config.SYSTEM_CORE.get(conf):
+            self.resources.allocate_for_system()
 
-        logging.info('available resources: {}'.format(self.resources))
+        logging.info('available resources: %s', self.resources)
 
-        self.__executor = Executor(self, config, self.resources)
-        self.__scheduler = Scheduler(self.resources)
-        self.jobList = JobList()
+        self._executor = Executor(self, conf, self.resources)
+        self._scheduler = Scheduler(self.resources)
+        self.job_list = JobList()
 
-        self.__scheduleQueue = []
+        self._schedule_queue = []
 
-        self.__jobStatesCbs = {}
+        self._job_states_cbs = {}
 
         self.zmq_address = None
 
-        self.managerId = Config.MANAGER_ID.get(config)
-        self.managerTags = Config.MANAGER_TAGS.get(config)
+        self.manager_id = Config.MANAGER_ID.get(conf)
+        self.manager_tags = Config.MANAGER_TAGS.get(conf)
 
-        self.__parentManager = parentManager
+        self._parent_manager = parent_manager
 
-
-    async def setupInterfaces(self):
-        """
-        Initialize manager after all incoming interfaces has been started.
-        """
-        if self.__parentManager:
+    async def setup_interfaces(self):
+        """Initialize manager after all incoming interfaces has been started. """
+        if self._parent_manager:
             try:
-                logging.info('registering in parent manager {} ...'.format(self.__parentManager))
-                await self.registerInParent()
-                self.registerNotifier(self.__notifyParentWithJob)
-            except:
-                logging.error('Failed to register manager in parent governor manager: {}'.format(sys.exc_info()[0]))
+                logging.info('registering in parent manager %s ...', self._parent_manager)
+                await self.register_in_parent()
+                self.register_notifier(self._notify_parent_with_job)
+            except Exception:
+                logging.error('Failed to register manager in parent governor manager: %s', sys.exc_info()[0])
                 raise
         else:
             logging.info('no parent manager set')
 
+    def set_zmq_address(self, zmq_address):
+        """Set ZMQ address of input interface.
 
-    def setZmqAddress(self, zmq_address):
+        Args:
+            zmq_address (str): input address of listening ZMQ interface
+        """
         self.zmq_address = zmq_address
 
+    def get_handler(self):
+        """Return request handler.
 
-    def getHandlerInstance(self):
+        Returns:
+            request handler
+        """
         return DirectManagerHandler(self)
 
-
     async def stop(self):
-        if self.__executor:
-            await self.__executor.stop()
+        """Stop all services.
+        The executor is stoped.
+        """
+        if self._executor:
+            await self._executor.stop()
 
-
-    def allJobsFinished(self):
-        return len(self.__scheduleQueue) == 0 and self.__executor.allJobsFinished()
-
+    @property
+    def is_all_jobs_finished(self):
+        """bool: returns True if there are no jobs in scheduling queue and no jobs are executing"""
+        return len(self._schedule_queue) == 0 and self._executor.is_all_jobs_finished()
 
     @profile
-    def __scheduleLoop(self):
-        """
-        Do schedule loop.
+    def _schedule_loop(self):
+        """Do schedule loop.
         Get jobs from schedule queue, check if they have workflow dependency meet and if yes,
         try to create allocation. The allocated job's are sent to executor.
         """
-        newScheduleQueue = []
+        new_schedule_queue = []
 
-        logging.debug("scheduling loop with {} jobs in queue".format(len(self.__scheduleQueue)))
+        logging.debug("scheduling loop with %d jobs in queue", len(self._schedule_queue))
 
-        for idx, schedJob in enumerate(self.__scheduleQueue):
-            if not self.resources.freeCores:
-                newScheduleQueue.extend(self.__scheduleQueue[idx:])
+        for idx, sched_job in enumerate(self._schedule_queue):
+            if not self.resources.free_cores:
+                new_schedule_queue.extend(self._schedule_queue[idx:])
                 break
 
-            minResCores = schedJob.getIterationsMinResourceRequirements()
-            if not minResCores is None and minResCores > self.resources.freeCores:
-                logging.debug('minimum # of cores {} for job {} exceeds # of free cores {}'.format(minResCores,
-                    schedJob.job.name, self.resources.freeCores))
-                self.__appendToScheduleQueue(newScheduleQueue, schedJob)
+            min_res_cores = sched_job.get_minimum_require_cores()
+            if min_res_cores is not None and min_res_cores > self.resources.free_cores:
+                logging.debug('minimum # of cores %d for job %s exceeds # of free cores %s', min_res_cores,
+                              sched_job.job.name, self.resources.free_cores)
+                DirectManager._append_to_schedule_queue(new_schedule_queue, sched_job)
                 continue
 
-            schedJob.checkDependencies()
+            sched_job.check_dependencies()
 
-            if not schedJob.isFeasible():
+            if not sched_job.is_feasible:
                 # job will never be ready
-                logging.debug("job {} not feasible - omitting".format(schedJob.job.name))
-                self.__changeJobState(schedJob.job, iteration=None, state=JobState.OMITTED)
-                schedJob.job.clearQueuePos()
+                logging.debug("job %s not feasible - omitting", sched_job.job.name)
+                self.change_job_state(sched_job.job, iteration=None, state=JobState.OMITTED)
+                sched_job.job.clear_queue_pos()
             else:
-                prevIteration = None
-                while self.resources.freeCores:
-                    if not minResCores is None and minResCores > self.resources.freeCores:
-                        logging.debug('minimum # of cores {} for job {} exceeds # of free cores {}'.format(minResCores,
-                            schedJob.job.name, self.resources.freeCores))
+                prev_iteration = None
+                while self.resources.free_cores:
+                    if min_res_cores is not None and min_res_cores > self.resources.free_cores:
+                        logging.debug('minimum # of cores %d for job %s exceeds # of free cores %d', min_res_cores,
+                                      sched_job.job.name, self.resources.free_cores)
                         break
 
-                    jobIteration = schedJob.getReadyIteration(prevIteration)
-
-                    if jobIteration:
+                    job_iteration = sched_job.get_ready_iteration(prev_iteration)
+                    if job_iteration:
                         # job is ready - try to find resources
-                        logging.debug("job {} is ready".format(jobIteration.name))
+                        logging.debug("job %s is ready", job_iteration.name)
                         try:
-                            allocation = self.__scheduler.allocateJob(jobIteration.resources)
+                            allocation = self._scheduler.allocate_job(job_iteration.resources)
                             if allocation:
-                                schedJob.removeIteration(jobIteration)
-                                prevIteration = None
+                                sched_job.remove_iteration(job_iteration)
+                                prev_iteration = None
 
-                                logging.debug("found resources for job {}".format(jobIteration.name))
+                                logging.debug("found resources for job %s", job_iteration.name)
 
                                 # allocation has been created - execute job
-                                self.__changeJobState(schedJob.job, iteration=jobIteration.iteration,
+                                self.change_job_state(sched_job.job, iteration=job_iteration.iteration,
                                                       state=JobState.SCHEDULED)
 
-                                asyncio.ensure_future(self.__executor.execute(allocation, jobIteration))
+                                asyncio.ensure_future(self._executor.execute(allocation, job_iteration))
                             else:
                                 # missing resources
-                                logging.debug("missing resources for job {}".format(jobIteration.name))
-                                prevIteration = jobIteration
-                        except (NotSufficientResources, InvalidResourceSpec) as e:
+                                logging.debug("missing resources for job %s", job_iteration.name)
+                                prev_iteration = job_iteration
+                        except (NotSufficientResources, InvalidResourceSpec) as exc:
                             # jobs will never schedule
-                            logging.warning("Job {} scheduling failed - {}".format(jobIteration.name, str(e)))
-                            schedJob.removeIteration(jobIteration)
-                            prevIteration = None
-                            self.__changeJobState(schedJob.job, iteration=jobIteration.iteration,
-                                                  state=JobState.FAILED, errorMsg=str(e))
+                            logging.warning("Job %s scheduling failed - %s", job_iteration.name, str(exc))
+                            sched_job.remove_iteration(job_iteration)
+                            prev_iteration = None
+                            self.change_job_state(sched_job.job, iteration=job_iteration.iteration,
+                                                  state=JobState.FAILED, error_msg=str(exc))
                     else:
                         break
 
-                if schedJob.hasMoreIterations():
-                    logging.warning("Job {} preserved in scheduling queue".format(schedJob.job.name))
-                    self.__appendToScheduleQueue(newScheduleQueue, schedJob)
+                if sched_job.has_more_iterations:
+                    logging.warning("Job %s preserved in scheduling queue", sched_job.job.name)
+                    DirectManager._append_to_schedule_queue(new_schedule_queue, sched_job)
 
-        self.__scheduleQueue = newScheduleQueue
+        self._schedule_queue = new_schedule_queue
 
-
-    def __changeJobState(self, job, iteration, state, errorMsg=None):
-        """
-        Invoked to change job status.
+    def change_job_state(self, job, iteration, state, error_msg=None):
+        """Invoked to change job status.
         Any notification should be called from this method.
 
         Args:
             job (ExecutingJob): job that changed status
             iteration (int): job iteration index
-            status (JobState): target job state
-            errorMsg (string): optional error messages
+            state (JobState): target job state
+            error_msg (string): optional error messages
         """
-        parentJobChangedStatus = job.setState(state, iteration, errorMsg)
+        parent_job_changed_status = job.set_state(state, iteration, error_msg)
 
-        self.__fireJobStateNotifies(job.name, iteration, state)
-        if parentJobChangedStatus:
-            logging.debug("parent job {} status changed to {} - notifing".format(job.name, parentJobChangedStatus.name))
-            self.__fireJobStateNotifies(job.name, None, state)
+        self._fire_job_state_notifies(job.name, iteration, state)
+        if parent_job_changed_status:
+            logging.debug("parent job %s status changed to %s - notifing", job.name, parent_job_changed_status.name)
+            self._fire_job_state_notifies(job.name, None, state)
 
-
-    def jobExecuting(self, jobIteration):
-        """
-        Invoked to signal starting job iteration execution.
+    def job_executing(self, job_iteration):
+        """Invoked to signal starting job iteration execution.
 
         Args:
-            jobIteration (SchedulingIteration): job iteration that started executing
+            job_iteration (SchedulingIteration): job iteration that started executing
         """
-        self.__changeJobState(jobIteration.job, iteration=jobIteration.iteration, state=JobState.EXECUTING)
+        self.change_job_state(job_iteration.job, iteration=job_iteration.iteration, state=JobState.EXECUTING)
 
-
-    def jobFinished(self, jobIteration, allocation, exitCode, errorMsg):
-        """
-        Invoked to signal job finished.
+    def job_finished(self, job_iteration, allocation, exit_code, error_msg):
+        """Invoked to signal job finished.
         Allocation made for the job should be released.
 
         Args:
-            jobIteration (SchedulingIteration): job iteration that finished
+            job_iteration (SchedulingIteration): job iteration that finished
             allocation (Allocation): allocation created for the job
-            exitCode (int): job exit code
-            errorMsg (str): an optional error message
+            exit_code (int): job exit code
+            error_msg (str): an optional error message
         """
         state = JobState.SUCCEED
 
-        if exitCode != 0:
+        if exit_code != 0:
             state = JobState.FAILED
 
-        self.__changeJobState(jobIteration.job, iteration=jobIteration.iteration, state=state, errorMsg=errorMsg)
-        self.__scheduler.releaseAllocation(allocation)
-        self.__scheduleLoop()
+        self.change_job_state(job_iteration.job, iteration=job_iteration.iteration, state=state, error_msg=error_msg)
+        self._scheduler.release_allocation(allocation)
+        self._schedule_loop()
 
-
-    def __fireJobStateNotifies(self, jobId, iteration, state):
-        """
-        Create task with callback functions call registered for job state changes.
+    def _fire_job_state_notifies(self, job_id, iteration, state):
+        """Create task with callback functions call registered for job state changes.
         A new asyncio task is created which call all registered callbacks in not defined order.
 
         Args:
-            jobId (str): job identifier
+            job_id (str): job identifier
+            iteration (int): iteration index
             state (JobState): new job status
         """
-        if len(self.__jobStatesCbs) > 0:
-            logging.debug("notifies callbacks about {} job status change {}".format(jobId if iteration is None else
-                '{}:{}'.format(jobId, iteration), state))
-            asyncio.ensure_future(self.__callCallbacks(
-                jobId, iteration, state, self.__jobStatesCbs.values()
-            ))
+        if len(self._job_states_cbs) > 0:
+            logging.debug("notifies callbacks about %s job status change %s",
+                          job_id if iteration is None else '{}:{}'.format(job_id, iteration), state)
+            asyncio.ensure_future(self._call_callbacks(job_id, iteration, state, self._job_states_cbs.values()))
 
-
-    async def __callCallbacks(self, jobId, iteration, state, cbs):
-        """
-        Call job state change callback function with given arguments.
+    async def _call_callbacks(self, job_id, iteration, state, cbs):
+        """Call job state change callback function with given arguments.
 
         Args:
-            jobId (str): job identifier
+            job_id (str): job identifier
             iteration (int): job iteration index
             state (JobState): new job status
             cbs ([]function): callback functions
         """
         if cbs is not None:
-            for cb in cbs:
+            for callb in cbs:
                 try:
-                    cb.cb(jobId, iteration, state, *cb.args)
-                except Exception as e:
-                    logging.exception("Callback function failed: {}".format(str(e)))
+                    callb.callback(job_id, iteration, state, *callb.args)
+                except Exception as exc:
+                    logging.exception("Callback function failed: %s", str(exc))
 
-
-    def unregisterNotifier(self, id):
-        """
-        Unregister callback function for job state changes.
+    def unregister_notifier(self, nid):
+        """Unregister callback function for job state changes.
 
         Args:
-            id (str): the callback function identifier returned by 'registerNotifier' function
+            nid (str): the callback function identifier returned by ``register_notifier`` function
 
         Returns:
-            bool: true if function unregistered successfully, and false if given identifier
-               has not been found
+            bool: true if function unregistered successfully, and false if given identifier has not been found
         """
-        if id in self.__jobStatesCbs:
-            del self.__jobStatesCbs[id]
+        if nid in self._job_states_cbs:
+            del self._job_states_cbs[nid]
             return True
 
         return False
 
-
-    def registerNotifier(self, jobStateCb, *args):
-        """
-        Register callback function for job state changes.
+    def register_notifier(self, job_state_cb, *args):
+        """Register callback function for job state changes.
         The registered function will be called for all job state changes.
 
         Args:
-            jobStateCb (function): should accept two arguments - job name and new state
+            job_state_cb (def): should accept two arguments - job name and new state
 
         Returns:
             str: identifier of registered callback, which can be used to unregister
               callback or None if callback function is missing or is invalid
         """
-        if jobStateCb is not None:
-            id = uuid.uuid4()
-            self.__jobStatesCbs[id] = JobStateCB(jobStateCb, *args)
+        if job_state_cb is not None:
+            nid = uuid.uuid4()
+            self._job_states_cbs[nid] = JobStateCB(job_state_cb, *args)
 
-            return id
+            return nid
 
         return None
 
-
     def enqueue(self, jobs):
-        """
-        Enqueue job to execution.
+        """Enqueue job to execution.
 
         Args:
-            job (Job): job description
+            jobs (list(Job)): job descriptions to add to the system for scheduling
 
         Raises:
             JobAllreadyExist: when job with the same name was enqued earlier.
         """
         if jobs is not None:
             for job in jobs:
-                self.jobList.add(job)
-                self.__appendToScheduleQueue(self.__scheduleQueue, SchedulingJob(self, job))
+                self.job_list.add(job)
+                DirectManager._append_to_schedule_queue(self._schedule_queue, SchedulingJob(self, job))
 
-            self.__scheduleLoop()
+            self._schedule_loop()
 
+    @staticmethod
+    def _append_to_schedule_queue(queue, sched_job):
+        """Append job in scheduling queue.
 
-    def __appendToScheduleQueue(self, queue, schedJob):
-        queue.append(schedJob)
-        schedJob.job.setQueuePos(len(queue) - 1)
+        Args:
+            queue (list): the queue to add job
+            sched_job (SchedlingJob): job to add to the queue
+        """
+        queue.append(sched_job)
+        sched_job.job.set_queue_pos(len(queue) - 1)
 
+    def _get_parent_manager_socket(self):
+        """Create an asynchronous ZMQ socket to the governor manager.
 
-    def getExecutor(self):
-        return self.__executor
+        Returns:
+            zmq.Socket: socket to the governor manager
+        """
+        parent_socket = zmq.asyncio.Context.instance().socket(zmq.REQ) #pylint: disable=maybe-no-member
+        parent_socket.connect(self._parent_manager)
+        parent_socket.setsockopt(zmq.LINGER, 0) #pylint: disable=maybe-no-member
 
+        return parent_socket
 
-    def __getParentSocket(self):
-        parentSocket = zmq.asyncio.Context.instance().socket(zmq.REQ)
-        parentSocket.connect(self.__parentManager)
-        parentSocket.setsockopt(zmq.LINGER, 0)
+    def _get_parent_manager_socket_sync(self):
+        """Create an synchronous ZMQ socket to the governor manager.
 
-        return parentSocket
+        Returns:
+            zmq.Socket: socket to the governor manager
+        """
+        parent_socket = zmq.Context.instance().socket(zmq.REQ) #pylint: disable=maybe-no-member
+        parent_socket.connect(self._parent_manager)
+        parent_socket.setsockopt(zmq.LINGER, 0) #pylint: disable=maybe-no-member
 
+        return parent_socket
 
-    def __getParentSyncSocket(self):
-        parentSocket = zmq.Context.instance().socket(zmq.REQ)
-        parentSocket.connect(self.__parentManager)
-        parentSocket.setsockopt(zmq.LINGER, 0)
+    async def _send_parent_request_with_valid_async_timeout(self, request, timeout):
+        """Send a request to the governor manager with asynchronous socket.
 
-        return parentSocket
-
-
-    async def __sendParentRequestWithValidAsyncTimeout(self, request, timeout):
+        Args:
+            request (dict): request to send
+            timeout (int): timeout in seconds to wait for reply
+        """
         out_socket = None
 
         try:
-            out_socket = self.__getParentSocket()
+            out_socket = self._get_parent_manager_socket()
 
             await out_socket.send_json(request)
             msg = await asyncio.wait_for(out_socket.recv_json(), timeout)
             if not msg['code'] == 0:
-                raise GovernorConnectionError('Failed to register manager instance in governor: {}'.format(msg.get('message', '')))
+                raise GovernorConnectionError('Failed to register manager instance in governor: {}'.format(
+                    msg.get('message', '')))
 
             return msg
-        except:
-            raise GovernorConnectionError('Failed to register manager instance in governor: {}'.format(str(sys.exc_info())))
+        except Exception:
+            raise GovernorConnectionError('Failed to register manager instance in governor: {}'.format(
+                str(sys.exc_info())))
         finally:
             if out_socket:
                 try:
                     out_socket.close()
-                except:
+                except Exception:
                     # ignore errors during cleanup
-                    logging.debug('failed to close socket: {}'.format(str(sys.exc_info())))
+                    logging.debug('failed to close socket: %s', str(sys.exc_info()))
 
+    async def _send_parent_manager_request_with_valid_async(self, request):
+        """Send a request to the governor manager with asynchronous socket.
 
-    async def __sendParentRequestWithValidAsync(self, request):
+        Args:
+            request (dict): request to send
+        """
         out_socket = None
 
         try:
-            out_socket = self.__getParentSocket()
+            out_socket = self._get_parent_manager_socket()
 
             await out_socket.send_json(request)
             msg = await asyncio.wait_for(out_socket.recv_json(), 5)
             if not msg['code'] == 0:
-                raise GovernorConnectionError('Failed to send message to parent manager: {}'.format(msg.get('message', '')))
+                raise GovernorConnectionError('Failed to send message to parent manager: {}'.format(
+                    msg.get('message', '')))
 
             return msg
         finally:
             if out_socket:
                 try:
                     out_socket.close()
-                except:
-                    # ignore errors during cleanup
+                except Exception:
                     pass
 
+    def _notify_parent_with_job(self, job_id, iteration, state):
+        """Send notification to the governor manager about submited job's state change.
 
-    def __sendParentRequestWithValidSync(self, request):
-        out_socket = None
-
-        try:
-            out_socket = self.__getParentSyncSocket()
-
-            out_socket.send_json(request)
-            logging.debug('sent register request: {}'.format(str(request)))
-
-            msg = out_socket.recv_json()
-
-#            poller = zmq.Poller()
-#            poller.register(out_socket, zmq.POLLIN)
-#            if poller.poll(5 * 1000):  # 10s timeout in milliseconds
-#                poller.unregister(out_socket)
-#                msg = out_socket.recv_json()
-#            else:
-#                poller.unregister(out_socket)
-#                poller = None
-#                raise TimeoutError('Timeout registering in parent manager {}'.format(self.__parentManager))
-            logging.debug('got register response: {}'.format(str(msg)))
-            if not msg['code'] == 0:
-                raise GovernorConnectionError('Failed to register manager instance in governor: {}'.format(msg.get('message', '')))
-
-            return msg
-        finally:
-            if out_socket:
-                try:
-                    logging.debug('closing sync socket: {}'.format(str(out_socket)))
-                    out_socket.close()
-                except:
-                    # ignore errors during cleanup
-                    pass
-
-
-    def __notifyParentWithJob(self, jobId, iteration, state):
-        if self.__parentManager and state.isFinished() and iteration is None:
+        Args:
+            job_id (str): job identifier
+            iteration (int): iteration index
+            state (JobState): new job state
+        """
+        if self._parent_manager and state.is_finished() and iteration is None:
             # notify parent only about whole jobs, not a single iterations
             # send also the job attributes which are necessary to identify the job in governor manager
             try:
-                job = self.jobList.get(jobId)
-                reqData = { 'request': 'notify',
-                            'entity': 'job',
-                            'params': {
-                                'name': jobId,
-                                'state': state.name,
-                                'attributes': job.attributes
-                            }
+                job = self.job_list.get(job_id)
+                req_data = {
+                    'request': 'notify',
+                    'entity': 'job',
+                    'params': {
+                        'name': job_id,
+                        'state': state.name,
+                        'attributes': job.attributes
+                    }
                 }
-                asyncio.ensure_future(self.__sendParentRequestWithValidAsync(reqData))
+                asyncio.ensure_future(self._send_parent_manager_request_with_valid_async(req_data))
             except Exception:
-                logging.error('failed to send job notification to the parent manager: {}'.format(sys.exc_info()))
+                logging.error('failed to send job notification to the parent manager: %s', sys.exc_info())
                 logging.error(traceback.format_exc())
 
-
-    async def registerInParent(self):
+    async def register_in_parent(self):
+        """Register manager instance in parent governor manager.
         """
-        Register manager in parent governor manager.
-        """
-        await self.__sendParentRequestWithValidAsyncTimeout({ 'request': 'register',
+        await self._send_parent_request_with_valid_async_timeout({
+            'request': 'register',
             'entity': 'manager',
             'params': {
-            'id': self.managerId,
-            'address': self.zmq_address,
-            'resources': self.resources.toDict(),
-            'tags': self.managerTags,
-          }
+                'id': self.manager_id,
+                'address': self.zmq_address,
+                'resources': self.resources.to_dict(),
+                'tags': self.manager_tags,
+            }
         }, 5)
 
 
 class DirectManagerHandler:
+    """Direct execution mode handler for manager.
+    In this mode, the manager will try to execute all incoming tasks on available resources,
+    without submiting them to other managers. Also, if defined, the notifications about
+    tasks completion will be sent to the parent manager (the managers governor).
+
+    Attributes:
+        _manager (Manager): manager instance
+        _finish_task (asyncio.Future): the finish task
+        _receiver (Receiver): receiver instance
+        start_time (DateTime): moment of start of the handler
+    """
 
     def __init__(self, manager):
+        """Initialize instance.
+
+        Args:
+            manager (Manager): manager instance
         """
-        Direct execution mode handler for manager.
-        In this mode, the manager will try to execute all incoming tasks on available resources,
-        without submiting them to other managers. Also, if defined, the notifications about
-        tasks completion will be sent to the parent manager (the managers governor).
+        self._manager = manager
 
-        :param manager: the manager class
+        self._finish_task = None
+        self._receiver = None
+
+        self.start_time = datetime.now()
+
+    def set_receiver(self, receiver):
+        """Set receiver.
+
+        Args:
+            receiver (Receiver): the receiver instance
         """
-        self.__manager = manager
+        self._receiver = receiver
+        if self._receiver:
+            self._manager.set_zmq_address(self._receiver.zmq_address)
 
-        self.__finishTask = None
-        self.__receiver = None
+    async def handle_register_req(self, iface, request): #pylint: disable=W0613
+        """Handle register request.
 
-        self.startTime = datetime.now()
+        Currently not implemented
 
+        Args:
+            iface (Interface): interface which received request
+            request (ControlReq): register request data
 
-    def setReceiver(self, receiver):
-        self.__receiver = receiver
-        if self.__receiver:
-            self.__manager.setZmqAddress(self.__receiver.getZmqAddress())
-
-
-    async def handleRegisterReq(self, iface, request):
-        return Response.Error('Register manager request not supported in this kind of manager (direct)')
-
-
-    async def handleControlReq(self, iface, request):
+        Returns:
+            Response: the response data
         """
-        Handlder for control commands.
+        return Response.error('Register manager request not supported in this kind of manager (direct)')
+
+    async def handle_control_req(self, iface, request): #pylint: disable=W0613
+        """Handlder for control commands.
         Control commands are used to configure system during run-time.
 
         Args:
@@ -849,17 +877,15 @@ class DirectManagerHandler:
             Response: the response data
         """
         if request.command == ControlReq.REQ_CONTROL_CMD_FINISHAFTERALLTASKSDONE:
-            if self.__finishTask is not None:
-                return Response.Error('Finish request already requested')
+            if self._finish_task is not None:
+                return Response.error('Finish request already requested')
 
-            self.__finishTask = asyncio.ensure_future(self.__waitForAllJobs())
+            self._finish_task = asyncio.ensure_future(self._wait_for_all_jobs())
 
-        return Response.Ok('{} command accepted'.format(request.command))
+        return Response.ok('{} command accepted'.format(request.command))
 
-
-    async def handleSubmitReq(self, iface, request):
-        """
-        Handlder for job submission.
+    async def handle_submit_req(self, iface, request): #pylint: disable=W0613
+        """Handlder for job submission.
         Before job will be submited the in-depth validation will be proviede, e.g.: job name
         uniqness.
 
@@ -870,88 +896,101 @@ class DirectManagerHandler:
         Returns:
             Response: the response data
         """
-       # enqueue job in the manager
+        # enqueue job in the manager
         try:
-            jobs = self.__prepareJobs(request.jobReqs)
-            self.__manager.enqueue(jobs)
+            jobs = self._prepare_jobs(request.jobs)
+            self._manager.enqueue(jobs)
 
             data = {
                 'submitted': len(jobs),
-                'jobs': [job.name for job in jobs]
+                'jobs': [job.get_name() for job in jobs]
             }
 
-            return Response.Ok('{} jobs submitted'.format(len(jobs)), data=data)
-        except Exception as e:
-            logging.error('Submit error: {}'.format(sys.exc_info()))
-#            logging.error(traceback.format_exc())
-            return Response.Error(str(e))
+            return Response.ok('{} jobs submitted'.format(len(jobs)), data=data)
+        except Exception as exc:
+            logging.error('Submit error: %s', sys.exc_info())
+            return Response.error(str(exc))
 
+    def _prepare_jobs(self, req_jobs):
+        """Validate submit job description.
 
-    def __prepareJobs(self, reqJobs):
-        resources = self.__manager.resources
+        Args:
+            req_jobs (list(dict)): list of submited job descriptions
+        """
+        resources = self._manager.resources
 
         req_job_names = set()
 
-        newJobs = []
-        for req in reqJobs:
-            reqJob = req['req']
-            vars = req['vars']
+        new_jobs = []
+        for req in req_jobs:
+            req_job = req['req']
+            req_vars = req['vars']
 
-            vars['jname'] = self.__replaceVariablesInString(reqJob['name'], vars)
+            req_vars['jname'] = DirectManagerHandler._replace_variables_in_string(req_job['name'], req_vars)
 
-            if any((c in vars['jname'] for c in ['$', '{', '}', '(', ')', '\'', '"', ' ', '\t', '\n'])):
+            if any((c in req_vars['jname'] for c in ['$', '{', '}', '(', ')', '\'', '"', ' ', '\t', '\n'])):
                 raise InvalidRequest('Job identifier \'({})\' contains invalid characters or unknown variables'.format(
-                    vars['jname']))
+                    req_vars['jname']))
 
             # default value for missing 'resources' definition
-            if 'resources' not in reqJob:
-                reqJob['resources'] = { 'numCores': { 'exact': 1 } }
+            if 'resources' not in req_job:
+                req_job['resources'] = {'numCores': {'exact': 1}}
 
             try:
-                reqJob_vars = self.__replaceVariables(reqJob, vars)
+                req_job_vars = DirectManagerHandler._replace_variables(req_job, req_vars)
 
                 # verify job name uniqness
-                if self.__manager.jobList.exist(reqJob_vars['name']) or \
-                        reqJob_vars['name'] in req_job_names:
-                    raise JobAlreadyExist('Job {} already exist'.format(reqJob_vars['name']))
+                if self._manager.job_list.exist(req_job_vars['name']) or \
+                        req_job_vars['name'] in req_job_names:
+                    raise JobAlreadyExist('Job {} already exist'.format(req_job_vars['name']))
 
-                newJob = Job(**reqJob_vars)
+                new_job = Job(**req_job_vars)
                 # validate resource requirements
-                if not resources.checkMaximumJobRequirements(newJob.resources):
-                    raise InvalidRequest('Not enough resources for job {}'.format(vars['jname']))
+                if not resources.check_min_job_requirements(new_job.resources):
+                    raise InvalidRequest('Not enough resources for job {}'.format(req_vars['jname']))
 
-                newJobs.append(newJob)
-                req_job_names.add(reqJob_vars['name'])
+                new_jobs.append(new_job)
+                req_job_names.add(req_job_vars['name'])
             except InvalidRequest:
                 raise
-            except JobAlreadyExist as e:
-                raise e
-            except Exception as e:
-                logging.exception('Wrong submit request: {}'.format(str(e)))
-                raise InvalidRequest('Wrong submit request: {}'.format(str(e))) from e
+            except JobAlreadyExist as exc:
+                raise exc
+            except Exception as exc:
+                logging.exception('Wrong submit request: %s', str(exc))
+                raise InvalidRequest('Wrong submit request: {}'.format(str(exc)))
 
         # verify job dependencies
-        #TODO: code to verify job dependencies
+        # TODO: code to verify job dependencies
+        return new_jobs
 
-        return newJobs
+    @staticmethod
+    def _replace_variables(data, variables):
+        """Replace variables within given JSON-serializable data structure.
 
-
-    def __replaceVariables(self, data, vars):
-        if vars is not None and len(vars) > 0:
-            return json.loads(Template(json.dumps(data)).safe_substitute(vars))
-        else:
-            return data
-
-    def __replaceVariablesInString(self, string, vars):
-        if vars is not None and len(vars) > 0:
-            return Template(string).safe_substitute(vars)
-        else:
-            return string
-
-
-    async def handleJobStatusReq(self, iface, request):
+        Args:
+            data (dict): a data structure where the variables should be replaced
+            variables (dict): a dictionary with variables
         """
-        Handler for job status checking.
+        if variables is not None and len(variables) > 0:
+            return json.loads(Template(json.dumps(data)).safe_substitute(variables))
+
+        return data
+
+    @staticmethod
+    def _replace_variables_in_string(string, variables):
+        """Replace variables within string.
+
+        Args:
+            string (str): a string where the variables should be replaced
+            varables (dict): a dictionary with variables
+        """
+        if variables is not None and len(variables) > 0:
+            return Template(string).safe_substitute(variables)
+
+        return string
+
+    async def handle_jobstatus_req(self, iface, request): #pylint: disable=W0613
+        """Handler for job status checking.
 
         Args:
             iface (Interface): interface which received request
@@ -962,26 +1001,24 @@ class DirectManagerHandler:
         """
         result = {}
 
-        for jobName in request.jobNames:
+        for job_name in request.job_names:
             try:
-                job = self.__manager.jobList.get(jobName)
+                job = self._manager.job_list.get(job_name)
 
                 if job is None:
-                    return Response.Error('Job \'{}\' doesn\'t exist'.format(request.jobName))
+                    return Response.error('Job \'{}\' doesn\'t exist'.format(request.job_name))
 
-                result[jobName] = {'status': int(ResponseCode.OK), 'data': {
-                    'jobName': jobName,
-                    'status': str(job.getStateStr())
+                result[job_name] = {'status': int(ResponseCode.OK), 'data': {
+                    'job_name': job_name,
+                    'status': str(job.str_state())
                 }}
-            except Exception as e:
-                result[jobName] = {'status': int(ResponseCode.ERROR), 'message': e.args[0]}
+            except Exception as exc:
+                result[job_name] = {'status': int(ResponseCode.ERROR), 'message': exc.args[0]}
 
-        return Response.Ok(data={'jobs': result})
+        return Response.ok(data={'jobs': result})
 
-
-    async def handleJobInfoReq(self, iface, request):
-        """
-        Handler for job info checking.
+    async def handle_jobinfo_req(self, iface, request): #pylint: disable=W0613
+        """Handler for job info checking.
 
         Args:
             iface (Interface): interface which received request
@@ -992,93 +1029,110 @@ class DirectManagerHandler:
         """
         result = {}
 
-        for jobName in request.jobNames:
+        for job_name in request.job_names:
             try:
-                realJobName, jobIteration = self.__manager.jobList.parse_jobname(jobName)
+                real_job_name, job_iteration = JobList.parse_jobname(job_name)
 
-                job = self.__manager.jobList.get(realJobName)
+                job = self._manager.job_list.get(real_job_name)
 
                 if job is None:
-                    return Response.Error('Job {} doesn\'t exist'.format(request.jobName))
+                    return Response.error('Job {} doesn\'t exist'.format(request.job_names))
 
-                if not jobIteration is None:
-                    if not job.getIteration().inRange(jobIteration):
-                        return Response.Error('Unknown iteration {} for job {}'.format(jobIteration, realJobName))
+                if job_iteration is not None:
+                    if not job.iteration.in_range(job_iteration):
+                        return Response.error('Unknown iteration {} for job {}'.format(job_iteration, real_job_name))
 
-                jobData = {
-                    'jobName': jobName,
-                    'status': str(job.getStateStr(jobIteration))
+                job_data = {
+                    'jobName': job_name,
+                    'status': str(job.str_state(job_iteration))
                 }
 
-                if jobIteration is None and job.isIterative():
-                    jobData['iterations'] = { 'start': job.getIteration().start,
-                                              'stop': job.getIteration().stop,
-                                              'total': job.getIteration().iterations(),
-                                              'finished': job.getIteration().iterations() - job.getSubjobsNotfinished(),
-                                              'failed': job.getSubjobsFailed() }
+                if job_iteration is None and job.has_iterations:
+                    job_data['iterations'] = {
+                        'start': job.iteration.start,
+                        'stop': job.iteration.stop,
+                        'total': job.iteration.iterations(),
+                        'finished': job.iteration.iterations() - job.get_not_finished_iterations(),
+                        'failed': job.get_failed_iterations()
+                    }
 
-                    if request.includeChilds:
-                        jobData['childs'] = [ ]
-                        for idx, subJob in enumerate(job.getSubjobs()):
-                            info = { 'iteration': idx + job.getIteration().start,
-                                     'state': subJob.getState().name }
+                    if request.include_childs:
+                        job_data['childs'] = []
+                        for idx, subjob in enumerate(job.getSubjobs()):
+                            info = {
+                                'iteration': idx + job.iteration.start,
+                                'state': subjob.state().name
+                            }
 
-                            subruntime = subJob.getRuntime()
+                            subruntime = subjob.runtime()
                             if subruntime is not None and len(subruntime) > 0:
                                 info['runtime'] = subruntime
 
-                            jobData['childs'].append(info)
+                            job_data['childs'].append(info)
 
-                if job.getMessages(jobIteration) is not None:
-                    jobData['messages'] = job.getMessages()
+                if job.messages(job_iteration) is not None:
+                    job_data['messages'] = job.messages()
 
-                jruntime = job.getRuntime(jobIteration)
+                jruntime = job.runtime(job_iteration)
                 if jruntime is not None and len(jruntime) > 0:
-                    jobData['runtime'] = jruntime
+                    job_data['runtime'] = jruntime
 
-                jhistory = job.getHistory(jobIteration)
+                jhistory = job.history(job_iteration)
                 if jhistory is not None and len(jhistory) > 0:
                     history_str = ''
 
                     for entry in jhistory:
                         history_str = '\n'.join([history_str, "{}: {}".format(str(entry[1]), entry[0].name)])
 
-                    jobData['history'] = history_str
+                    job_data['history'] = history_str
 
-                result[jobName] = {'status': int(ResponseCode.OK), 'data': jobData}
-            except Exception as e:
-                result[jobName] = {'status': int(ResponseCode.ERROR), 'message': e.args[0]}
+                result[job_name] = {'status': int(ResponseCode.OK), 'data': job_data}
+            except Exception as exc:
+                result[job_name] = {'status': int(ResponseCode.ERROR), 'message': exc.args[0]}
 
-        return Response.Ok(data={'jobs': result})
+        return Response.ok(data={'jobs': result})
 
+    async def handle_canceljob_req(self, iface, request): #pylint: disable=W0613
+        """Handler for cancel job request.
 
-    async def handleCancelJobReq(self, iface, request):
-        job = self.__manager.jobList.get(request.jobName)
+        Currently not supported.
 
-        if job is None:
-            return Response.Error('Job \'{}\' doesn\'t exist'.format(request.jobName))
+        Args:
+            iface (Interface): interface which received request
+            request (CancelJobReq): cancel job request
 
-        return Response.Error('Cancel job is not supported')
+        Returns:
+            Response: the response data
+        """
+        return Response.error('Cancel job is not supported')
 
+    async def handle_removejob_req(self, iface, request): #pylint: disable=W0613
+        """Handler for remove job request.
 
-    async def handleRemoveJobReq(self, iface, request):
+        Args:
+            iface (Interface): interface which received request
+            request (RemoveJobReq): remove job request
+
+        Returns:
+            Response: the response data
+        """
         removed = 0
         errors = {}
 
-        for jobName in request.jobNames:
+        for job_name in request.job_names:
             try:
-                job = self.__manager.jobList.get(jobName)
+                job = self._manager.job_list.get(job_name)
 
                 if job is None:
-                    raise InvalidRequest('Job \'{}\' doesn\'t exist'.format(jobName))
+                    raise InvalidRequest('Job \'{}\' doesn\'t exist'.format(job_name))
 
-                if not job.getState().isFinished():
-                    raise InvalidRequest('Job \'{}\' not finished - can not be removed'.format(jobName))
+                if not job.state().is_finished():
+                    raise InvalidRequest('Job \'{}\' not finished - can not be removed'.format(job_name))
 
-                self.__manager.jobList.remove(jobName)
+                self._manager.job_list.remove(job_name)
                 removed += 1
-            except Exception as e:
-                errors[jobName] = e.args[0]
+            except Exception as exc:
+                errors[job_name] = exc.args[0]
 
         data = {
             'removed': removed,
@@ -1087,84 +1141,114 @@ class DirectManagerHandler:
         if len(errors) > 0:
             data['errors'] = errors
 
-        return Response.Ok(data=data)
+        return Response.ok(data=data)
 
+    async def handle_listjobs_req(self, iface, request): #pylint: disable=W0613
+        """Handler for list jobs request.
 
-    async def handleListJobsReq(self, iface, request):
-        job_names = self.__manager.jobList.jobs()
+        Args:
+            iface (Interface): interface which received request
+            request (ListJobsReq): list jobs request
 
-        logging.info("got {} jobs from list".format(str(len(job_names))))
+        Returns:
+            Response: the response data
+        """
+        job_names = self._manager.job_list.jobs()
+
+        logging.info("got %d jobs from list", len(job_names))
 
         jobs = {}
-        for jobName in job_names:
-            job = self.__manager.jobList.get(jobName)
+        for job_name in job_names:
+            job = self._manager.job_list.get(job_name)
 
             if job is None:
-                return Response.Error('One of the job \'{}\' doesn\'t exist in registry'.format(jobName))
+                return Response.error('One of the job \'{}\' doesn\'t exist in registry'.format(job_name))
 
             job_data = {
-                'status': str(job.getStateStr())
+                'status': str(job.str_state())
             }
 
-            if job.getMessages() is not None:
-                job_data['messages'] = job.getMessages()
+            if job.messages() is not None:
+                job_data['messages'] = job.messages()
 
-            if job.getQueuePos() is not None:
-                job_data['inQueue'] = job.getQueuePos()
+            if job.queue_pos() is not None:
+                job_data['inQueue'] = job.queue_pos()
 
-            jobs[jobName] = job_data
-        return Response.Ok(data={
+            jobs[job_name] = job_data
+        return Response.ok(data={
             'length': len(job_names),
             'jobs': jobs,
         })
 
-    async def handleResourcesInfoReq(self, iface, request):
-        resources = self.__manager.resources
-        return Response.Ok(data={
-            'totalNodes': len(resources.nodes),
-            'totalCores': resources.totalCores,
-            'usedCores': resources.usedCores,
-            'freeCores': resources.freeCores
+    async def handle_resourcesinfo_req(self, iface, request): #pylint: disable=W0613
+        """Handler resources info request.
+
+        Args:
+            iface (Interface): interface which received request
+            request (ResourcesReq): resources info request
+
+        Returns:
+            Response: the response data
+        """
+        resources = self._manager.resources
+        return Response.ok(data={
+            'totalNodes': resources.total_nodes,
+            'totalCores': resources.total_cores,
+            'usedCores': resources.used_cores,
+            'freeCores': resources.free_cores
         })
 
-    async def handleFinishReq(self, iface, request):
+    async def handle_finish_req(self, iface, request): #pylint: disable=W0613
+        """Handler finish request.
+
+        Args:
+            iface (Interface): interface which received request
+            request (FinishReq): job status request
+
+        Returns:
+            Response: the response data
+        """
         delay = 2
 
-        if self.__finishTask is not None:
-            return Response.Error('Finish request already requested')
+        if self._finish_task is not None:
+            return Response.error('Finish request already requested')
 
-        self.__finishTask = asyncio.ensure_future(self.__delayedFinish(delay))
+        self._finish_task = asyncio.ensure_future(self._delayed_finish(delay))
 
-        return Response.Ok(data={
+        return Response.ok(data={
             'when': '%ds' % delay
         })
 
+    async def generate_status_response(self):
+        """Generate current status statistics.
 
-    async def generateStatusResponse(self):
-        nSchedulingJobs = nFailedJobs = nFinishedJobs = nExecutingJobs = 0
-        jobNames = self.__manager.jobList.jobs()
-        for jobName in jobNames:
-            job = self.__manager.jobList.get(jobName)
+        Returns:
+            stats (dict): current status statistics
+        """
+        scheduling_jobs = failed_jobs = finished_jobs = executing_jobs = 0
+        job_names = self._manager.job_list.jobs()
+        for job_name in job_names:
+            job = self._manager.job_list.get(job_name)
 
             if job is None:
-                logging.warning('missing job\'s {} data '.format(jobName))
+                logging.warning('missing job\'s %s data', job_name)
             else:
-                if job.getState() in [JobState.QUEUED, JobState.SCHEDULED]:
-                    nSchedulingJobs += 1
-                elif job.getState() in [JobState.EXECUTING]:
-                    nExecutingJobs += 1
-                elif job.getState() in [JobState.FAILED, JobState.OMITTED]:
-                    nFailedJobs += 1
-                elif job.getState() in [JobState.CANCELED, JobState.SUCCEED]:
-                    nFinishedJobs += 1
+                if job.state() in [JobState.QUEUED, JobState.SCHEDULED]:
+                    scheduling_jobs += 1
+                elif job.state() in [JobState.EXECUTING]:
+                    executing_jobs += 1
+                elif job.state() in [JobState.FAILED, JobState.OMITTED]:
+                    failed_jobs += 1
+                elif job.state() in [JobState.CANCELED, JobState.SUCCEED]:
+                    finished_jobs += 1
 
-        resources = self.__manager.resources
-        return Response.Ok(data={
+        resources = self._manager.resources
+        return Response.ok(data={
             'System': {
-                'Uptime': str(datetime.now() - self.startTime),
-                'Zmqaddress': self.__receiver.getZmqAddress(),
-                'Ifaces': [iface.name() for iface in self.__receiver.getInterfaces()] \
-                    if self.__receiver and self.__receiver.getInterfaces() else [],
+                'Uptime': str(datetime.now() - self.start_time),
+                'Zmqaddress': self._receiver.zmq_address,
+                'Ifaces': [iface.name() for iface in self._receiver.interfaces] \
+                    if self._receiver and self._receiver.interfaces else [],
                 'Host': socket.gethostname(),
                 'Account': getpass.getuser(),
                 'Wd': os.getcwd(),
@@ -1172,47 +1256,67 @@ class DirectManagerHandler:
                 'Python': sys.executable,
                 'Platform': sys.platform,
             }, 'Resources': {
-                'TotalNodes': len(resources.nodes),
-                'TotalCores': resources.totalCores,
-                'UsedCores': resources.usedCores,
-                'FreeCores': resources.freeCores,
+                'TotalNodes': resources.total_nodes,
+                'TotalCores': resources.total_cores,
+                'UsedCores': resources.used_cores,
+                'FreeCores': resources.free_cores,
             }, 'JobStats': {
-                'TotalJobs': len(jobNames),
-                'InScheduleJobs': nSchedulingJobs,
-                'FailedJobs': nFailedJobs,
-                'FinishedJobs': nFinishedJobs,
-                'ExecutingJobs': nExecutingJobs,
+                'TotalJobs': len(job_names),
+                'InScheduleJobs': scheduling_jobs,
+                'FailedJobs': failed_jobs,
+                'FinishedJobs': finished_jobs,
+                'ExecutingJobs': executing_jobs,
             }})
 
+    async def handle_status_req(self, iface, request): #pylint: disable=W0613
+        """Handler status request.
 
-    async def handleStatusReq(self, iface, request):
-        return await self.generateStatusResponse()
+        Args:
+            iface (Interface): interface which received request
+            request (StatusReq): current system status request
 
+        Returns:
+            Response: the response data
+        """
+        return await self.generate_status_response()
 
-    async def handleNotifyReq(self, iface, request):
-        return Response.Error('Operation not supported')
+    async def handle_notify_req(self, iface, request): #pylint: disable=W0613
+        """Handler for notify request.
 
+        Args:
+            iface (Interface): interface which received request
+            request (NotifyReq): notify request
 
-    async def __waitForAllJobs(self):
+        Returns:
+            Response: the response data
+        """
+        return Response.error('Operation not supported')
+
+    async def _wait_for_all_jobs(self):
+        """Wait until all jobs finish and stop receiver."""
         logging.info("waiting for all jobs to finish (the new method)")
 
-        while not self.__manager.allJobsFinished():
+        while not self._manager.is_all_jobs_finished:
             await asyncio.sleep(0.2)
 
         logging.info("detected all jobs finished")
-        self.stopReceiver()
+        self.stop_receiver()
 
+    async def _delayed_finish(self, delay):
+        """Stop receiver with given delay.
 
-    async def __delayedFinish(self, delay):
-        logging.info("finishing in {} seconds".format(delay))
+        Args:
+            delay (int): number of seconds to wait before stoping receiver
+        """
+        logging.info("finishing in %d seconds", delay)
 
         await asyncio.sleep(delay)
 
-        self.stopReceiver()
+        self.stop_receiver()
 
-
-    def stopReceiver(self):
-        if self.__receiver:
-            self.__receiver.setFinish(True)
+    def stop_receiver(self):
+        """Signal receiver to stop."""
+        if self._receiver:
+            self._receiver.set_finish(True)
         else:
             logging.warning('Failed to set finish flag due to lack of receiver access')

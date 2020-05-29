@@ -12,351 +12,377 @@ from qcg.appscheduler.launcher.launcher import Launcher
 import qcg.appscheduler.profile
 
 
-
 class ExecutionJob:
+    """
+    Class is responsible for executing a single job iteration inside allocation.
+
+    Attributes:
+        allocation (Allocation): job iteration allocation to execute on
+        job_iteration (SchedulingIteration): job iteration data
+        _envs (list(Environment)): list of environment instances which should prepare environment variables for
+            execution
+        id (str): unique execution identifier
+        exit_code (int): job iteration exit code
+        _executor (Executor): the executor instance
+        error_message (str): the error description from job iteration execution
+        env_opts (dict): the options for environment instances
+        wd_path (str): path to the job iteration working directory
+        env (dict): target job iteration environment variables
+        _start_time (DateTime): moment of job iteration execution start
+        _stop_time (DateTime): moment of job iteration execution stop
+        nnodes (int): number of allocation nodes
+        ncores (int): total number of allocation cores
+        nlist (list(str)): list of allocation node names
+        tasks_per_node (str): string describing number of cores (separated by comma) on each node
+        job_execution (JobExecution): job execution element with variables replaced for specific iteration
+    """
 
     @profile
-    def __init__(self, executor, envs, allocation, jobIteration):
-        """
-        Class is responsible for executing a single job iteration inside allocation.
+    def __init__(self, executor, envs, allocation, job_iteration):
+        """Initialize instance.
 
-        :param executor (Executor): object for tracing job iteration executions
-        :param envs (Environment[]): job iteration environments
-        :param allocation (Allocation) : scheduled allocation for job iteration
-        :param jobIteration (SchedulingIteration) : job iteration to execute
+        Args:
+            executor (Executor): object for tracing job iteration executions
+            envs (list(Environment)): job iteration environments
+            allocation (Allocation): scheduled allocation for job iteration
+            job_iteration (SchedulingIteration) : job iteration to execute
         """
-        assert allocation is not None
-        assert jobIteration is not None
-
         self.allocation = allocation
-        self.jobIteration = jobIteration
-        self.__envs = envs
-        self.id = str(uuid.uuid4().hex)
-        self.exitCode = None
-        self.__executor = executor
-        self.errorMessage = None
-        self.envOpts = { }
+        self.job_iteration = job_iteration
+        self._envs = envs
+        self.jid = str(uuid.uuid4().hex)
+        self.exit_code = None
+        self._executor = executor
+        self.error_message = None
+        self.env_opts = {}
 
         # temporary
-        self.wdPath = '.'
+        self.wd_path = '.'
 
         # inherit environment variables from parent process
         self.env = os.environ.copy()
-#        self.env = {}
 
-        self.__jobStartTime = None
-        self.__jobStopTime = None
+        self._start_time = None
+        self._stop_time = None
 
-        self.nnodes = len(self.allocation.nodeAllocations)
-        self.ncores = sum([node.ncores for node in self.allocation.nodeAllocations])
-        self.nlist = ','.join([node.node.name for node in self.allocation.nodeAllocations])
-        self.tasks_per_node = ','.join([str(node.ncores) for node in self.allocation.nodeAllocations])
+        self.nnodes = len(self.allocation.nodes)
+        self.ncores = sum([node.ncores for node in self.allocation.nodes])
+        self.nlist = ','.join([node.node.name for node in self.allocation.nodes])
+        self.tasks_per_node = ','.join([str(node.ncores) for node in self.allocation.nodes])
 
-        #logging.info("job resource's initialized {}, {}, {}, {}".format(self.nnodes, self.ncores, self.nlist, self.tasks_per_node))
+        self.job_execution = self._replace_job_variables(self.job_iteration.job.execution)
 
-        self.__setupJobVariables()
+    def _replace_job_variables(self, job_execution):
+        """Replace any variables used in job description.
 
-        # job execution description with variables replaced
-        self.jobExecution = JobExecution(
-            **json.loads(
-                self.__substituteJobVariables(self.jobIteration.job.execution.toJSON())
-            ))
+        Args:
+            job_execution (JobExecution): original job description
 
-    def __setupJobVariables(self):
+        Returns:
+            JobExecution: job description with replaced variables
         """
-        Set variables that can be used in job description.
-        """
-        self.__jobVars = {
-            'root_wd': self.__executor.base_wd,
+        job_vars = {
+            'root_wd': self._executor.base_wd,
             'ncores': str(self.ncores),
             'nnodes': str(self.nnodes),
             'nlist': self.nlist
         }
 
-        if self.jobIteration.iteration is not None:
-            self.__jobVars['it'] = self.jobIteration.iteration
+        if self.job_iteration.iteration is not None:
+            job_vars['it'] = self.job_iteration.iteration
 
-    def __substituteJobVariables(self, data):
-        """
-        Replace any variables used in job description.
-        """
-        return Template(data).safe_substitute(self.__jobVars)
+        replaced_job_execution = JobExecution(
+            **json.loads(Template(job_execution.to_json()).safe_substitute(job_vars)))
 
-    def __setupSandbox(self):
-        """
-        Set a job's working directory based on execution description and root working directory of executor.
-        An attribute 'wdPath' is set as an output of this method and directory is created
-        """
-        if self.jobExecution.wd is None:
-            self.wdPath = self.__executor.base_wd
-        else:
-            self.wdPath = self.jobExecution.wd
-
-            if not os.path.isabs(self.wdPath):
-                self.wdPath = os.path.join(self.__executor.base_wd, self.wdPath)
-
-#        logging.info("preparing job %s sanbox at %s" % (self.jobIteration.name, self.wdPath))
-        if not os.path.exists(self.wdPath):
-#            logging.info("creating directory for job %s at %s" % (self.jobIteration.name, self.wdPath))
-            os.makedirs(self.wdPath)
-
-
-    def __prepareEnv(self):
-        """
-        Setup an execution environment.
-        Mostly environment variables are set
-        """
-        if self.jobExecution.env is not None:
-            self.env.update(self.jobExecution.env)
-
-        if self.__executor.getZmqAddress():
-            self.env.update({
-                'QCG_PM_ZMQ_ADDRESS': self.__executor.getZmqAddress()
-            })
-
-#        logging.info('updating job\'s environment from {} objects'.format(str(self.__envs)))
-        if self.__envs:
-            for env in self.__envs:
-                env.updateEnv(self, self.env, self.envOpts)
-
-#        logging.info('environment after update: {}'.format(str(self.env)))
-
+        return replaced_job_execution
 
     def preprocess(self):
-        """
-        Prepare environment for job execution.
+        """Prepare environment for job execution.
         Setup sandbox and environment variables. Resolve module loading and virtual environment activation.
         """
-        self.__setupSandbox()
-        self.__prepareEnv()
-        self.__resolveModsVenv()
+        self._setup_sandbox()
+        self._prepare_env()
+        self._resolve_mods_venv()
 
+    def _setup_sandbox(self):
+        """Set a job's working directory based on execution description and root working directory of executor.
+        An attribute ``wd_path`` is set as an output of this method and directory is created
+        """
+        if self.job_execution.wd is None:
+            self.wd_path = self._executor.base_wd
+        else:
+            self.wd_path = self.job_execution.wd
 
-    def __resolveModsVenv(self):
+            if not os.path.isabs(self.wd_path):
+                self.wd_path = os.path.join(self._executor.base_wd, self.wd_path)
+
+        if not os.path.exists(self.wd_path):
+            os.makedirs(self.wd_path)
+
+    def _prepare_env(self):
+        """Setup an execution environment.
+        Mostly environment variables are set
+        """
+        if self.job_execution.env is not None:
+            self.env.update(self.job_execution.env)
+
+        if self._executor.zmq_address:
+            self.env.update({
+                'QCG_PM_ZMQ_ADDRESS': self._executor.zmq_address
+            })
+
+        if self._envs:
+            for env in self._envs:
+                env.update_env(self, self.env, self.env_opts)
+
+    def _resolve_mods_venv(self):
+        """When modules or virtualenv is defined in job description this function modifies job description to run
+        bash with proper arguments.
+        """
         # in case of modules or virtualenv we have to run bash first with proper application
         # after the modules and virtualenv activation.
-        if self.jobExecution.modules is not None or self.jobExecution.venv is not None:
-            job_exec = self.jobExecution.exec
-            job_args = self.jobExecution.args
+        if self.job_execution.modules is not None or self.job_execution.venv is not None:
+            job_exec = self.job_execution.exec
+            job_args = self.job_execution.args
 
-            self.jobExecution.exec = 'bash'
+            self.job_execution.exec = 'bash'
 
             bash_cmd = ''
-            if self.jobExecution.modules:
-                bash_cmd += ' '.join(['source /etc/profile && module load {};'.format(mod) for mod in self.jobExecution.modules])
+            if self.job_execution.modules:
+                bash_cmd += ' '.join(['source /etc/profile && module load {};'.format(mod)
+                                      for mod in self.job_execution.modules])
 
-            if self.jobExecution.venv:
-                bash_cmd += 'source {}/bin/activate;'.format(self.jobExecution.venv)
+            if self.job_execution.venv:
+                bash_cmd += 'source {}/bin/activate;'.format(self.job_execution.venv)
 
-            if self.jobExecution.script:
-                bash_cmd += self.jobExecution.script
+            if self.job_execution.script:
+                bash_cmd += self.job_execution.script
             else:
                 bash_cmd += 'exec {} {}'.format(
-                    job_exec,
-                    ' '.join([str(arg).replace(" ", "\ ") for arg in job_args]))
+                    job_exec, ' '.join([str(arg).replace(" ", "\\ ") for arg in job_args]))
 
-            self.jobExecution.args = [ '-c', bash_cmd ]
+            self.job_execution.args = ['-c', bash_cmd]
         else:
-            if self.jobExecution.script:
-                self.jobExecution.exec = 'bash'
-                self.jobExecution.args = ['-c', self.jobExecution.script]
+            if self.job_execution.script:
+                self.job_execution.exec = 'bash'
+                self.job_execution.args = ['-c', self.job_execution.script]
 
-
-    def preStart(self):
-        """
-        This method should be executed before job will be started.
+    def pre_start(self):
+        """This method should be executed before job will be started.
         The job statistics are updated (workdir, job start time) and executor is notified about job start.
         """
-        self.__jobStartTime = datetime.now()
+        self._start_time = datetime.now()
 
-        self.__executor.jobIterationExecuting(self)
-        self.jobIteration.job.appendRuntime({'wd': self.wdPath}, iteration=self.jobIteration.iteration)
-
+        self._executor.job_iteration_started(self)
+        self.job_iteration.job.append_runtime({'wd': self.wd_path}, iteration=self.job_iteration.iteration)
 
     @profile
     async def launch(self):
+        """The function for launching process of job iteration"""
         raise NotImplementedError('This method must be implemened in subclass')
 
+    def postprocess(self, exit_code, error_message=None):
+        """Postprocess job execution.
+        Update job statistics (runtime), set the exit code and optionally error message and notify executor about job
+        finish.
 
-    def postprocess(self, exitCode, errorMessage=None):
+        Args:
+            exit_code (int): job iteration exit code
+            error_message (str, optional): error description
         """
-        Postprocess job execution.
-        Update job statistics (runtime), set the exit code and optionally error message and notify executor about job finish.
-        """
-        self.__jobStopTime = datetime.now()
-        if self.__jobStartTime:
-            self.__jobRunTime = self.__jobStopTime - self.__jobStartTime
+        self._stop_time = datetime.now()
+        if self._start_time:
+            job_runtime = self._stop_time - self._start_time
         else:
-            self.__jobRunTime = 0
+            job_runtime = 0
 
-        self.jobIteration.job.appendRuntime({'rtime': str(self.__jobRunTime)}, iteration=self.jobIteration.iteration)
+        self.job_iteration.job.append_runtime({'rtime': str(job_runtime)}, iteration=self.job_iteration.iteration)
 
-        self.exitCode = exitCode
-        self.errorMessage = errorMessage
-        self.__executor.jobIterationFinished(self)
-
+        self.exit_code = exit_code
+        self.error_message = error_message
+        self._executor.job_iteration_finished(self)
 
     async def run(self):
-        """
-        Prepare environment for a job and launch job process.
-        """
+        """Prepare environment for a job and launch job process."""
         try:
             self.preprocess()
 
-            self.preStart()
+            self.pre_start()
 
             await self.launch()
         except Exception as ex:
-            logging.exception("failed to start job {}".format(self.jobIteration.name))
+            logging.exception("failed to start job %s", self.job_iteration.name)
             self.postprocess(-1, str(ex))
 
 
 class LocalSchemaExecutionJob(ExecutionJob):
+    """Run job iteration as a local process according to defined schema.
+
+    Attributes:
+        _schema (ExecutionSchmea): execution schema instance
+    """
 
     @profile
-    def __init__(self, executor, envs, allocation, jobIteration, schema):
-        """
-        Run application as a local process according to defined schema.
-        """
-        super().__init__(executor, envs, allocation, jobIteration)
-        
-        self.__schema = schema
-        self.__processTask = None
+    def __init__(self, executor, envs, allocation, job_iteration, schema):
+        """Initialize instance.
 
+        Args:
+            executor (Executor): executor instance
+            envs (list(Environment)): list of environment instances
+            allocation (Allocation): scheduled allocation for job iteration
+            schema (ExecutionSchema): execution schema
+        """
+        super().__init__(executor, envs, allocation, job_iteration)
+
+        self._schema = schema
         if schema:
-            self.envOpts = schema.getEnvOpts()
-
+            self.env_opts = schema.get_env_opts()
 
     def preprocess(self):
-        """
-        Prepare environment for job execution.
+        """Prepare environment for job execution.
         Setup environment and modify exec according to the execution schema.
         """
         super().preprocess()
-        self.__schema.preprocess(self)
+        self._schema.preprocess(self)
 
-
-    async def __executeLocalProcess(self):
+    async def _execute_local_process(self):
+        """Asynchronous task to launch local process with job iteration"""
         try:
-            je = self.jobExecution
-            stdinP = None
-            stdoutP = asyncio.subprocess.DEVNULL
-            stderrP = asyncio.subprocess.DEVNULL
+            jexec = self.job_execution
+            stdin_p = None
+            stdout_p = asyncio.subprocess.DEVNULL
+            stderr_p = asyncio.subprocess.DEVNULL
 
+            if jexec.stdin:
+                stdin_path = jexec.stdin if os.path.isabs(jexec.stdin) else os.path.join(self.wd_path, jexec.stdin)
+                stdin_p = open(stdin_path, 'r')
 
-            if je.stdin:
-                stdin_path = je.stdin if os.path.isabs(je.stdin) else os.path.join(self.wdPath, je.stdin)
-                stdinP = open(stdin_path, 'r')
-
-            if je.stdout and je.stderr and je.stdout == je.stderr:
-                stdout_path = je.stdout if os.path.isabs(je.stdout) else os.path.join(self.wdPath, je.stdout)
-                stdoutP = stderrP = open(stdout_path, 'w')
+            if jexec.stdout and jexec.stderr and jexec.stdout == jexec.stderr:
+                stdout_path = jexec.stdout if os.path.isabs(jexec.stdout) else os.path.join(self.wd_path, jexec.stdout)
+                stdout_p = stderr_p = open(stdout_path, 'w')
             else:
-                if je.stdout:
-                    stdout_path = je.stdout if os.path.isabs(je.stdout) else os.path.join(self.wdPath, je.stdout)
-                    stdoutP = open(stdout_path, 'w')
+                if jexec.stdout:
+                    stdout_path = jexec.stdout if os.path.isabs(jexec.stdout) else os.path.join(self.wd_path,
+                                                                                                jexec.stdout)
+                    stdout_p = open(stdout_path, 'w')
 
-                if je.stderr:
-                    stderr_path = je.stderr if os.path.isabs(je.stderr) else os.path.join(self.wdPath, je.stderr)
-                    stderrP = open(stderr_path, 'w')
+                if jexec.stderr:
+                    stderr_path = jexec.stderr if os.path.isabs(jexec.stderr) else os.path.join(self.wd_path,
+                                                                                                jexec.stderr)
+                    stderr_p = open(stderr_path, 'w')
 
-            logging.debug("launching job {}: {} {}".format(self.jobIteration.name, je.exec, str(je.args)))
+            logging.debug("launching job %s: %s %s", self.job_iteration.name, jexec.exec, str(jexec.args))
 
             process = await asyncio.create_subprocess_exec(
-                je.exec, *je.args,
-                stdin=stdinP,
-                stdout=stdoutP,
-                stderr=stderrP,
-                cwd=self.wdPath,
+                jexec.exec, *jexec.args,
+                stdin=stdin_p,
+                stdout=stdout_p,
+                stderr=stderr_p,
+                cwd=self.wd_path,
                 env=self.env,
                 shell=False,
             )
 
-            logging.info("local process {} for job {} launched".format(process.pid, self.jobIteration.name))
+            logging.info("local process %d for job %s launched", process.pid, self.job_iteration.name)
 
             await process.wait()
 
-            logging.info("local process for job {} finished".format(self.jobIteration.name))
+            logging.info("local process for job %s finished", self.job_iteration.name)
 
-            exitCode = process.returncode
+            exit_code = process.returncode
 
-            self.postprocess(exitCode)
-        except Exception as e:
-            logging.exception("execution failed: {}".format(str(e)))
-            self.postprocess(-1, str(e))
+            self.postprocess(exit_code)
+        except Exception as exc:
+            logging.exception("execution failed: %s", str(exc))
+            self.postprocess(-1, str(exc))
         finally:
             try:
-                if stdinP:
-                    stdinP.close()
-                if stdoutP != asyncio.subprocess.DEVNULL:
-                    stdoutP.close()
-                if stderrP != asyncio.subprocess.DEVNULL and stderrP != stdoutP:
-                    stderrP.close()
-            except Exception as e:
-                logging.error("cleanup failed: {}".format(str(e)))
-
+                if stdin_p:
+                    stdin_p.close()
+                if stdout_p != asyncio.subprocess.DEVNULL:
+                    stdout_p.close()
+                if stderr_p not in [asyncio.subprocess.DEVNULL, stdout_p]:
+                    stderr_p.close()
+            except Exception as exc:
+                logging.error("cleanup failed: %s", str(exc))
 
     @profile
     async def launch(self):
-        self.__exec_task = asyncio.ensure_future(self.__executeLocalProcess())
-
-
-    def postprocess(self, exitCode, errorMessage=None):
-        super().postprocess(exitCode, errorMessage)
+        """Create asynchronous task to launch job iteration"""
+        asyncio.ensure_future(self._execute_local_process())
 
 
 class LauncherExecutionJob(ExecutionJob):
+    """Run job iteration with Launcher service.
+
+    Attributes:
+        env_opts (dict): options for environment instances
+    """
 
     launcher = None
 
     @classmethod
-    def StartAgents(cls, wdir, auxDir, nodes, binding):
+    def start_agents(cls, wdir, aux_dir, nodes, binding):
+        """Start Launcher service agents on all nodes.
+
+        Args:
+            wdir (str): launcher agent working directory
+            aux_dir (str): launcher agent directory for placing log and temporary files
+            nodes (list(str)): list of nodes where to start launcher agents
+            binding (bool): does the launcher agents should bind executed job iterations to specific cpus
+        """
         if cls.launcher:
             raise Exception('launcher agents already ininitialized')
 
-        agents = [ { 'agent_id': node.name, 'slurm': { 'node': node.name }, 'options': { 'binding': binding, 'auxDir': auxDir } } for node in nodes ]
-        cls.launcher = Launcher(wdir, auxDir)
+        agents = [{'agent_id': node.name,
+                   'slurm': {'node': node.name},
+                   'options': {'binding': binding, 'aux_dir': aux_dir}} for node in nodes]
+        cls.launcher = Launcher(wdir, aux_dir)
 
         asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(cls.launcher.start(agents)))
 
-
     @classmethod
-    async def StopAgents(cls):
+    async def stop_agents(cls):
+        """Stop all launcher service agents."""
         if cls.launcher:
             await cls.launcher.stop()
             cls.launcher = None
-            
 
     @profile
-    def __init__(self, executor, envs, allocation, jobIteration):
-        """
-        Run application through the node launcher service.
-        """
-        super().__init__(executor, envs, allocation, jobIteration)
-        self.envOpts = { 'nohostfile': True }
+    def __init__(self, executor, envs, allocation, job_iteration):
+        """Initialize instance.
 
+        Args:
+            executor (Executor): executor instance
+            envs (list(Environment)): list of environment instances
+            allocation (Allocation): scheduled allocation for job iteration
+            schema (ExecutionSchema): execution schema
+        """
+        super().__init__(executor, envs, allocation, job_iteration)
+        self.env_opts = {'nohostfile': True}
 
     @profile
     async def launch(self):
+        """Submit job to the specific launcher agent."""
+        jexec = self.job_execution
+        node = self.allocation.nodes[0]
+
+        await self.__class__.launcher.submit(node.node.name,
+                                             self.jid,
+                                             [jexec.exec, *jexec.args],
+                                             stdin=os.path.join(self.wd_path, jexec.stdin) if jexec.stdin else None,
+                                             stdout=os.path.join(self.wd_path, jexec.stdout) if jexec.stdout else None,
+                                             stderr=os.path.join(self.wd_path, jexec.stderr) if jexec.stderr else None,
+                                             env=self.env,
+                                             wdir=self.wd_path,
+                                             cores=node.cores,
+                                             finish_cb=self._finish_cb)
+
+    def _finish_cb(self, message):
+        """Method called when remote job iteration process finish.
+
+        Args:
+            message (dict): the finish status sent by launcher agent, the ``ec`` key is interpreted as exit code,
+                and ``message`` key as error description
         """
-        Submit job to the specific launcher agent.
-        """
-        je = self.jobExecution
-        nodeAlloc = self.allocation.nodeAllocations[0]
-
-        await self.__class__.launcher.submit(
-                nodeAlloc.node.name,
-                self.id,
-                [ je.exec, *je.args ],
-                stdin=os.path.join(self.wdPath, je.stdin) if je.stdin else None,
-                stdout=os.path.join(self.wdPath, je.stdout) if je.stdout else None,
-                stderr=os.path.join(self.wdPath, je.stderr) if je.stderr else None,
-                env=self.env,
-                wdir=self.wdPath,
-                cores=nodeAlloc.cores,
-                finish_cb=self.__finishCb)
-
-
-    def __finishCb(self, message):
         self.postprocess(int(message.get('ec', -1)), message.get('message', None))
-

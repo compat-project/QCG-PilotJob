@@ -8,157 +8,189 @@ from qcg.appscheduler.errors import InvalidRequest
 from qcg.appscheduler.request import RegisterReq, ListJobsReq, ResourcesInfoReq, FinishReq
 from qcg.appscheduler.request import RemoveJobReq, ControlReq, StatusReq, NotifyReq
 from qcg.appscheduler.request import Request, SubmitReq, JobStatusReq, JobInfoReq, CancelJobReq
-from qcg.appscheduler.response import Response, ResponseCode
+from qcg.appscheduler.response import Response
 from qcg.appscheduler.zmqinterface import ZMQInterface
 
 
 class ResponseStatus(Enum):
+    """Request response status."""
+
     UNKNOWN = 1
     ERROR = 2
     SUCCESS = 3
 
 
 class ValidateResponse:
+    """The response data.
+
+    Attributes:
+        result (ResponseStatus): status
+        msg (str): response message
+        request (Request): request
+    """
+
     def __init__(self):
+        """Initialize response."""
         self.result = ResponseStatus.UNKNOWN
-        self.errorMessage = None
+        self.msg = None
         self.request = None
 
-    def error(self, errMsg):
+    def error(self, err_msg):
+        """Set response as an error.
+
+        Args:
+            err_msg (str): response error message
+        """
         self.result = ResponseStatus.ERROR
         self.request = None
-        self.errorMessage = errMsg
+        self.msg = err_msg
 
     def success(self, request):
+        """Set response as a success.
+
+        Args:
+            request (Request): the original request
+        """
         self.result = ResponseStatus.SUCCESS
         self.request = request
-        self.errorMessage = 'Ok'
+        self.msg = 'Ok'
 
-    def isError(self):
+    @property
+    def is_error(self):
+        """bool: is an error response"""
         return self.result == ResponseStatus.ERROR
 
-    def isSuccess(self):
+    @property
+    def is_success(self):
+        """bool: is a success response"""
         return self.result == ResponseStatus.SUCCESS
 
 
 class Receiver:
+    """The receiver listens for requests on input interfaces and passes requests to handlers (managers).
 
-    def __init__(self, requestHandler, ifaces, resources):
-        """
-        Receiver listen on interfaces, validate requests and pass them to request handler (manager).
+    Attributes:
+        _ifaces (list(Interface)): list of interfaces to listen for requests
+        _tasks (list(asyncio.Future)): list of tasks that listens on interfaces for incoming requests
+        _zmq_address (str): address of the ZMQ input interface
+        _handler (Manager): object which handles incoming requests
+        _handlers (dict): map of requests and handler functions
+        finished (bool): flag set by the handlers when receiving should be finished
+    """
+
+    def __init__(self, handler, ifaces):
+        """Initialize receiver.
 
         Args:
-            request_handler: manager that handles requests
+            handler: manager that handles requests
             ifaces (Interface[]): list of interfaces
         """
         assert ifaces is not None and isinstance(ifaces, list) and len(ifaces) > 0
 
-        self.__handler = requestHandler
+        self._handler = handler
 
-        self.__ifaces = ifaces
-        self.__tasks = []
-        self.__reqEnv = {
-            'resources': resources
-        }
+        self._ifaces = ifaces
+        self._tasks = []
 
-        self.zmq_address = self.__findZmqAddress()
+        self._zmq_address = self._find_zmq_address()
 
-        self.__handlers = {
-            RegisterReq: self.__handler.handleRegisterReq,
-            ControlReq: self.__handler.handleControlReq,
-            SubmitReq: self.__handler.handleSubmitReq,
-            JobStatusReq: self.__handler.handleJobStatusReq,
-            JobInfoReq: self.__handler.handleJobInfoReq,
-            CancelJobReq: self.__handler.handleCancelJobReq,
-            RemoveJobReq: self.__handler.handleRemoveJobReq,
-            ListJobsReq: self.__handler.handleListJobsReq,
-            ResourcesInfoReq: self.__handler.handleResourcesInfoReq,
-            FinishReq: self.__handler.handleFinishReq,
-            StatusReq: self.__handler.handleStatusReq,
-            NotifyReq: self.__handler.handleNotifyReq,
+        self._handlers = {
+            RegisterReq: self._handler.handle_register_req,
+            ControlReq: self._handler.handle_control_req,
+            SubmitReq: self._handler.handle_submit_req,
+            JobStatusReq: self._handler.handle_jobstatus_req,
+            JobInfoReq: self._handler.handle_jobinfo_req,
+            CancelJobReq: self._handler.handle_canceljob_req,
+            RemoveJobReq: self._handler.handle_removejob_req,
+            ListJobsReq: self._handler.handle_listjobs_req,
+            ResourcesInfoReq: self._handler.handle_resourcesinfo_req,
+            FinishReq: self._handler.handle_finish_req,
+            StatusReq: self._handler.handle_status_req,
+            NotifyReq: self._handler.handle_notify_req,
         }
 
         self.finished = False
+        self._handler.set_receiver(self)
 
-        self.__handler.setReceiver(self)
+    def _find_zmq_address(self):
+        """Look for ZMQ interface and get input address of this interface.
 
-
-    def __findZmqAddress(self):
-        zmqiface = next((iface for iface in self.__ifaces if isinstance(iface, ZMQInterface)), None)
-        if zmqiface:
-            return zmqiface.external_address
+        Returns:
+            str: input address of first ZMQ interface, or None if no such interface is available
+        """
+        zmq_iface = next((iface for iface in self._ifaces if isinstance(iface, ZMQInterface)), None)
+        if zmq_iface:
+            return zmq_iface.external_address
 
         return None
 
+    @property
+    def zmq_address(self):
+        """str: address of ZMQ interface"""
+        return self._zmq_address
 
-    def getZmqAddress(self):
-        return self.zmq_address
+    @property
+    def interfaces(self):
+        """list(Interface): list of input interfaces"""
+        return self._ifaces
 
+    def set_finish(self, finished):
+        """Set finish flag.
 
-    def getInterfaces(self):
-        return self.__ifaces
-
-
-    def setFinish(self, finished):
-        """
-        Set finish flag.
-        If set to TRUE the receiver should not accept any new requests and whole service should finish.
+        If set to True the receiver should not accept any new requests and whole service should finish.
         The service will monitor this flag to know when receiver finished accepting requests.
 
-        :param finished: the finished flag
+        Args:
+            finished (bool): the finish flag
         """
         self.finished = finished
 
-
-    def isFinished(self):
-        """
-        Return value of finish flag.
-
-        :return: the value of finish flag
-        """
+    @property
+    def is_finished(self):
+        """bool: the value of finish flag"""
         return self.finished
 
+    async def _listen(self, iface):
+        """Task that listen on given interface and handles the incoming requests.
 
-    async def __listen(self, iface):
+        Args:
+            iface (Interface): interface to listen to
         """
-        Handling an interface.
-        """
-        logging.info('Listener on interface {} started'.format(iface.__class__.__name__))
+        logging.info('Listener on interface %s started', iface.__class__.__name__)
 
         while True:
             try:
-                reqData = await iface.receive()
+                request = await iface.receive()
 
-                if reqData is None:
+                if request is None:
                     # finishing listening - nothing more will come
-                    logging.info('Finishing listening on interface {} due to EOD'.format(iface.__class__.__name__))
+                    logging.info('Finishing listening on interface %s due to EOD', iface.__class__.__name__)
                     return
 
-                logging.info('Interface {} received request: {}'.format(iface.__class__.__name__, str(reqData)))
+                logging.info('Interface %s received request: %s', iface.__class__.__name__, str(request))
 
                 # validate request
-                validResp = self.__validate(reqData)
+                valid_response = Receiver._validate(request)
 
-                if validResp.isError():
-                    logging.debug('validate request failed: result({}), errorMessage({}), request({})'.format(
-                        str(validResp.result), str(validResp.errorMessage), str(validResp.request)))
-                    response = Response.Error(validResp.errorMessage)
+                if valid_response.is_error:
+                    logging.debug('validate request failed: result(%s), msg(%s), request(%s)',
+                                  str(valid_response.result), str(valid_response.msg), str(valid_response.request))
+                    response = Response.Error(valid_response.msg)
                 else:
-                    response = await self.__handleRequest(iface, validResp.request)
+                    response = await self._handle_request(iface, valid_response.request)
 
-                logging.info('sending response: {}'.format(str(response.toDict())))
+                logging.info('sending response: %s', str(response.toDict()))
                 await iface.reply(response.toJSON())
             except CancelledError:
                 # listener was canceled - finished gracefully
-                logging.info('Finishing listening on interface {} due to interrupt'.format(iface.__class__.__name__))
+                logging.info('Finishing listening on interface %s due to interrupt', iface.__class__.__name__)
                 return
-            except:
-                logging.exception('Failed to process request from interface {}'.format(iface.__class__.__name__))
+            except Exception:
+                logging.exception('Failed to process request from interface %s', iface.__class__.__name__)
 
+    async def _handle_request(self, iface, request):
+        """Handle single request.
 
-    async def __handleRequest(self, iface, request):
-        """
-        Handle single request.
         The proper handler for given request type should be found (in handlers map) and
         called.
 
@@ -169,28 +201,28 @@ class Receiver:
         Returns:
             Response: response that should be returned to user
         """
-        if request.__class__ not in self.__handlers:
-            logging.error('Failed to handle request: unknown request class "{}"'.format(request.__class__.__name__))
+        if request.__class__ not in self._handlers:
+            logging.error('Failed to handle request: unknown request class "%s"', request.__class__.__name__)
             return Response.Error('Unknown request type "{}"'.format(request.__class__.__name__))
-        else:
-            try:
-                logging.info('Handling {} request from {} interface'.format(
-                    request.__class__.__name__, iface.__class__.__name__))
 
-                return await self.__handlers[request.__class__](iface, request)
-            except:
-                logging.exception('Failed to process request: {}'.format(sys.exc_info()[0]))
-                return Response.Error('Failed to process request: {}'.format(sys.exc_info()[0]))
+        try:
+            logging.info('Handling %s request from %s interface',
+                         request.__class__.__name__, iface.__class__.__name__)
 
+            return await self._handlers[request.__class__](iface, request)
+        except Exception:
+            logging.exception('Failed to process request: %s', sys.exc_info()[0])
+            return Response.Error('Failed to process request: {}'.format(sys.exc_info()[0]))
 
-    def __validate(self, reqData):
-        """
-        Validate incoming request.
+    @staticmethod
+    def _validate(request):
+        """Validate incoming request and parse it.
+
         In this first step only form of JSON format is validated along with some basic checks.
         More specific validation should be provided on further steps.
 
         Args:
-            reqData (dict): request data
+            request (dict): request data
 
         Returns:
             ValidateResponse: validation result
@@ -199,75 +231,74 @@ class Receiver:
         req = None
 
         try:
-            req = Request.Parse(reqData, self.__reqEnv)
+            req = Request.parse(request)
             response.success(req)
-        except InvalidRequest as e:
+        except InvalidRequest as exc:
             logging.error("Failed to parse request - invalid request")
-            response.error('Invalid request: %s' % (e.args[0]))
+            response.error('Invalid request: {}'.format(exc.args[0]))
         except Exception:
-            logging.exception('Failed to parse request: {}'.format(sys.exc_info()[0]))
+            logging.exception('Failed to parse request: %s', sys.exc_info()[0])
             response.error('Invalid request: {}'.format(sys.exc_info()[0]))
 
-#        logging.info("Validated request with result: %s" % (response.result))
-
         # request is OK, but we have to validate request parameters, such as:
-        #	cancelJob, statusJob job names exists or submitJob job name uniqness
+        # cancelJob, statusJob job names exists or submitJob job name uniqness
         return response
 
-
     def run(self):
-        """
-        Start listening on interfaces.
+        """Start listening on interfaces.
+
         This method creates asynchronic tasks and returns. To stop created tasks, method 'stop'
         must be called.
         """
         # are old tasks should be stoped here ?
-        self.__tasks = []
+        self._tasks = []
 
-        for iface in self.__ifaces:
+        for iface in self._ifaces:
             try:
-                logging.info('Starting listener on interface {}'.format(iface.__class__.__name__))
-                task = asyncio.ensure_future(self.__listen(iface))
-            except Exception as e:
-                logging.exception('Failed to start listener for {} interface'.format(iface.__class__.__name__))
+                logging.info('Starting listener on interface %s', iface.__class__.__name__)
+                task = asyncio.ensure_future(self._listen(iface))
+            except Exception:
+                logging.exception('Failed to start listener for %s interface', iface.__class__.__name__)
                 task = None
 
             if task is not None:
-                self.__tasks.append(task)
+                self._tasks.append(task)
 
-        logging.info('Successfully initialized {} interfaces'.format(len(self.__tasks)))
-
+        logging.info('Successfully initialized %d interfaces', len(self._tasks))
 
     async def stop(self):
-        """
-        Stop all listening on interfaces.
-        """
+        """Stop all listening on interfaces."""
         await self.cancel_listeners()
 
-        for iface in self.__ifaces:
+        for iface in self._ifaces:
             try:
                 iface.close()
-            except:
-                logging.warning('failed to close interface: {}'.format(str(sys.exc_info())))
-
+            except Exception:
+                logging.warning('failed to close interface: %s', str(sys.exc_info()))
 
     async def cancel_listeners(self):
-        logging.info('canceling {} listener tasks'.format(len(self.__tasks)))
-        for task in self.__tasks:
+        """Cancel all interface listeners."""
+        logging.info('canceling %d listener tasks', len(self._tasks))
+
+        for task in self._tasks:
             if task is not None:
                 logging.info('canceling listener task')
                 try:
                     task.cancel()
-                except:
-                    logging.warning('failed to cancel listener task: {}'.format(sys.exc_info()[0]))
+                except Exception:
+                    logging.warning('failed to cancel listener task: %s', sys.exc_info()[0])
 
                 try:
                     await task
                 except asyncio.CancelledError:
                     logging.debug('listener canceled')
 
-        self.__tasks = []
+        self._tasks = []
 
+    def generate_status_response(self):
+        """Get current statistics from handler/manager.
 
-    def generateStatusResponse(self):
-        return self.__handler.generateStatusResponse()
+        Returns:
+            Response: response with current statistics as a data
+        """
+        return self._handler.generate_status_response()

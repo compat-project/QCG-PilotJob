@@ -55,7 +55,7 @@ def test_slurmenv_simple_job():
     print('tmpdir: {}'.format(tmpdir))
 
     jobName = 'mdate'
-    jobs = [job.toDict() for job in [
+    jobs = [job.to_dict() for job in [
         Job(jobName,
             JobExecution(
                 'date',
@@ -112,7 +112,7 @@ def test_slurmenv_simple_script():
     print('tmpdir: {}'.format(tmpdir))
 
     jobName = 'mdate_script'
-    jobs = [job.toDict() for job in [
+    jobs = [job.to_dict() for job in [
         Job(jobName,
             JobExecution(
                 script = '/bin/date\n/bin/hostname\n',
@@ -171,7 +171,7 @@ def test_slurmenv_many_cores():
     jobName = 'hostname'
     jobwdir_base = 'hostname.sandbox'
     cores_num = 2
-    jobs = [job.toDict() for job in [
+    jobs = [job.to_dict() for job in [
         Job(jobName,
             JobExecution(
                 exec = 'mpirun',
@@ -244,7 +244,7 @@ def test_slurmenv_many_nodes():
     jobwdir_base = 'hostname.sandbox'
     cores_num = 1
     nodes_num = 2
-    jobs = [job.toDict() for job in [
+    jobs = [job.to_dict() for job in [
         Job(jobName,
             JobExecution(
                 exec = 'mpirun',
@@ -319,7 +319,7 @@ def test_slurmenv_many_nodes_no_cores():
     jobName = 'hostname'
     jobwdir_base = 'hostname.sandbox'
     nodes_num = 2
-    jobs = [job.toDict() for job in [
+    jobs = [job.to_dict() for job in [
         Job(jobName,
             JobExecution(
                 exec = 'mpirun',
@@ -394,7 +394,7 @@ def test_slurmenv_many_nodes_many_cores():
     jobwdir_base = 'hostname.sandbox'
     cores_num = resources.nodes[0].free
     nodes_num = resources.totalNodes
-    jobs = [job.toDict() for job in [
+    jobs = [job.to_dict() for job in [
         Job(jobName,
             JobExecution(
                 exec = 'mpirun',
@@ -476,7 +476,7 @@ def test_slurmenv_launcher_agents():
         if asyncio.get_event_loop() and asyncio.get_event_loop().is_closed():
             asyncio.set_event_loop(asyncio.new_event_loop())
 
-        LauncherExecutionJob.StartAgents(tmpdir, auxdir, resources.nodes, resources.binding)
+        LauncherExecutionJob.start_agents(tmpdir, auxdir, resources.nodes, resources.binding)
 
         try:
             assert len(LauncherExecutionJob.launcher.agents) == resources.totalNodes
@@ -496,10 +496,10 @@ def test_slurmenv_launcher_agents():
 
             # launching once more should raise exception
             with pytest.raises(Exception):
-                LauncherExecutionJob.StartAgents(tmpdir, auxdir, resources.nodes, resources.binding)
+                LauncherExecutionJob.start_agents(tmpdir, auxdir, resources.nodes, resources.binding)
 
         finally:
-            asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(LauncherExecutionJob.StopAgents()))
+            asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(LauncherExecutionJob.stop_agents()))
             time.sleep(1)
 
             tasks = asyncio.Task.all_tasks(asyncio.get_event_loop())

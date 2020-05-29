@@ -6,11 +6,12 @@ from datetime import datetime, timedelta
 from enum import Enum
 from qcg.appscheduler.resources import CRType
 
-from qcg.appscheduler.errors import JobAlreadyExist, IllegalResourceRequirements, \
-    IllegalJobDescription
+from qcg.appscheduler.errors import JobAlreadyExist, IllegalResourceRequirements, IllegalJobDescription
 
 
 class JobState(Enum):
+    """The job state."""
+
     QUEUED = 1
     SCHEDULED = 2
     EXECUTING = 3
@@ -19,14 +20,51 @@ class JobState(Enum):
     CANCELED = 6
     OMITTED = 7
 
-    def isFinished(self):
+    def is_finished(self):
+        """Check if job state is finished (final)."""
         return self in [JobState.SUCCEED, JobState.FAILED, JobState.CANCELED,
                         JobState.OMITTED]
 
 
 class JobExecution:
-    def __init__(self, exec=None, args=None, env=None, script=None, wd=None, \
-                 stdin=None, stdout=None, stderr=None, modules=None, venv=None, model=None):
+    """The execution element of job description.
+
+    Attributes:
+        exec (str, optional): path to the executable
+        args (list(str), optional): list of arguments
+        env (dict(str, str), optional): list of environment variables
+        stdin (str, optional): path to the standard input file
+        stdout (str, optional): path to the standard output file
+        stderr (str, optional): path to the standard error file
+        modules (list(str), optional): list of modules to load before job start
+        venv (str, optional): path to the virtual environment to initialize before job start
+        wd (str, optional): path to the job's working directory
+        model (str, optional): model of execution
+    """
+
+    def __init__(self, exec=None, args=None, env=None, script=None, stdin=None, stdout=None, stderr=None,
+                 modules=None, venv=None, wd=None, model=None):
+        """Initialize execution element of job description.
+
+        Args:
+            exec (str, optional): path to the executable
+            args (list(str), optional): list of arguments
+            env (dict(str, str), optional): list of environment variables
+            stdin (str, optional): path to the standard input file
+            stdout (str, optional): path to the standard output file
+            stderr (str, optional): path to the standard error file
+            modules (list(str), optional): list of modules to load before job start
+            venv (str, optional): path to the virtual environment to initialize before job start
+            wd (str, optional): path to the job's working directory
+            model (str, optional): model of execution
+
+        Raises:
+            IllegalJobDescription: when:
+                * nor ``exec`` or ``script`` are defined,
+                * ``script`` and one of ``exec``, ``args`` or ``env`` is both defined
+                * ``args`` is not a list
+                * ``env`` is not a dictionary
+        """
         if all((not exec, not script)):
             raise IllegalJobDescription("Job execution (exec or script) not defined")
 
@@ -44,7 +82,7 @@ class JobExecution:
         self.stderr = stderr
 
         if modules and not isinstance(modules, list):
-            self.modules = [ modules ]
+            self.modules = [modules]
         else:
             self.modules = modules
 
@@ -58,16 +96,21 @@ class JobExecution:
         if args is not None:
             if not isinstance(args, list):
                 raise IllegalJobDescription("Execution arguments must be an array")
-            self.args = args
+        self.args = args
 
         if env is not None:
             if not isinstance(env, dict):
                 raise IllegalJobDescription("Execution environment must be an dictionary")
-            self.env = env
+        self.env = env
 
         self.wd = wd
 
-    def toDict(self):
+    def to_dict(self):
+        """Serialize ``execution`` element to dictionary.
+
+        Returns:
+            dict(str): dictionary with ``execution`` element values
+        """
         result = {'exec': self.exec, 'args': self.args, 'env': self.env, 'script': self.script}
         if self.wd is not None:
             result['wd'] = self.wd
@@ -92,15 +135,35 @@ class JobExecution:
 
         return result
 
-    def toJSON(self):
-        return json.dumps(self.toDict(), indent=2)
+    def to_json(self):
+        """Serialize ``execution`` element to JSON description.
+
+        Returns:
+            JSON description of ``execution`` element.
+        """
+        return json.dumps(self.to_dict(), indent=2)
 
 
 class ResourceSize:
+    """The resources size element used in job description when specified the number of required cores or nodes."""
+
     def __init__(self, exact=None, min=None, max=None, scheduler=None):
+        """Initialize resource size.
+
+        Args:
+            exact (int, optional): exact number of resources
+            min (int, optional): minimum number of resources
+            max (int, optional): maximum number of resources
+            scheduler (str, optional): the iteration resources schedulers name
+
+        Raises:
+            IllegalResourceRequirements raised when:
+                * ``exact`` number and one of ``min``, ``max`` or ``scheduler`` is both specified
+                * nor ``exact`` or ``min`` or ``max`` is not specified
+                * ``max`` and ``min`` is specified and ``min`` > ``max``
+        """
         if exact is not None and (min is not None or max is not None or scheduler is not None):
-            raise IllegalResourceRequirements(
-                "Exact number of resources defined with min/max/scheduler")
+            raise IllegalResourceRequirements("Exact number of resources defined with min/max/scheduler")
 
         if max is not None and min is not None and min > max:
             raise IllegalResourceRequirements("Maximum number greater than minimal")
@@ -111,94 +174,132 @@ class ResourceSize:
         if (exact is not None and exact < 0) or (min is not None and min < 0) or (max is not None and max < 0):
             raise IllegalResourceRequirements("Neative number of resources")
 
-        self.__exact = exact
-        self.__min = min
-        self.__max = max
-        self.__scheduler = scheduler
+        self._exact = exact
+        self._min = min
+        self._max = max
+        self._scheduler = scheduler
 
     @property
     def exact(self):
-        return self.__exact
+        """ int: exact number of resources."""
+        return self._exact
 
     @property
     def min(self):
-        return self.__min
+        """int: minimum number of resources"""
+        return self._min
 
     @property
     def max(self):
-        return self.__max
+        """int: maximum number of resources"""
+        return self._max
 
     @property
     def scheduler(self):
-        return self.__scheduler
+        """str: iteration resource scheduler name"""
+        return self._scheduler
 
     @property
     def range(self):
-        return (self.__min, self.__max)
+        """(int, int): tuple with resources range"""
+        return self._min, self._max
 
-    def isExact(self):
-        return self.__exact is not None
+    def is_exact(self):
+        """Check if resource size is defined as exact number.
 
-    def toDict(self):
+        Returns:
+            True: if resource size is defined as exact number
+            False: if reosurce size is defined as range
+        """
+        return self._exact is not None
+
+    def to_dict(self):
+        """Serialize resource size to dictionary
+
+        Returns:
+            dict(str): dictionary with resource size
+        """
         result = {}
 
-        if self.__exact is not None:
-            result['exact'] = self.__exact
+        if self._exact is not None:
+            result['exact'] = self._exact
 
-        if self.__min is not None:
-            result['min'] = self.__min
+        if self._min is not None:
+            result['min'] = self._min
 
-        if self.__max is not None:
-            result['max'] = self.__max
+        if self._max is not None:
+            result['max'] = self._max
 
-        if self.__scheduler is not None:
-            result['scheduler'] = self.__scheduler
+        if self._scheduler is not None:
+            result['scheduler'] = self._scheduler
 
         return result
 
-    def toJSON(self):
-        return json.dumps(self.toDict())
+    def to_json(self):
+        """Serialize resource size to JSON description.
+
+        Returns:
+         JSON description of resource size element.
+        """
+        return json.dumps(self.to_dict())
 
 
 class JobResources:
-    __wtRegex = re.compile(r'((?P<hours>\d+?)h)?((?P<minutes>\d+?)m)?((?P<seconds>\d+?)s)?')
+    """The ```resources``` element of job description."""
 
-    def __parseWt(self, wt):
-        parts = None
+    _wt_regex = re.compile(r'((?P<hours>\d+?)h)?((?P<minutes>\d+?)m)?((?P<seconds>\d+?)s)?')
 
-        parts = self.__wtRegex.match(wt)
+    def _parse_wt(self, wt):
+        """Parse wall time description into timedelta structure.
 
+        Args:
+            wt (str): the wall time description as a string
+
+        Returns:
+            timedelta: parsed wall time description
+
+        Raises:
+            IllegalResourceRequirements: when wall time description has wrong format.
+        """
+        parts = self._wt_regex.match(wt)
         if not parts:
             raise IllegalResourceRequirements("Wrong wall time format")
 
         try:
             parts = parts.groupdict()
-            timeParams = {}
+            time_params = {}
             for name, param in parts.items():
                 if param:
-                    timeParams[name] = int(param)
+                    time_params[name] = int(param)
 
-            td = timedelta(**timeParams)
+            td = timedelta(**time_params)
             if td.total_seconds() == 0:
                 raise IllegalResourceRequirements("Wall time must be greater than 0")
 
             return td
         except IllegalResourceRequirements:
             raise
-        except:
+        except Exception:
             raise IllegalResourceRequirements("Wrong wall time format")
 
+    @staticmethod
+    def _validate_crs(crs):
+        """Validate consumable resources.
 
-    def __validateCrs(self, crs):
-        """
-        Validate consumable resources.
         Check if crs are known and well defined.
 
         Args:
-            crs (dict(string, int)) - map with consumable resources.
+            crs (dict(string, int)): map with consumable resources.
 
         Returns:
-            final map of crs
+            dict: final map of crs
+
+        Raises:
+            IllegalResourceRequirements: when
+                * unknown consumable resources
+                * double definition of consumable resources
+                * number of consumable resources is not defined as integer
+                * number of consumable resources is less than 1
         """
         if crs:
             # already used crs
@@ -208,24 +309,24 @@ class JobResources:
                 if not name.upper() in CRType.__members__:
                     raise IllegalResourceRequirements("Unknown consumable resource {}".format(name))
 
-                crType = CRType[name.upper()]
-                if crType in result:
+                cr_type = CRType[name.upper()]
+                if cr_type in result:
                     raise IllegalResourceRequirements("Consumable resource {} already defined".format(name))
 
                 if not isinstance(count, int):
-                    raise IllegalResourceRequirements("Consumable resource {} count not a number {}".format(name, type(count).__name__))
+                    raise IllegalResourceRequirements("Consumable resource {} count not a number {}".format(
+                        name, type(count).__name__))
 
                 if count < 1:
-                    raise IllegalResourceRequirements("Number of consumable resource {} must be greater than 0".format(name))
+                    raise IllegalResourceRequirements("Number of consumable resource {} must be greater than 0".format(
+                        name))
 
-                result[crType] = count
+                result[cr_type] = count
 
         return result
 
-
     def __init__(self, numCores=None, numNodes=None, wt=None, nodeCrs=None):
-        """
-        Job resource requirements.
+        """Initialize ``resources`` element of job description.
 
         * if numNodes > 1, then numCores relates to each of the node, so total number of
                 required cores will be a product of numNodes and numCores
@@ -236,6 +337,12 @@ class JobResources:
             numNodes - number of nodes, either as exact number of as a range
             wt - wall time
             nodeCrs (dict(string,int)) - each node consumable resources
+
+        Raises:
+            IlleglResourceRequirements: raised when:
+                * ``numCores`` and ``numNodes`` not defined
+                * ``numCores`` or ``numNodes`` not instance of either ``int``, ``dict`` or ResourceSize
+                * wrong consumable resources definition
         """
         if numCores is None and numNodes is None:
             raise IllegalResourceRequirements("No resources defined")
@@ -257,102 +364,176 @@ class JobResources:
                 raise IllegalJobDescription("Wrong definition of number of nodes (%s)" % (type(numNodes).__name__))
 
         if wt is not None:
-            self.wt = self.__parseWt(wt)
+            self.wt = self._parse_wt(wt)
         else:
             self.wt = None
 
-        self.nodeCrs = None
-        if not nodeCrs is None:
+        self.crs = None
+        if nodeCrs is not None:
             if not isinstance(nodeCrs, dict):
-                raise IllegalJobDescription("Wrong definition of Consumable Resources {} (must be a dictionary)".format(type(nodeCrs).__name__))
+                raise IllegalJobDescription("Wrong definition of Consumable Resources {} (must be a dictionary)".format(
+                    type(nodeCrs).__name__))
 
-            self.nodeCrs = self.__validateCrs(nodeCrs)
+            self.crs = JobResources._validate_crs(nodeCrs)
 
-        self.numCores = numCores
-        self.numNodes = numNodes
+        self.cores = numCores
+        self.nodes = numNodes
 
-    def hasNodes(self):
-        return self.numNodes is not None
+    @property
+    def has_nodes(self):
+        """bool: true if ``resources`` element of job description contains number of nodes definition"""
+        return self.nodes is not None
 
-    def hasCores(self):
-        return self.numCores is not None
+    @property
+    def has_cores(self):
+        """bool: true if ``resources`` element of job description contains number of cores definition"""
+        return self.cores is not None
 
-    def hasNodeCrs(self):
-        return self.nodeCrs is not None
+    @property
+    def has_crs(self):
+        """bool: true if ``resources`` element of job description contains consumable resources definition"""
+        return self.crs is not None
 
     @property
     def cores(self):
-        return self.numCores
+        """ResourceSize: return ``numCores`` definition of ``resources`` element."""
+        return self.cores
 
     @property
     def nodes(self):
-        return self.numNodes
+        """ResourceSize: return ``numNodes`` definition of ``resources`` element."""
+        return self.nodes
 
     @property
     def crs(self):
-        return self.nodeCrs
+        """ResourceSize: return ``nodeCrs`` definition of ``resources`` element."""
+        return self.crs
 
-    def getMinimumNumberOfCores(self):
-        minCores = 1
-        if self.hasCores():
-            if self.cores.isExact():
-                minCores = self.cores.exact
+    def get_min_num_cores(self):
+        """Return minimum number of cores the job can be run.
+
+        Returns:
+            int: minimum number of required cores for the job.
+        """
+        min_cores = 1
+        if self.has_cores:
+            if self.cores.is_exact():
+                min_cores = self.cores.exact
             else:
-                minCores = self.cores.range[0]
+                min_cores = self.cores.range[0]
 
-        if self.hasNodes():
-            if self.nodes.isExact():
-                minCores = minCores * self.nodes.exact
+        if self.has_nodes:
+            if self.nodes.is_exact():
+                min_cores = min_cores * self.nodes.exact
             else:
-                minCores = minCores * self.nodes.range[0]
+                min_cores = min_cores * self.nodes.range[0]
 
-        return minCores
+        return min_cores
 
-    def toDict(self):
+    def to_dict(self):
+        """Serialize ``resource`` element of job description to dictionary
+
+        Returns:
+            dict(str): dictionary with ``resources`` element of job description
+        """
         result = {}
-        if self.hasCores():
-            result['numCores'] = self.numCores.toDict()
+        if self.has_cores:
+            result['numCores'] = self.cores.to_dict()
 
-        if self.hasNodes():
-            result['numNodes'] = self.numNodes.toDict()
+        if self.has_nodes:
+            result['numNodes'] = self.nodes.to_dict()
 
-        if self.hasNodeCrs():
-            result['nodeCrs'] = { crtype.name:value for (crtype,value) in self.nodeCrs.items() }
+        if self.has_crs:
+            result['nodeCrs'] = {crtype.name: value for (crtype, value) in self.crs.items()}
 
         return result
 
-    def toJSON(self):
-        return json.dumps(self.toDict(), indent=2)
+    def to_json(self):
+        """Serialize ``resource`` element of job description to JSON description.
+
+        Returns:
+            JSON description of ``resource`` element of job description.
+        """
+        return json.dumps(self.to_dict(), indent=2)
 
 
 class JobDependencies:
-    def __validateJobList(self, jobList, errorMessage):
-        if not isinstance(jobList, list):
-            raise IllegalJobDescription(errorMessage)
+    """Runtime dependencies of job."""
 
-        for jobName in jobList:
-            if not isinstance(jobName, str):
-                raise IllegalJobDescription(errorMessage)
+    @staticmethod
+    def _validate_job_list(job_list, err_msg):
+        """Validate list of job names.
+
+        Validate if given argument is a list of strings.
+
+        Args:
+            job_list (list(str)): job names list
+            err_msg (str): error message to be places in IllegalJobDescription
+
+        Raises:
+            IllegalJobDescription: if ``job_list`` is not a list of strings
+        """
+        if not isinstance(job_list, list):
+            raise IllegalJobDescription(err_msg)
+
+        for jobname in job_list:
+            if not isinstance(jobname, str):
+                raise IllegalJobDescription(err_msg)
 
     def __init__(self, after=None):
+        """Initialize runtime dependencies of a job.
+
+        Args:
+            after - list of jobs that must finish before job can be started
+
+        Raises:
+            IllegalJobDescription: when list of jobs has a wrong format.
+        """
         self.after = []
 
         if after is not None:
-            self.__validateJobList(after, "Dependency task's list must be an array of job names")
+            JobDependencies._validate_job_list(after, "Dependency task's list must be an array of job names")
             self.after = after
 
-    def hasDependencies(self):
+    @property
+    def has_dependencies(self):
+        """bool: true if job contains runtime dependencies"""
         return len(self.after) > 0
 
-    def toDict(self):
+    def to_dict(self):
+        """Serialize job's runtime dependencies
+
+        Returns:
+            dict(str): dictionary with job's runtime dependencies
+        """
         return self.__dict__
 
-    def toJSON(self):
-        return json.dumps(self.toDict(), indent=2)
+    def to_json(self):
+        """Serialize job's runtime dependencies to JSON description.
+
+        Returns:
+            JSON description of job's runtime dependencies
+        """
+        return json.dumps(self.to_dict(), indent=2)
 
 
 class JobIteration:
+    """The ``iteration`` element of job description."""
+
     def __init__(self, start=None, stop=None):
+        """Initialize ``iteration`` element of job description.
+
+        If ``start`` is not defined, the value 0 is assumed.
+
+        Args:
+            start (int): starting index of an iteration
+            stop (int): stop index of an iteration - the last value of job's iteration will be ``stop`` - 1
+
+        Raises:
+            IllegalJobDescription: raised when:
+                * ``stop`` is not defined
+                * ``start`` is greater or equal ``stop``
+        """
         if stop is None:
             raise IllegalJobDescription("Missing stop iteration value")
 
@@ -365,95 +546,205 @@ class JobIteration:
         self.start = start
         self.stop = stop
 
-    def inRange(self, index):
-        return index >= self.start and index < self.stop
+    def in_range(self, index):
+        """Check if given index is in range of job's iterations.
+
+        Args:
+            index (int): index to check
+
+        Returns:
+            bool: true if index is in range
+        """
+        return self.stop > index >= self.start
 
     def iterations(self):
+        """Return number of iterations of a job.
+
+        Returns:
+            int: number of iterations
+        """
         return self.stop - self.start
 
-    def toDict(self):
+    def to_dict(self):
+        """Serialize ``iteration`` element of job description
+
+        Returns:
+            dict(str): dictionary with ``iteration`` element of job description
+        """
         return self.__dict__
 
-    def toJSON(self):
-        return json.dumps(self.toDict(), indent=2)
+    def to_json(self):
+        """Serialize ``iteration`` element of job description to JSON description.
+
+        Returns:
+            JSON description of ``iteration`` element of job description
+        """
+        return json.dumps(self.to_dict(), indent=2)
 
     def __str__(self):
+        """Return string representation of ``iteration`` element of job description.
+
+        Returns:
+            str: string representation of ``iteration`` element of job description
+        """
         return "{}-{}".format(self.start, self.stop)
 
 
 class SubJobState:
+    """Represent state of execution of single job's iteration."""
+
     def __init__(self):
-        self.__state = JobState.QUEUED
-        self.__history = []
-        self.__messages = None
-        self.__runtime = {}
+        """Initialize state of execution of single job's iteration.
 
-    def getState(self):
-        return self.__state
+        The initial state is set to QUEUED and all other attributes are initialized as empty elements.
+        """
+        self._state = JobState.QUEUED
+        self._history = []
+        self._messages = None
+        self._runtime = {}
 
-    def setState(self, state, errorMsg=None):
+    def state(self):
+        """Return current status of job's iteration.
+
+        Returns:
+            JobState: current status of job's iteration
+        """
+        return self._state
+
+    def set_state(self, state, err_msg=None):
+        """Set current state of job's iteration.
+
+        Args:
+            state (JobState): the new state of job's iteration
+            err_msg (str, optional): the error message to record
+        """
         assert isinstance(state, JobState), "Wrong state type"
 
-        self.__state = state
-        self.__history.append((state, datetime.now()))
-        if errorMsg:
-            self.appendMessage(errorMsg)
+        self._state = state
+        self._history.append((state, datetime.now()))
+        if err_msg:
+            self.append_message(err_msg)
 
-    def appendRuntime(self, data):
-        self.__runtime.update(data)
+    def append_runtime(self, data):
+        """Record job's iteration runtime statistics.
 
-    def getHistory(self):
-        return self.__history
+        Args:
+            data (dict): the data to append to job's iteration runtime statistics
+        """
+        self._runtime.update(data)
 
-    def getMessages(self):
-        return self.__messages
+    def history(self):
+        """Return job's iteration state change history.
 
-    def getRuntime(self):
-        return self.__runtime
+        Returns:
+            list(JobState, DateTime): job's iteration state change history.
+        """
+        return self._history
 
-    def appendMessage(self, msg):
-        if self.__messages is None:
-            self.__messages = msg
+    def messages(self):
+        """Return job's iteration recorded error messages.
+
+        Returns:
+            list(str): recorded job's iteration error messages.
+        """
+        return self._messages
+
+    def runtime(self):
+        """Return job's iteration runtime statistics.
+
+        Returns:
+            dict: job's iteration runtime statistics
+        """
+        return self._runtime
+
+    def append_message(self, msg):
+        """Record job's iteration error message.
+
+        Args:
+            msg (str): error message to record
+        """
+        if self._messages is None:
+            self._messages = msg
         else:
-            self.__messages = '\n'.join([self.__messages, msg])
+            self._messages = '\n'.join([self._messages, msg])
 
 
 class Job:
+    """Job description and state.
+
+    Attributes:
+        _name (str): job name
+        _execution (JobExecution): execution description
+        _resources (JobResources): resources description
+        _iteration (JobIteration): iteration description
+        dependencies (JobDependencies): runtime dependencies description
+        attributes (dict): additional attributes
+        _subjobs (list(SubJobState)): list of job's iteration states - only if ``iteration`` element defined, elements
+            at positions 'job iteration' - 'iteration start'
+        _subjobs_not_finished (int): number of not finished already iterations - only if ``iteration`` element defined
+        _subjobs_failed (int): number of already failed iterations - only if ``iteration`` element defined
+        _history (list(JobState, DateTime)): state change history
+        _state (JobState): current state
+        _messages: recorded error messages
+        _queue_pos: current job's position in scheduling queue
+     """
+
     @staticmethod
     def validate_jobname(jobname):
-        return not ':' in jobname
+        """Check if given name is valid for job's name.
+
+        Args:
+            jobname (str): name to validate
+
+        Returns:
+            bool: true if name is valid
+        """
+        return ':' not in jobname
 
     def __init__(self, name, execution, resources, iteration=None, dependencies=None, attributes=None):
+        """Initialize job.
+
+        Args:
+            name (str): job name
+            execution (JobExecution or dict): ``execution`` element of job's description
+            resources (JobResources or dict): ``resources`` element of job's description
+            iteration (JobIteration or dict, optional): ``iteration`` element of job's description
+            dependencies (JobDependencies or dict, optional): ``dependencies`` element of job's description
+            attributes (dict, optional): additional job's attributes used by partition manager
+
+        Raises:
+            IllegalJobDescription: raised in case of wrong elements of job's description
+        """
         if name is None:
             raise IllegalJobDescription("Job name not defined")
 
         if not Job.validate_jobname(name):
             raise IllegalJobDescription("Invalid job name {}".format(name))
 
-        self.__name = name
+        self._name = name
 
         if isinstance(execution, JobExecution):
-            self.__execution = execution
+            self._execution = execution
         elif isinstance(execution, dict):
-            self.__execution = JobExecution(**execution)
+            self._execution = JobExecution(**execution)
         else:
             raise IllegalJobDescription("Job execution not defined or wrong type")
 
         if isinstance(resources, JobResources):
-            self.__resources = resources
+            self._resources = resources
         elif isinstance(resources, dict):
-            self.__resources = JobResources(**resources)
+            self._resources = JobResources(**resources)
         else:
             raise IllegalJobDescription("Job resources not defined or wrong type")
 
         if isinstance(iteration, JobIteration) or iteration is None:
-            self.__iteration = iteration
+            self._iteration = iteration
         elif isinstance(iteration, dict):
             try:
-                self.__iteration = JobIteration(**iteration)
+                self._iteration = JobIteration(**iteration)
             except IllegalJobDescription:
                 raise
-            except:
+            except Exception:
                 raise IllegalJobDescription("Job iteration wrong specification")
         else:
             raise IllegalJobDescription("Job iteration wrong type")
@@ -465,203 +756,361 @@ class Job:
                 self.dependencies = JobDependencies(**dependencies)
             except IllegalJobDescription:
                 raise
-            except:
+            except Exception:
                 raise IllegalJobDescription("Job dependencies wrong specification")
         else:
             raise IllegalJobDescription("Job dependencies wrong type")
 
-        if not attributes is None and not isinstance(attributes, dict):
+        if attributes is not None and not isinstance(attributes, dict):
             raise IllegalJobDescription("Job attributes must be dictionary")
         self.attributes = attributes
 
-        if self.__iteration:
-            self.__subjobs = [ SubJobState() for i in range(self.__iteration.start, self.__iteration.stop)]
-            self.__subjobs_notFinished = self.__iteration.iterations()
-            self.__subjobs_failed = 0
-        self.__history = []
+        if self._iteration:
+            self._subjobs = [SubJobState() for i in range(self._iteration.start, self._iteration.stop)]
+            self._subjobs_not_finished = self._iteration.iterations()
+            self._subjobs_failed = 0
+        self._history = []
 
-        self.__runtime = {}
+        self._runtime = {}
 
         # history must be initialized before
-        self.__state = None
-        self.setState(JobState.QUEUED)
+        self._state = None
+        self.set_state(JobState.QUEUED)
 
-        self.__messages = None
+        self._messages = None
 
         # position in scheduling queue - None if not set
-        self.__queuePos = None
+        self._queue_pos = None
 
-    @property
-    def name(self):
-        return self.__name
+    def get_name(self, iteration=None):
+        """Return job's or job's iteration name.
 
-    def getName(self, iteration=None):
-        return self.__name if iteration is None else '{}:{}'.format(self.__name, iteration)
+        Args:
+            iteration (int, optional): if defined the iteration's name is returned
+
+        Returns:
+            str: job's or job's iteration's name
+        """
+        return self._name if iteration is None else '{}:{}'.format(self._name, iteration)
 
     @property
     def execution(self):
-        return self.__execution
+        """JobExecution: the ``execution`` element of job description"""
+        return self._execution
 
     @property
     def resources(self):
-        return self.__resources
+        """JobExecution: the ``resources`` element of job description"""
+        return self._resources
 
-    def getSubjobs(self):
-        return self.__subjobs
+    def get_not_finished_iterations(self):
+        """Return number of currently not finished iterations.
 
-    def getSubjobsNotfinished(self):
-        return self.__subjobs_notFinished
+        This method is valid only for iteration jobs.
 
-    def getSubjobsFailed(self):
-        return self.__subjobs_failed
-
-    def getHistory(self, iteration=None):
-        if iteration is None:
-            return self.__history
-        else:
-            return self.__getSubJob(iteration).getHistory()
-
-    def getMessages(self, iteration=None):
-        if iteration is None:
-            return self.__messages
-        else:
-            return self.__getSubJob(iteration).getMessages()
-
-    def getRuntime(self, iteration=None):
-        if iteration is None:
-            return self.__runtime
-        else:
-            return self.__getSubJob(iteration).getRuntime()
-
-    def isIterative(self):
-        return self.__iteration is not None
-
-    def getIteration(self):
-        return self.__iteration
-
-    def getState(self, iteration=None):
-        if iteration is None:
-            return self.__state
-        else:
-            return self.__getSubJob(iteration).getState()
-
-    def getStateStr(self, iteration=None):
-        return self.getState(iteration).name
-
-    def __getSubJob(self, iteration):
-        return self.__subjobs[iteration - self.__iteration.start]
-
-    def setState(self, state, iteration=None, errorMsg=None):
+        Returns:
+            int: number of not finished iterations
         """
-        Change job/iteration state.
+        return self._subjobs_not_finished
 
-        :param state: the new state
-        :param iteration: iteration index
-        :param errorMsg: optional error message description
+    def get_failed_iterations(self):
+        """Return number of already failed iterations.
 
-        :return: True if job iteration status change triggered job status change (for example the last iteration job
-          finished, so the whole job also finished)
-                 False - the parent job state has not been changed
+        This method is valid only for iteration jobs.
+
+        Returns:
+            int: number of failed iterations
+        """
+        return self._subjobs_failed
+
+    def history(self, iteration=None):
+        """Return job's or job's iteration state change history.
+
+        Args:
+            iteration (int, optional): if defined the iteration's state change history is returned
+
+        Returns:
+            list(JobState, DateTime): job's or job's iteration state change history.
+        """
+        if iteration is None:
+            return self._history
+
+        return self._get_subjob(iteration).history()
+
+    def messages(self, iteration=None):
+        """Return job's or job's iteration recorded error messages.
+
+        Args:
+            iteration (int, optional): if defined the iteration's recorded error messages is returned
+
+        Returns:
+            list(str): recorded job's or job's iteration error messages.
+        """
+        if iteration is None:
+            return self._messages
+
+        return self._get_subjob(iteration).messages()
+
+    def runtime(self, iteration=None):
+        """Return job's or job's iteration runtime statistics.
+
+        Args:
+            iteration (int, optional): if defined the iteration's runtime statistics is returned
+
+        Returns:
+            dict: job's or job's iteration runtime statistics
+        """
+        if iteration is None:
+            return self._runtime
+
+        return self._get_subjob(iteration).runtime()
+
+    @property
+    def has_iterations(self):
+        """bool: true if job has iterations"""
+        return self._iteration is not None
+
+    @property
+    def iteration(self):
+        """JobIteration: ``iteration`` element of job description"""
+        return self._iteration
+
+    def state(self, iteration=None):
+        """Return job's or job's iteration current state.
+
+        Args:
+           iteration (int, optional): if defined the iteration's state is returned
+
+        Returns:
+           JobState: job's or job's iteration current state
+        """
+        if iteration is None:
+            return self._state
+
+        return self._get_subjob(iteration).state()
+
+    def str_state(self, iteration=None):
+        """Return job's or job's iteration current state as string.
+
+        Args:
+           iteration (int, optional): if defined the iteration's state is returned
+
+        Returns:
+           JobState: job's or job's iteration current state as string
+        """
+        return self.state(iteration).name
+
+    def _get_subjob(self, iteration):
+        """Return job's iteration state object for given iteration.
+
+        Args:
+            iteration (int): the iteration index
+
+        Returns:
+            SubJobState: job's iteration state object
+        """
+        return self._subjobs[iteration - self._iteration.start]
+
+    def set_state(self, state, iteration=None, err_msg=None):
+        """Set current job's or job's iteration state.
+
+        Args:
+            state (JobState): new job's or job's iteration state
+            iteration (int, optional): job's iteration index if the iteration state should be set
+            err_msg (str, optional): the optional error message to record
+
+        Returns:
+            JobState: the job's finish state if job's iteration status change triggered job status change (for example
+                the last iteration job finished, so the whole job also finished), or None if job's as a whole still
+                not finished
         """
         assert isinstance(state, JobState), "Wrong state type"
 
-        logging.debug('job {} iteration {} status changed to {} (final ? {})'.format(self.__name, iteration, state.name,
-                                                                             state.isFinished()))
+        logging.debug('job %s iteration %s status changed to %s (final ? %s)', self._name, iteration, state.name,
+                      state.is_finished())
 
-        if not iteration is None:
-            self.__getSubJob(iteration).setState(state, errorMsg)
+        if iteration is not None:
+            self._get_subjob(iteration).set_state(state, err_msg)
 
-            if state.isFinished():
-                self.__subjobs_notFinished = self.__subjobs_notFinished - 1
+            if state.is_finished():
+                self._subjobs_not_finished = self._subjobs_not_finished - 1
 
-                if state == JobState.FAILED or state == JobState.OMITTED or state == JobState.CANCELED:
-                    self.__subjobs_failed += 1
+                if state in [JobState.FAILED, JobState.OMITTED, JobState.CANCELED]:
+                    self._subjobs_failed += 1
 
-                logging.debug('currently not finished subjobs {}, failed {}'.format(self.__subjobs_notFinished,
-                                                                                    self.__subjobs_failed))
+                logging.debug('currently not finished subjobs %s, failed %s', self._subjobs_not_finished,
+                              self._subjobs_failed)
 
-                if self.__subjobs_notFinished == 0 and not self.__state.isFinished():
+                if self._subjobs_not_finished == 0 and not self._state.is_finished():
                     # all subjobs finished - change whole job state
-                    final_state = JobState.SUCCEED if self.__subjobs_failed == 0 else JobState.FAILED
-                    self.setState(final_state)
+                    final_state = JobState.SUCCEED if self._subjobs_failed == 0 else JobState.FAILED
+                    self.set_state(final_state)
                     return final_state
         else:
-            self.__state = state
-            self.__history.append((state, datetime.now()))
-            if errorMsg:
-                self.appendMessage(errorMsg)
+            self._state = state
+            self._history.append((state, datetime.now()))
+            if err_msg:
+                self.append_message(err_msg)
 
         return None
 
-    def hasDependencies(self):
-            return self.dependencies is not None and self.dependencies.hasDependencies()
+    @property
+    def has_dependencies(self):
+        """bool: true if job has runtime dependencies"""
+        return self.dependencies is not None and self.dependencies.has_dependencies
 
-    def appendMessage(self, msg):
-        if self.__messages is None:
-            self.__messages = msg
+    def append_message(self, msg):
+        """Record job's error message.
+
+        Args:
+            msg (str): error message to record
+        """
+        if self._messages is None:
+            self._messages = msg
         else:
-            self.__messages = '\n'.join([self.__messages, msg])
+            self._messages = '\n'.join([self._messages, msg])
 
-    def getQueuePos(self):
-        return self.__queuePos
+    def queue_pos(self):
+        """Return current position of a job in scheduling queue
 
-    def setQueuePos(self, pos):
-        self.__queuePos = pos
+        Returns:
+            int: current position of a job in scheduling queue
+        """
+        return self._queue_pos
 
-    def clearQueuePos(self):
-        self.__queuePos = None
+    def set_queue_pos(self, pos):
+        """Set current position of a job in scheduling queue.
 
-    def appendRuntime(self, data, iteration):
-        if not iteration is None:
-            self.__getSubJob(iteration).appendRuntime(data)
+        Args:
+            pos (int): current position of a job in scheduling queue
+        """
+        self._queue_pos = pos
+
+    def clear_queue_pos(self):
+        """Reset current position of a job in scheduling queue."""
+        self._queue_pos = None
+
+    def append_runtime(self, data, iteration):
+        """Record job's or job's iteration runtime statistics.
+
+        Args:
+            data (dict): the data to append to job's or job's iteration runtime statistics
+            iteration (int, optional): if defined the iteration's runtime statistics will be updated
+
+        Args:
+            data (dict): the data to append to job's or job's iteration runtime statistics
+        """
+        if iteration is not None:
+            self._get_subjob(iteration).append_runtime(data)
         else:
-            self.__runtime.update(data)
+            self._runtime.update(data)
 
-    def toDict(self):
+    def to_dict(self):
+        """Serialize job's description to dictionary.
+
+        Returns:
+            dict(str): dictionary with job description
+        """
         result = {
-            'name': self.__name,
-            'execution': self.__execution.toDict(),
-            'resources': self.__resources.toDict()}
+            'name': self._name,
+            'execution': self._execution.to_dict(),
+            'resources': self._resources.to_dict()}
 
-        if not self.__iteration is None:
-            result['iteration'] = self.__iteration.toDict()
+        if self._iteration is not None:
+            result['iteration'] = self._iteration.to_dict()
 
-        if not self.dependencies is None:
-            result['dependencies'] = self.dependencies.toDict()
+        if self.dependencies is not None:
+            result['dependencies'] = self.dependencies.to_dict()
 
-        if not self.attributes is None:
+        if self.attributes is not None:
             result['attributes'] = self.attributes
 
         return result
 
-    def toJSON(self):
-        return json.dumps(self.toDict(), indent=2)
+    def to_json(self):
+        """Serialize job description to JSON format.
+
+        Returns:
+            JSON of job's description
+        """
+        return json.dumps(self.to_dict(), indent=2)
 
 
 class JobList:
-    def __init__(self):
-        self.__jmap = {}
+    """The list of all submited jobs.
 
-    def parse_jobname(self, jobname):
+    Attributes:
+        _jmap (dict(str,Job)): dictionary with all submited jobs with name as key
+    """
+
+    def __init__(self):
+        """Initialize the list."""
+        self._jmap = {}
+
+    @staticmethod
+    def parse_jobname(jobname):
+        """Split given name into job name and iteration.
+
+        Args:
+            jobname (str): the name to parse
+
+        Returns:
+            name, iteration: tuple with job name and iteration, if given job name didn't contain iteration index, the
+              second value will be None
+        """
         parts = jobname.split(':', 1)
         return parts[0], int(parts[1]) if len(parts) > 1 else None
 
     def add(self, job):
+        """Add a new job.
+
+        Args:
+            job (Job): job to add to the list
+
+        Raises:
+            JobAlreadyExist: when job with given name already exists in list
+        """
         assert isinstance(job, Job), "Wrong job type '%s'" % (type(job).__name__)
 
-        if self.exist(job.name):
-            raise JobAlreadyExist(job.name)
+        if self.exist(job.get_name()):
+            raise JobAlreadyExist(job.get_name())
 
-        self.__jmap[job.name] = job
+        self._jmap[job.get_name()] = job
 
-    def exist(self, jobName):
-        return jobName in self.__jmap
+    def exist(self, jobname):
+        """Check if job with given name is in list.
 
-    def get(self, jobName):
-        return self.__jmap.get(jobName, None)
+        Args:
+            jobname (str): job name to check
+
+        Returns:
+            bool: true if job with given name is already in list
+        """
+        return jobname in self._jmap
+
+    def get(self, jobname):
+        """Return job with given name.
+
+        Args:
+            jobname (str): job name
+
+        Returns:
+            Job: job from the list or None if not such job has been added.
+        """
+        return self._jmap.get(jobname, None)
 
     def jobs(self):
-        return self.__jmap.keys()
+        """Return all job names in the list.
 
-    def remove(self, jobName):
-        del self.__jmap[jobName]
+        Returns:
+            set-like object with job names
+        """
+        return self._jmap.keys()
+
+    def remove(self, jobname):
+        """Remove job with given name from list.
+
+        Args:
+            jobname (str): job's name to remove from list
+        """
+        del self._jmap[jobname]
