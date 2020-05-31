@@ -175,7 +175,7 @@ class Receiver:
                 if valid_response.is_error:
                     logging.debug('validate request failed: result(%s), msg(%s), request(%s)',
                                   str(valid_response.result), str(valid_response.msg), str(valid_response.request))
-                    response = Response.Error(valid_response.msg)
+                    response = Response.error(valid_response.msg)
                 else:
                     response = await self._handle_request(iface, valid_response.request)
 
@@ -203,7 +203,7 @@ class Receiver:
         """
         if request.__class__ not in self._handlers:
             logging.error('Failed to handle request: unknown request class "%s"', request.__class__.__name__)
-            return Response.Error('Unknown request type "{}"'.format(request.__class__.__name__))
+            return Response.error('Unknown request type "{}"'.format(request.__class__.__name__))
 
         try:
             logging.info('Handling %s request from %s interface',
@@ -212,7 +212,7 @@ class Receiver:
             return await self._handlers[request.__class__](iface, request)
         except Exception:
             logging.exception('Failed to process request: %s', sys.exc_info()[0])
-            return Response.Error('Failed to process request: {}'.format(sys.exc_info()[0]))
+            return Response.error('Failed to process request: {}'.format(sys.exc_info()[0]))
 
     @staticmethod
     def _validate(request):

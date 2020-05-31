@@ -86,7 +86,7 @@ def test_scheduler_allocate_job_gpus():
 
     assert all((len(r.nodes) == len(nCores), [r.nodes[i] == "n.{}".format(i) for i in range(len(nCores))]))
     assert all([r.nodes[i].total == nCores[i] and r.nodes[i].used == 0 and r.nodes[i].free == nCores[i] for i in range(len(nCores))])
-    assert all([len(r.nodes[i].crs) == 1 and CRType.GPU in r.nodes[i].crs and r.nodes[i].crs[CRType.GPU].totalCount == nGpus[i] and \
+    assert all([len(r.nodes[i].crs) == 1 and CRType.GPU in r.nodes[i].crs and r.nodes[i].crs[CRType.GPU].total_count == nGpus[i] and \
             r.nodes[i].crs[CRType.GPU].used == 0 and r.nodes[i].crs[CRType.GPU].available == nGpus[i] for i in range(len(nCores))])
     assert all((r.total_cores == sum(nCores), r.free_cores == sum(nCores), r.used_cores == 0))
 
@@ -185,7 +185,7 @@ def test_scheduler_allocate_job_gpus():
 
     assert all((len(r.nodes) == len(nCores), [r.nodes[i] == "n.{}".format(i) for i in range(len(nCores))]))
     assert all([r.nodes[i].total == nCores[i] and r.nodes[i].used == 0 and r.nodes[i].free == nCores[i] for i in range(len(nCores))])
-    assert all([len(r.nodes[i].crs) == 1 and CRType.GPU in r.nodes[i].crs and r.nodes[i].crs[CRType.GPU].totalCount == nGpus[i] and \
+    assert all([len(r.nodes[i].crs) == 1 and CRType.GPU in r.nodes[i].crs and r.nodes[i].crs[CRType.GPU].total_count == nGpus[i] and \
             r.nodes[i].crs[CRType.GPU].used == 0 and r.nodes[i].crs[CRType.GPU].available == nGpus[i] for i in range(len(nCores))])
     assert all((r.total_cores == sum(nCores), r.free_cores == sum(nCores), r.used_cores == 0))
 

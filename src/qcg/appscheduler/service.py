@@ -263,7 +263,7 @@ class QCGPMService:
         self._manager = GovernorManager(self._conf, parent_manager)
         self._manager.register_notifier(self._job_status_change_notify, self._manager)
 
-        self._receiver = Receiver(self._manager.get_handler(), self._ifaces, None)
+        self._receiver = Receiver(self._manager.get_handler(), self._ifaces)
 
     def _setup_direct_manager(self, parent_manager):
         """Setup QCG-PilotJob manager as a single instance or partition manager.

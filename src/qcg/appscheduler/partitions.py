@@ -162,7 +162,7 @@ class PartitionManager:
     async def launch(self):
         """Launch instance of partition manager."""
 
-        logging.info('launching partition manager %s on node %s to control node numbers %s-%s',
+        logging.info('launching partition manager %s on node %s to control node numbers %d-%d',
                      self.mid, self.node_name, self.start_node, self.end_node)
 
         slurm_args = ['-J', str(self.mid), '-w', self.node_name, '--oversubscribe', '--overcommit',
@@ -504,12 +504,12 @@ class GovernorManager:
                 if (datetime.now() - start_of_waiting_for_registration).total_seconds() >\
                         self._wait_for_register_timeout:
                     # timeout exceeded
-                    logging.error('not all partition managers registered - only %s on %s total', len(self.managers),
+                    logging.error('not all partition managers registered - only %d on %d total', len(self.managers),
                                   len(self._partition_managers))
                     self._terminate_partition_managers_and_finish()
                     raise InternalError('Partition managers not registered')
 
-            logging.info('available resources: {} (%s used) cores on %s nodes', self.total_resources.total_cores,
+            logging.info('available resources: %d (%d used) cores on %d nodes', self.total_resources.total_cores,
                          self.total_resources.used_cores, self.total_resources.total_nodes)
 
             logging.info('all partition managers registered')
@@ -571,6 +571,19 @@ class GovernorManager:
                 await self._schedule_buffered_jobs_task
             except asyncio.CancelledError:
                 logging.debug('listener canceled')
+
+    def register_notifier(self, job_state_cb, *args):
+        """Register callback function for job state changes.
+        The registered function will be called for all job state changes.
+
+        Args:
+            job_state_cb (def): should accept two arguments - job name and new state
+
+        Returns:
+            str: identifier of registered callback, which can be used to unregister
+              callback or None if callback function is missing or is invalid
+        """
+        # TODO: do wee need this for governor manager ?
 
     async def _schedule_buffered_jobs(self):
         """Take all buffered jobs (already validated) and schedule them on available resources. """
@@ -854,7 +867,7 @@ class GovernorManager:
                     return Response.error('Job {} doesn\'t exist'.format(request.jobName))
 
                 result[job_name] = {'status': int(ResponseCode.OK), 'data': {
-                    'job_name': job_name,
+                    'jobName': job_name,
                     'status': str(job.status.name)
                 }}
             except Exception as exc:

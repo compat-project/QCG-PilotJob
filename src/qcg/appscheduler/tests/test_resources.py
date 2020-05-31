@@ -20,7 +20,7 @@ def test_resources_export():
 
     for idx, n in enumerate(nodes):
         assert all((n.ids == res_copy.nodes[idx].ids, n.ids == res.nodes[idx].ids,
-                    n.freeIds == res_copy.nodes[idx].freeIds, n.freeIds == res.nodes[idx].freeIds))
+                    n.free_ids == res_copy.nodes[idx].free_ids, n.free_ids == res.nodes[idx].free_ids))
 
     assert all((len(res.to_json()) > 0, res.to_json() == res_copy.to_json()))
 
@@ -32,8 +32,8 @@ def test_resources_export():
                 res.total_cores == sum([n.total for n in nodes]),
                 res.used_cores == sum([n.used for n in nodes]),
                 res.free_cores == sum([n.total for n in nodes]) - sum([n.used for n in nodes]),
-                nodes[0].freeIds == list(range(3, 10)),
-                nodes[1].freeIds == [4, 5],
+                nodes[0].free_ids == list(range(3, 10)),
+                nodes[1].free_ids == [4, 5],
                 res.binding == True, res.rtype == ResourcesType.SLURM)), res.to_json()
 
     res_copy = Resources.from_dict(res.to_dict())
@@ -43,7 +43,7 @@ def test_resources_export():
 
     for idx, n in enumerate(nodes):
         assert all((n.ids == res_copy.nodes[idx].ids, n.ids == res.nodes[idx].ids,
-                    n.freeIds == res_copy.nodes[idx].freeIds, n.freeIds == res.nodes[idx].freeIds))
+                    n.free_ids == res_copy.nodes[idx].free_ids, n.free_ids == res.nodes[idx].free_ids))
 
     assert all((len(res.to_json()) > 0, res.to_json() == res_copy.to_json()))
 
@@ -66,9 +66,9 @@ def test_resources_export():
     n1 = r.nodes[0]
     n2 = r.nodes[1]
 
-    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].totalCount == n1GpuTot,
+    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].total_count == n1GpuTot,
         n1.crs[CRType.GPU].used == 0, n1.crs[CRType.GPU].available == n1GpuTot))
-    assert all((len(n2.crs) == 1, CRType.GPU in n2.crs, n2.crs[CRType.GPU].totalCount == n2GpuTot,
+    assert all((len(n2.crs) == 1, CRType.GPU in n2.crs, n2.crs[CRType.GPU].total_count == n2GpuTot,
         n2.crs[CRType.GPU].used == 0, n2.crs[CRType.GPU].available == n2GpuTot))
 
     r_copy = Resources.from_dict(r.to_dict())
@@ -81,9 +81,9 @@ def test_resources_export():
     n1 = r_copy.nodes[0]
     n2 = r_copy.nodes[1]
 
-    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].totalCount == n1GpuTot,
+    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].total_count == n1GpuTot,
         n1.crs[CRType.GPU].used == 0, n1.crs[CRType.GPU].available == n1GpuTot))
-    assert all((len(n2.crs) == 1, CRType.GPU in n2.crs, n2.crs[CRType.GPU].totalCount == n2GpuTot,
+    assert all((len(n2.crs) == 1, CRType.GPU in n2.crs, n2.crs[CRType.GPU].total_count == n2GpuTot,
         n2.crs[CRType.GPU].used == 0, n2.crs[CRType.GPU].available == n2GpuTot))
 
     assert all((len(r_copy.to_json()) > 0, r_copy.to_json() == r.to_json()))
@@ -108,9 +108,9 @@ def test_resources_export():
     n1 = r.nodes[0]
     n2 = r.nodes[1]
 
-    assert all((len(n1.crs) == 1, CRType.MEM in n1.crs, n1.crs[CRType.MEM].totalCount == n1MemTot,
+    assert all((len(n1.crs) == 1, CRType.MEM in n1.crs, n1.crs[CRType.MEM].total_count == n1MemTot,
         n1.crs[CRType.MEM].used == 0, n1.crs[CRType.MEM].available == n1MemTot))
-    assert all((len(n2.crs) == 2, CRType.MEM in n2.crs, n2.crs[CRType.MEM].totalCount == n2MemTot,
+    assert all((len(n2.crs) == 2, CRType.MEM in n2.crs, n2.crs[CRType.MEM].total_count == n2MemTot,
         n2.crs[CRType.MEM].used == 0, n2.crs[CRType.MEM].available == n2MemTot,
         CRType.GPU in n2.crs, n2.crs[CRType.GPU].available == n2GpuTot))
 
@@ -124,9 +124,9 @@ def test_resources_export():
     n1 = r_copy.nodes[0]
     n2 = r_copy.nodes[1]
 
-    assert all((len(n1.crs) == 1, CRType.MEM in n1.crs, n1.crs[CRType.MEM].totalCount == n1MemTot,
+    assert all((len(n1.crs) == 1, CRType.MEM in n1.crs, n1.crs[CRType.MEM].total_count == n1MemTot,
         n1.crs[CRType.MEM].used == 0, n1.crs[CRType.MEM].available == n1MemTot))
-    assert all((len(n2.crs) == 2, CRType.MEM in n2.crs, n2.crs[CRType.MEM].totalCount == n2MemTot,
+    assert all((len(n2.crs) == 2, CRType.MEM in n2.crs, n2.crs[CRType.MEM].total_count == n2MemTot,
         n2.crs[CRType.MEM].used == 0, n2.crs[CRType.MEM].available == n2MemTot,
         CRType.GPU in n2.crs, n2.crs[CRType.GPU].available == n2GpuTot))
 
@@ -223,9 +223,9 @@ def test_resources_allocate_crs_gpu():
     n1 = r.nodes[0]
     n2 = r.nodes[1]
 
-    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].totalCount == n1GpuTot,
+    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].total_count == n1GpuTot,
         n1.crs[CRType.GPU].used == 0, n1.crs[CRType.GPU].available == n1GpuTot))
-    assert all((len(n2.crs) == 1, CRType.GPU in n2.crs, n2.crs[CRType.GPU].totalCount == n2GpuTot,
+    assert all((len(n2.crs) == 1, CRType.GPU in n2.crs, n2.crs[CRType.GPU].total_count == n2GpuTot,
         n2.crs[CRType.GPU].used == 0, n2.crs[CRType.GPU].available == n2GpuTot))
 
     # create partial allocation on the first node with gpu cr
@@ -237,7 +237,7 @@ def test_resources_allocate_crs_gpu():
     assert a1.crs != None and all((len(a1.crs) == 1, CRType.GPU in a1.crs, a1.crs[CRType.GPU].count == c1_g,
         a1.crs[CRType.GPU].instances == list(range(c1_g)))), "crs: {}".format(str(a1.crs))
     assert all((n1.total == n1Tot, n1.free == n1Tot - c1_c, n1.used == c1_c))
-    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].totalCount == n1GpuTot,
+    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].total_count == n1GpuTot,
         n1.crs[CRType.GPU].used == c1_g, n1.crs[CRType.GPU].available == n1GpuTot - c1_g))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c1_c, r.used_cores == c1_c))
 
@@ -248,7 +248,7 @@ def test_resources_allocate_crs_gpu():
     a2 = n1.allocate_max(c2_c, {CRType.GPU: c2_g})
     assert a2 == None
     assert all((n1.total == n1Tot, n1.free == n1Tot - c1_c, n1.used == c1_c))
-    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].totalCount == n1GpuTot,
+    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].total_count == n1GpuTot,
         n1.crs[CRType.GPU].used == c1_g, n1.crs[CRType.GPU].available == n1GpuTot - c1_g))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c1_c, r.used_cores == c1_c))
 
@@ -259,7 +259,7 @@ def test_resources_allocate_crs_gpu():
     assert all((a3.ncores == c3_c, a3.cores == list(range(c1_c, c1_c + c3_c)))), "cores: {} vs expected {}".format(str(a3.cores), str(list(range(c1_c, c1_c + c3_c))))
     assert a3.crs == None
     assert all((n1.total == n1Tot, n1.free == n1Tot - c1_c - c3_c == 0, n1.used == c1_c + c3_c == n1Tot))
-    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].totalCount == n1GpuTot,
+    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].total_count == n1GpuTot,
         n1.crs[CRType.GPU].used == c1_g, n1.crs[CRType.GPU].available == n1GpuTot - c1_g))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c1_c - c3_c, r.used_cores == c1_c + c3_c))
 
@@ -269,21 +269,21 @@ def test_resources_allocate_crs_gpu():
     a4 = n1.allocate_max(c4_c, {CRType.GPU: c4_g})
     assert a4 == None
     assert all((n1.total == n1Tot, n1.free == n1Tot - c1_c - c3_c == 0, n1.used == c1_c + c3_c == n1Tot))
-    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].totalCount == n1GpuTot,
+    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].total_count == n1GpuTot,
         n1.crs[CRType.GPU].used == c1_g, n1.crs[CRType.GPU].available == n1GpuTot - c1_g))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c1_c - c3_c, r.used_cores == c1_c + c3_c))
 
     # release some cpus
     a3.release()
     assert all((n1.total == n1Tot, n1.free == n1Tot - c1_c, n1.used == c1_c))
-    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].totalCount == n1GpuTot,
+    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].total_count == n1GpuTot,
         n1.crs[CRType.GPU].used == c1_g, n1.crs[CRType.GPU].available == n1GpuTot - c1_g))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c1_c, r.used_cores == c1_c))
 
     # release already released cpu's - nothing should change
     a3.release()
     assert all((n1.total == n1Tot, n1.free == n1Tot - c1_c, n1.used == c1_c))
-    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].totalCount == n1GpuTot,
+    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].total_count == n1GpuTot,
         n1.crs[CRType.GPU].used == c1_g, n1.crs[CRType.GPU].available == n1GpuTot - c1_g))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c1_c, r.used_cores == c1_c))
 
@@ -296,22 +296,22 @@ def test_resources_allocate_crs_gpu():
     assert a5.crs != None and all((len(a5.crs) == 1, CRType.GPU in a5.crs, a5.crs[CRType.GPU].count == c5_g,
         a5.crs[CRType.GPU].instances == list(range(c1_g, c1_g + c5_g)))), "crs: {}".format(str(a5.crs))
     assert all((n1.total == n1Tot, n1.free == n1Tot - c1_c - c5_c == 0, n1.used == c1_c + c5_c == n1Tot))
-    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].totalCount == n1GpuTot,
-        n1.crs[CRType.GPU].used == c1_g + c5_g == n1.crs[CRType.GPU].totalCount,
+    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].total_count == n1GpuTot,
+        n1.crs[CRType.GPU].used == c1_g + c5_g == n1.crs[CRType.GPU].total_count,
         n1.crs[CRType.GPU].available == n1GpuTot - c1_g - c5_g == 0))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c1_c - c5_c, r.used_cores == c1_c + c5_c))
 
     # release one gpu allocation
     a1.release()
     assert all((n1.total == n1Tot, n1.free == n1Tot - c5_c, n1.used == c5_c))
-    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].totalCount == n1GpuTot,
+    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].total_count == n1GpuTot,
         n1.crs[CRType.GPU].used == c5_g, n1.crs[CRType.GPU].available == n1GpuTot - c5_g))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c5_c, r.used_cores == c5_c))
 
     # release once more already released gpu allocation - nothing should change
     a1.release()
     assert all((n1.total == n1Tot, n1.free == n1Tot - c5_c, n1.used == c5_c))
-    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].totalCount == n1GpuTot,
+    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].total_count == n1GpuTot,
         n1.crs[CRType.GPU].used == c5_g, n1.crs[CRType.GPU].available == n1GpuTot - c5_g))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c5_c, r.used_cores == c5_c))
 
@@ -319,7 +319,7 @@ def test_resources_allocate_crs_gpu():
     a5.release()
     a5.release()
     assert all((n1.total == n1Tot, n1.free == n1Tot, n1.used == 0))
-    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].totalCount == n1GpuTot,
+    assert all((len(n1.crs) == 1, CRType.GPU in n1.crs, n1.crs[CRType.GPU].total_count == n1GpuTot,
         n1.crs[CRType.GPU].used == 0, n1.crs[CRType.GPU].available == n1GpuTot))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot, r.used_cores == 0))
 
@@ -345,9 +345,9 @@ def test_resources_allocate_crs_mem():
     n1 = r.nodes[0]
     n2 = r.nodes[1]
 
-    assert all((len(n1.crs) == 1, CRType.MEM in n1.crs, n1.crs[CRType.MEM].totalCount == n1MemTot,
+    assert all((len(n1.crs) == 1, CRType.MEM in n1.crs, n1.crs[CRType.MEM].total_count == n1MemTot,
         n1.crs[CRType.MEM].used == 0, n1.crs[CRType.MEM].available == n1MemTot))
-    assert all((len(n2.crs) == 2, CRType.MEM in n2.crs, n2.crs[CRType.MEM].totalCount == n2MemTot,
+    assert all((len(n2.crs) == 2, CRType.MEM in n2.crs, n2.crs[CRType.MEM].total_count == n2MemTot,
         n2.crs[CRType.MEM].used == 0, n2.crs[CRType.MEM].available == n2MemTot,
         CRType.GPU in n2.crs, n2.crs[CRType.GPU].available == n2GpuTot))
 
@@ -362,9 +362,9 @@ def test_resources_allocate_crs_mem():
     assert a1.crs != None and all((len(a1.crs) == 2, CRType.GPU in a1.crs, a1.crs[CRType.GPU].count == c1_g,
         a1.crs[CRType.GPU].instances == list(range(c1_g)), CRType.MEM in a1.crs, a1.crs[CRType.MEM].count == c1_m)), "crs: {}".format(str(a1.crs))
     assert all((n2.total == n2Tot, n2.free == n2Tot - c1_c, n2.used == c1_c))
-    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].totalCount == n2GpuTot,
+    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].total_count == n2GpuTot,
         n2.crs[CRType.GPU].used == c1_g, n2.crs[CRType.GPU].available == n2GpuTot - c1_g,
-        CRType.MEM in n2.crs, n2.crs[CRType.MEM].totalCount == n2MemTot,
+        CRType.MEM in n2.crs, n2.crs[CRType.MEM].total_count == n2MemTot,
         n2.crs[CRType.MEM].used == c1_m, n2.crs[CRType.MEM].available == n2MemTot - c1_m))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c1_c, r.used_cores == c1_c))
 
@@ -377,9 +377,9 @@ def test_resources_allocate_crs_mem():
     assert a2.crs != None and all((len(a2.crs) == 1, CRType.GPU in a2.crs, a2.crs[CRType.GPU].count == c2_g,
         a2.crs[CRType.GPU].instances == list(range(c1_g, c1_g + c2_g))))
     assert all((n2.total == n2Tot, n2.free == n2Tot - c1_c - c2_c, n2.used == c1_c + c2_c))
-    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].totalCount == n2GpuTot,
+    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].total_count == n2GpuTot,
         n2.crs[CRType.GPU].used == c1_g + c2_g == n2GpuTot, n2.crs[CRType.GPU].available == n2GpuTot - c1_g - c2_g == 0,
-        CRType.MEM in n2.crs, n2.crs[CRType.MEM].totalCount == n2MemTot,
+        CRType.MEM in n2.crs, n2.crs[CRType.MEM].total_count == n2MemTot,
         n2.crs[CRType.MEM].used == c1_m, n2.crs[CRType.MEM].available == n2MemTot - c1_m))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c1_c - c2_c, r.used_cores == c1_c + c2_c))
 
@@ -389,9 +389,9 @@ def test_resources_allocate_crs_mem():
     a3 = n2.allocate_max(c3_c, {CRType.MEM: c3_m})
     assert a3 == None
     assert all((n2.total == n2Tot, n2.free == n2Tot - c1_c - c2_c, n2.used == c1_c + c2_c))
-    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].totalCount == n2GpuTot,
+    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].total_count == n2GpuTot,
         n2.crs[CRType.GPU].used == c1_g + c2_g == n2GpuTot, n2.crs[CRType.GPU].available == n2GpuTot - c1_g - c2_g == 0,
-        CRType.MEM in n2.crs, n2.crs[CRType.MEM].totalCount == n2MemTot,
+        CRType.MEM in n2.crs, n2.crs[CRType.MEM].total_count == n2MemTot,
         n2.crs[CRType.MEM].used == c1_m, n2.crs[CRType.MEM].available == n2MemTot - c1_m))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c1_c - c2_c, r.used_cores == c1_c + c2_c))
 
@@ -401,27 +401,27 @@ def test_resources_allocate_crs_mem():
     a3 = n2.allocate_max(c3_c, {CRType.MEM: c3_m})
     assert a3 == None
     assert all((n2.total == n2Tot, n2.free == n2Tot - c1_c - c2_c, n2.used == c1_c + c2_c))
-    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].totalCount == n2GpuTot,
+    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].total_count == n2GpuTot,
         n2.crs[CRType.GPU].used == c1_g + c2_g == n2GpuTot, n2.crs[CRType.GPU].available == n2GpuTot - c1_g - c2_g == 0,
-        CRType.MEM in n2.crs, n2.crs[CRType.MEM].totalCount == n2MemTot,
+        CRType.MEM in n2.crs, n2.crs[CRType.MEM].total_count == n2MemTot,
         n2.crs[CRType.MEM].used == c1_m, n2.crs[CRType.MEM].available == n2MemTot - c1_m))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c1_c - c2_c, r.used_cores == c1_c + c2_c))
 
     # release some resources
     a1.release()
     assert all((n2.total == n2Tot, n2.free == n2Tot - c2_c, n2.used == c2_c))
-    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].totalCount == n2GpuTot,
+    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].total_count == n2GpuTot,
         n2.crs[CRType.GPU].used == c2_g, n2.crs[CRType.GPU].available == n2GpuTot - c2_g,
-        CRType.MEM in n2.crs, n2.crs[CRType.MEM].totalCount == n2MemTot,
+        CRType.MEM in n2.crs, n2.crs[CRType.MEM].total_count == n2MemTot,
         n2.crs[CRType.MEM].used == 0, n2.crs[CRType.MEM].available == n2MemTot))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c2_c, r.used_cores == c2_c))
 
     # once more release already released resources - nothing should change
     a1.release()
     assert all((n2.total == n2Tot, n2.free == n2Tot - c2_c, n2.used == c2_c))
-    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].totalCount == n2GpuTot,
+    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].total_count == n2GpuTot,
         n2.crs[CRType.GPU].used == c2_g, n2.crs[CRType.GPU].available == n2GpuTot - c2_g,
-        CRType.MEM in n2.crs, n2.crs[CRType.MEM].totalCount == n2MemTot,
+        CRType.MEM in n2.crs, n2.crs[CRType.MEM].total_count == n2MemTot,
         n2.crs[CRType.MEM].used == 0, n2.crs[CRType.MEM].available == n2MemTot))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c2_c, r.used_cores == c2_c))
 
@@ -436,36 +436,36 @@ def test_resources_allocate_crs_mem():
     assert a4.crs != None and all((len(a4.crs) == 2, CRType.GPU in a4.crs, a4.crs[CRType.GPU].count == c4_g,
         a4.crs[CRType.GPU].instances == list(range(c4_g)), CRType.MEM in a4.crs, a4.crs[CRType.MEM].count == c4_m)), "crs: {}".format(str(a4.crs))
     assert all((n2.total == n2Tot, n2.free == n2Tot - c2_c - c4_c == 0, n2.used == c2_c + c4_c == n2Tot))
-    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].totalCount == n2GpuTot,
+    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].total_count == n2GpuTot,
         n2.crs[CRType.GPU].used == c2_g + c4_g == n2GpuTot, n2.crs[CRType.GPU].available == n2GpuTot - c2_g - c4_g == 0,
-        CRType.MEM in n2.crs, n2.crs[CRType.MEM].totalCount == n2MemTot))
+        CRType.MEM in n2.crs, n2.crs[CRType.MEM].total_count == n2MemTot))
     assert all((n2.crs[CRType.MEM].used == c4_m == n2MemTot, n2.crs[CRType.MEM].available == n2MemTot - c4_m == 0))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c2_c - c4_c, r.used_cores == c2_c + c4_c))
 
     # release last allocation
     a4.release()
     assert all((n2.total == n2Tot, n2.free == n2Tot - c2_c, n2.used == c2_c))
-    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].totalCount == n2GpuTot,
+    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].total_count == n2GpuTot,
         n2.crs[CRType.GPU].used == c2_g, n2.crs[CRType.GPU].available == n2GpuTot - c2_g,
-        CRType.MEM in n2.crs, n2.crs[CRType.MEM].totalCount == n2MemTot,
+        CRType.MEM in n2.crs, n2.crs[CRType.MEM].total_count == n2MemTot,
         n2.crs[CRType.MEM].used == 0, n2.crs[CRType.MEM].available == n2MemTot))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c2_c, r.used_cores == c2_c))
 
     # release once more already released resources - nothing should change
     a4.release()
     assert all((n2.total == n2Tot, n2.free == n2Tot - c2_c, n2.used == c2_c))
-    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].totalCount == n2GpuTot,
+    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].total_count == n2GpuTot,
         n2.crs[CRType.GPU].used == c2_g, n2.crs[CRType.GPU].available == n2GpuTot - c2_g,
-        CRType.MEM in n2.crs, n2.crs[CRType.MEM].totalCount == n2MemTot,
+        CRType.MEM in n2.crs, n2.crs[CRType.MEM].total_count == n2MemTot,
         n2.crs[CRType.MEM].used == 0, n2.crs[CRType.MEM].available == n2MemTot))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c2_c, r.used_cores == c2_c))
 
     # release remaining allocation - all resources should be free
     a2.release()
     assert all((n2.total == n2Tot, n2.free == n2Tot, n2.used == 0))
-    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].totalCount == n2GpuTot,
+    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].total_count == n2GpuTot,
         n2.crs[CRType.GPU].used == 0, n2.crs[CRType.GPU].available == n2GpuTot,
-        CRType.MEM in n2.crs, n2.crs[CRType.MEM].totalCount == n2MemTot,
+        CRType.MEM in n2.crs, n2.crs[CRType.MEM].total_count == n2MemTot,
         n2.crs[CRType.MEM].used == 0, n2.crs[CRType.MEM].available == n2MemTot))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot, r.used_cores == 0))
 
@@ -480,9 +480,9 @@ def test_resources_allocate_crs_mem():
     assert a5.crs != None and all((len(a5.crs) == 2, CRType.GPU in a5.crs, a5.crs[CRType.GPU].count == c5_g,
         a5.crs[CRType.GPU].instances == list(range(c5_g)), CRType.MEM in a5.crs, a5.crs[CRType.MEM].count == c5_m)), "crs: {}".format(str(a5.crs))
     assert all((n2.total == n2Tot, n2.free == n2Tot - c5_c, n2.used == c5_c))
-    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].totalCount == n2GpuTot,
+    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].total_count == n2GpuTot,
         n2.crs[CRType.GPU].used == c5_g == n2GpuTot, n2.crs[CRType.GPU].available == n2GpuTot - c5_g == 0,
-        CRType.MEM in n2.crs, n2.crs[CRType.MEM].totalCount == n2MemTot))
+        CRType.MEM in n2.crs, n2.crs[CRType.MEM].total_count == n2MemTot))
     assert all((n2.crs[CRType.MEM].used == c5_m, n2.crs[CRType.MEM].available == n2MemTot - c5_m))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c5_c, r.used_cores == c5_c))
 
@@ -494,18 +494,18 @@ def test_resources_allocate_crs_mem():
                                CRType.GPU: c6_g})
     assert a6 == None
     assert all((n2.total == n2Tot, n2.free == n2Tot - c5_c, n2.used == c5_c))
-    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].totalCount == n2GpuTot,
+    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].total_count == n2GpuTot,
         n2.crs[CRType.GPU].used == c5_g == n2GpuTot, n2.crs[CRType.GPU].available == n2GpuTot - c5_g == 0,
-        CRType.MEM in n2.crs, n2.crs[CRType.MEM].totalCount == n2MemTot))
+        CRType.MEM in n2.crs, n2.crs[CRType.MEM].total_count == n2MemTot))
     assert all((n2.crs[CRType.MEM].used == c5_m, n2.crs[CRType.MEM].available == n2MemTot - c5_m))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot - c5_c, r.used_cores == c5_c))
 
     # release all allocations
     a5.release()
     assert all((n2.total == n2Tot, n2.free == n2Tot, n2.used == 0))
-    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].totalCount == n2GpuTot,
+    assert all((len(n2.crs) == 2, CRType.GPU in n2.crs, n2.crs[CRType.GPU].total_count == n2GpuTot,
         n2.crs[CRType.GPU].used == 0, n2.crs[CRType.GPU].available == n2GpuTot,
-        CRType.MEM in n2.crs, n2.crs[CRType.MEM].totalCount == n2MemTot,
+        CRType.MEM in n2.crs, n2.crs[CRType.MEM].total_count == n2MemTot,
         n2.crs[CRType.MEM].used == 0, n2.crs[CRType.MEM].available == n2MemTot))
     assert all((r.total_cores == n1Tot + n2Tot, r.free_cores == n1Tot + n2Tot, r.used_cores == 0))
 

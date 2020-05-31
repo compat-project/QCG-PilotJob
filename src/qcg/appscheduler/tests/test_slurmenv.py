@@ -393,7 +393,7 @@ def test_slurmenv_many_nodes_many_cores():
     jobName = 'hostname'
     jobwdir_base = 'hostname.sandbox'
     cores_num = resources.nodes[0].free
-    nodes_num = resources.totalNodes
+    nodes_num = resources.total_nodes
     jobs = [job.to_dict() for job in [
         Job(jobName,
             JobExecution(
@@ -479,7 +479,7 @@ def test_slurmenv_launcher_agents():
         LauncherExecutionJob.start_agents(tmpdir, auxdir, resources.nodes, resources.binding)
 
         try:
-            assert len(LauncherExecutionJob.launcher.agents) == resources.totalNodes
+            assert len(LauncherExecutionJob.launcher.agents) == resources.total_nodes
 
             # there should be only one launcher per node, so check based on 'node' in agent['data']['slurm']
             node_names = set(node.name for node in resources.nodes)

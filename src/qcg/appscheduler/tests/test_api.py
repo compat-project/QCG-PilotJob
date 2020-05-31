@@ -282,7 +282,7 @@ def test_api_submit_simple(tmpdir):
 
     try:
         res = m.resources()
-        assert all(('totalNodes' in res, 'totalCores' in res, res['totalNodes'] == 1, res['totalCores'] == cores))
+        assert all(('total_nodes' in res, 'total_cores' in res, res['total_nodes'] == 1, res['total_cores'] == cores))
 
         ids = m.submit(Jobs().
                        add(exec='/bin/date', stdout='date.out')
@@ -332,7 +332,7 @@ def test_api_submit_iterate(tmpdir):
 
     try:
         res = m.resources()
-        assert all(('totalNodes' in res, 'totalCores' in res, res['totalNodes'] == 1, res['totalCores'] == cores))
+        assert all(('total_nodes' in res, 'total_cores' in res, res['total_nodes'] == 1, res['total_cores'] == cores))
 
         iters = 10
         ids = m.submit(Jobs().
@@ -352,7 +352,7 @@ def test_api_submit_iterate(tmpdir):
         for iteration in range(iters):
             job_it = jinfos[jid].childs[iteration]
             assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format(jid, iteration),
-                        job_it.totalCores == 1, len(job_it.nodes) == 1)), str(job_it)
+                        job_it.total_cores == 1, len(job_it.nodes) == 1)), str(job_it)
 
         assert all(exists(tmpdir.join('date_{}.out'.format(i))) for i in range(iters))
         m.remove(jid)
@@ -370,7 +370,7 @@ def test_api_submit_resources(tmpdir):
 
     try:
         res = m.resources()
-        assert all(('totalNodes' in res, 'totalCores' in res, res['totalNodes'] == 1, res['totalCores'] == cores))
+        assert all(('total_nodes' in res, 'total_cores' in res, res['total_nodes'] == 1, res['total_cores'] == cores))
 
         ids = m.submit(Jobs().
                        add(exec='/bin/date', numCores=2)
@@ -381,7 +381,7 @@ def test_api_submit_resources(tmpdir):
 
         jinfos = m.infoParsed(ids)
         assert all((len(jinfos) == 1, jid in jinfos, jinfos[ids[0]].status  == 'SUCCEED',
-                    jinfos[ids[0]].totalCores == 2))
+                    jinfos[ids[0]].total_cores == 2))
     finally:
         m.finish()
         m.cleanup()
@@ -412,7 +412,7 @@ def test_api_submit_slurm_resources():
 
         jinfos = m.infoParsed(ids)
         assert all((len(jinfos) == 1, jid in jinfos, jinfos[jid].status  == 'SUCCEED',
-                    len(jinfos[jid].nodes) == nodes, jinfos[jid].totalCores == cores * nodes))
+                    len(jinfos[jid].nodes) == nodes, jinfos[jid].total_cores == cores * nodes))
         assert all(len(node_cores) == cores for node, node_cores in jinfos[jid].nodes.items())
 
     finally:

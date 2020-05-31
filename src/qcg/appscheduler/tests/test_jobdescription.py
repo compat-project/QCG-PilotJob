@@ -847,12 +847,12 @@ def test_job_description_subjobs():
     j = Job(name='j1', execution=JobExecution(exec='/bin/date'), resources=JobResources(numCores=1),
             iteration=JobIteration(stop=10))
     assert j.has_iterations
-    j.set_state(JobState.EXECUTING, iteration=None, errorMsg='job executing')
+    j.set_state(JobState.EXECUTING, iteration=None, err_msg='job executing')
     assert all((j.state() == JobState.EXECUTING, j.str_state() == JobState.EXECUTING.name))
     assert j.messages() == 'job executing'
     for it in range(10):
         j.set_state(JobState.EXECUTING, it, 'job {} executing'.format(it))
-    j.set_state(JobState.FAILED, iteration=None, errorMsg='job failed')
+    j.set_state(JobState.FAILED, iteration=None, err_msg='job failed')
     assert all((j.state() == JobState.FAILED, j.str_state() == JobState.FAILED.name))
     assert j.messages() == 'job executing\njob failed'
     # failed job will not change state if once set
