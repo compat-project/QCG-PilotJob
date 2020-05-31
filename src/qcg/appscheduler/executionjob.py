@@ -196,7 +196,8 @@ class ExecutionJob:
         else:
             job_runtime = 0
 
-        self.job_iteration.job.append_runtime({'rtime': str(job_runtime)}, iteration=self.job_iteration.iteration)
+        self.job_iteration.job.append_runtime({'rtime': str(job_runtime),
+                                               'exit_code': str(exit_code)}, iteration=self.job_iteration.iteration)
 
         self.exit_code = exit_code
         self.error_message = error_message

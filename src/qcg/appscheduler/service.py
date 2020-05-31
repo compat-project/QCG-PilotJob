@@ -276,7 +276,7 @@ class QCGPMService:
         self._manager = DirectManager(self._conf, parent_manager)
         self._manager.register_notifier(self._job_status_change_notify, self._manager)
 
-        self._receiver = Receiver(self._manager.get_handler(), self._ifaces, self._manager.resources)
+        self._receiver = Receiver(self._manager.get_handler(), self._ifaces)
 
     def _setup_address_file(self):
         """Write address of ZMQ interface address to the file."""
@@ -379,7 +379,7 @@ class QCGPMService:
                 os.remove(status_file)
 
             with open(status_file, 'w') as status_f:
-                status_f.write(response.toJSON())
+                status_f.write(response.to_json())
         except Exception as exc:
             logging.warning('failed to write final status: %s', str(exc))
 

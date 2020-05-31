@@ -756,7 +756,7 @@ def test_job_description_subjobs():
 
     # iteration names
     assert j.get_name() == 'j1'
-    assert all(j.getName(it) == '{}:{}'.format(j.get_name(), it) for it in range(10))
+    assert all(j.get_name(it) == '{}:{}'.format(j.get_name(), it) for it in range(10))
 
     # iteration states (initial)
     assert j.state() == JobState.QUEUED

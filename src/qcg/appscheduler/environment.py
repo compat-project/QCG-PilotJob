@@ -47,7 +47,7 @@ class CommonEnvironment(Environment):
             'QCG_PM_NODELIST': job.nlist,
             'QCG_PM_NPROCS': str(job.ncores),
             'QCG_PM_NTASKS': str(job.ncores),
-            'QCG_PM_STEP_ID': str(job.id),
+            'QCG_PM_STEP_ID': str(job.jid),
             'QCG_PM_TASKS_PER_NODE': job.tasks_per_node
         })
 
@@ -126,9 +126,9 @@ class SlurmEnvironment(Environment):
         if same_cores is not None:
             job.env.update({'SLURM_NTASKS_PER_NODE': same_cores})
 
-        if opts and not opts.get('nohostfile', False):
+        if not opts or not opts.get('nohostfile', False):
             # create host file
-            hostfile = os.path.join(job.wdPath, ".{}.hostfile".format(job.jobIteration.name))
+            hostfile = os.path.join(job.wd_path, ".{}.hostfile".format(job.job_iteration.name))
             with open(hostfile, 'w') as hostfile_h:
                 for node in job.allocation.nodes:
                     for _ in range(0, node.ncores):
@@ -136,6 +136,9 @@ class SlurmEnvironment(Environment):
             job.env.update({
                 'SLURM_HOSTFILE': hostfile
             })
+            logging.debug('host file generated at %s', hostfile)
+        else:
+            logging.debug('not generating hostfile')
 
         node_with_gpu_crs = [node for node in job.allocation.nodes
                              if node.crs is not None and CRType.GPU in node.crs]
@@ -149,7 +152,7 @@ class SlurmEnvironment(Environment):
                 del job.env['CUDA_VISIBLE_DEVICES']
 
 
-def __select_auto_environment():
+def _select_auto_environment():
     """Select proper job execution environment.
 
     When QCG-PilotJob manager is executed inside Slurm allocation, the same execution environment is returned.
@@ -165,8 +168,9 @@ def __select_auto_environment():
 
 
 _available_envs = {
-    """List of all available environments."""
-    'auto': __select_auto_environment,
+    # List of all available environments.
+
+    'auto': _select_auto_environment,
     CommonEnvironment.NAME: CommonEnvironment,
     SlurmEnvironment.NAME: SlurmEnvironment
 }
@@ -185,7 +189,7 @@ def get_environment(env_name):
         ValueError: if environment with given name is not available
     """
     if env_name not in _available_envs:
-        raise ValueError('environment {} not available'.format(env_name))
+        raise ValueError('environment "{}" not available'.format(env_name))
 
     env_type = _available_envs[env_name]
     return env_type() if isinstance(env_type, types.FunctionType) else env_type

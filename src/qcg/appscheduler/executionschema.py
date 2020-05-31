@@ -80,7 +80,7 @@ class SlurmExecution(ExecutionSchema):
 
         # create run configuration
         if job_model != "threads":
-            run_conf_file = os.path.join(ex_job.wdPath, ".{}.runconfig".format(ex_job.job_iteration.name))
+            run_conf_file = os.path.join(ex_job.wd_path, ".{}.runconfig".format(ex_job.job_iteration.name))
             with open(run_conf_file, 'w') as conf_f:
                 conf_f.write("0\t%s %s\n" % (
                     job_exec,
@@ -124,24 +124,17 @@ class SlurmExecution(ExecutionSchema):
                 cpu_bind]
 
         ex_job.job_execution.exec = 'srun'
-        ex_job.job_execution.args = [
-            "-n", str(ex_job.ncores),
-            "-m", "arbitrary",
-            "--overcommit",
-            "--mem-per-cpu=0",
-            cpu_bind,
-            "--multi-prog"]
 
         if ex_job.job_execution.stdin:
-            ex_job.job_execution.args.extend(["-i", os.path.join(ex_job.wdPath, ex_job.job_execution.stdin)])
+            ex_job.job_execution.args.extend(["-i", os.path.join(ex_job.wd_path, ex_job.job_execution.stdin)])
             ex_job.job_execution.stdin = None
 
         if ex_job.job_execution.stdout:
-            ex_job.job_execution.args.extend(["-o", os.path.join(ex_job.wdPath, ex_job.job_execution.stdout)])
+            ex_job.job_execution.args.extend(["-o", os.path.join(ex_job.wd_path, ex_job.job_execution.stdout)])
             ex_job.job_execution.stdout = None
 
         if ex_job.job_execution.stderr:
-            ex_job.job_execution.args.extend(["-e", os.path.join(ex_job.wdPath, ex_job.job_execution.stderr)])
+            ex_job.job_execution.args.extend(["-e", os.path.join(ex_job.wd_path, ex_job.job_execution.stderr)])
             ex_job.job_execution.stderr = None
 
         if ex_job.job_iteration.resources.wt:

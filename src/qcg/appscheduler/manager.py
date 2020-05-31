@@ -227,8 +227,8 @@ class SchedulingJob:
             if prev_iteration:
                 start_pos = self._iteration_sub_jobs.index(prev_iteration) + 1
 
-            logging.debug('job %d is ready, looking for next to (%d) iteration, start_pos set to %d',
-                          self.job.name, prev_iteration, start_pos)
+            logging.debug('job %s is ready, looking for next to (%s) iteration, start_pos set to %d',
+                          self.job.name, str(prev_iteration), start_pos)
 
             repeats = 2
             while repeats > 0:
@@ -599,6 +599,8 @@ class DirectManager:
         if exit_code != 0:
             state = JobState.FAILED
 
+        logging.info('job %s finished with exit code %d, error message: %s', job_iteration.name, exit_code, error_msg)
+
         self.change_job_state(job_iteration.job, iteration=job_iteration.iteration, state=state, error_msg=error_msg)
         self._scheduler.release_allocation(allocation)
         self._schedule_loop()
@@ -908,7 +910,7 @@ class DirectManagerHandler:
 
             return Response.ok('{} jobs submitted'.format(len(jobs)), data=data)
         except Exception as exc:
-            logging.error('Submit error: %s', sys.exc_info())
+            logging.exception('Submit error')
             return Response.error(str(exc))
 
     def _prepare_jobs(self, req_jobs):
@@ -1058,7 +1060,7 @@ class DirectManagerHandler:
 
                     if request.include_childs:
                         job_data['childs'] = []
-                        for idx, subjob in enumerate(job.getSubjobs()):
+                        for idx, subjob in enumerate(job.iteration_states):
                             info = {
                                 'iteration': idx + job.iteration.start,
                                 'state': subjob.state().name
@@ -1216,7 +1218,7 @@ class DirectManagerHandler:
         self._finish_task = asyncio.ensure_future(self._delayed_finish(delay))
 
         return Response.ok(data={
-            'when': '%ds' % delay
+            'when': '{}s'.format(delay)
         })
 
     async def generate_status_response(self):

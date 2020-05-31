@@ -179,8 +179,8 @@ class Receiver:
                 else:
                     response = await self._handle_request(iface, valid_response.request)
 
-                logging.info('sending response: %s', str(response.toDict()))
-                await iface.reply(response.toJSON())
+                logging.info('sending response: %s', str(response.to_dict()))
+                await iface.reply(response.to_json())
             except CancelledError:
                 # listener was canceled - finished gracefully
                 logging.info('Finishing listening on interface %s due to interrupt', iface.__class__.__name__)

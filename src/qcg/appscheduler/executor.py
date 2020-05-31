@@ -138,8 +138,8 @@ class Executor:
         if Config.PROGRESS.get(self._config):
             print("job {} finished".format(execution_job.job_iteration.name))
 
-        del self._not_finished[execution_job.id]
+        del self._not_finished[execution_job.jid]
 
         if self._manager is not None:
-            self._manager.job_finished(execution_job.job_iteration, execution_job.allocation, execution_job.exitCode,
+            self._manager.job_finished(execution_job.job_iteration, execution_job.allocation, execution_job.exit_code,
                                        execution_job.error_message)

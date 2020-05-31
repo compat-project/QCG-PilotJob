@@ -278,7 +278,7 @@ def test_api_jobs_load_save(tmpdir):
 def test_api_submit_simple(tmpdir):
     cores = 4
 
-    m = LocalManager(['--wd', str(tmpdir), '--nodes', str(cores)], {'wdir': str(tmpdir)})
+    m = LocalManager(['--wd', str(tmpdir), '--nodes', str(cores), '--log', 'debug'], {'wdir': str(tmpdir)})
 
     try:
         res = m.resources()
@@ -404,7 +404,7 @@ def test_api_submit_slurm_resources():
         cores = 2
         nodes = 2
         ids = m.submit(Jobs().
-                       add(exec='/bin/date', numCores=cores, numNodes=nodes)
+                       add(exec='/bin/date', stderr='date.stderr', stdout='date.stdout', numCores=cores, numNodes=nodes)
                        )
         jid = ids[0]
         assert len(m.list()) == 1

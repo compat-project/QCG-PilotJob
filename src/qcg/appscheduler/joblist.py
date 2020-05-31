@@ -96,12 +96,12 @@ class JobExecution:
         if args is not None:
             if not isinstance(args, list):
                 raise IllegalJobDescription("Execution arguments must be an array")
-        self.args = args
+            self.args = args
 
         if env is not None:
             if not isinstance(env, dict):
                 raise IllegalJobDescription("Execution environment must be an dictionary")
-        self.env = env
+            self.env = env
 
         self.wd = wd
 
@@ -368,46 +368,46 @@ class JobResources:
         else:
             self.wt = None
 
-        self.crs = None
+        self._crs = None
         if nodeCrs is not None:
             if not isinstance(nodeCrs, dict):
                 raise IllegalJobDescription("Wrong definition of Consumable Resources {} (must be a dictionary)".format(
                     type(nodeCrs).__name__))
 
-            self.crs = JobResources._validate_crs(nodeCrs)
+            self._crs = JobResources._validate_crs(nodeCrs)
 
-        self.cores = numCores
-        self.nodes = numNodes
+        self._cores = numCores
+        self._nodes = numNodes
 
     @property
     def has_nodes(self):
         """bool: true if ``resources`` element of job description contains number of nodes definition"""
-        return self.nodes is not None
+        return self._nodes is not None
 
     @property
     def has_cores(self):
         """bool: true if ``resources`` element of job description contains number of cores definition"""
-        return self.cores is not None
+        return self._cores is not None
 
     @property
     def has_crs(self):
         """bool: true if ``resources`` element of job description contains consumable resources definition"""
-        return self.crs is not None
+        return self._crs is not None
 
     @property
     def cores(self):
         """ResourceSize: return ``numCores`` definition of ``resources`` element."""
-        return self.cores
+        return self._cores
 
     @property
     def nodes(self):
         """ResourceSize: return ``numNodes`` definition of ``resources`` element."""
-        return self.nodes
+        return self._nodes
 
     @property
     def crs(self):
         """ResourceSize: return ``nodeCrs`` definition of ``resources`` element."""
-        return self.crs
+        return self._crs
 
     def get_min_num_cores(self):
         """Return minimum number of cores the job can be run.
@@ -417,16 +417,16 @@ class JobResources:
         """
         min_cores = 1
         if self.has_cores:
-            if self.cores.is_exact():
-                min_cores = self.cores.exact
+            if self._cores.is_exact():
+                min_cores = self._cores.exact
             else:
-                min_cores = self.cores.range[0]
+                min_cores = self._cores.range[0]
 
         if self.has_nodes:
-            if self.nodes.is_exact():
-                min_cores = min_cores * self.nodes.exact
+            if self._nodes.is_exact():
+                min_cores = min_cores * self._nodes.exact
             else:
-                min_cores = min_cores * self.nodes.range[0]
+                min_cores = min_cores * self._nodes.range[0]
 
         return min_cores
 
@@ -438,13 +438,13 @@ class JobResources:
         """
         result = {}
         if self.has_cores:
-            result['numCores'] = self.cores.to_dict()
+            result['numCores'] = self._cores.to_dict()
 
         if self.has_nodes:
-            result['numNodes'] = self.nodes.to_dict()
+            result['numNodes'] = self._nodes.to_dict()
 
         if self.has_crs:
-            result['nodeCrs'] = {crtype.name: value for (crtype, value) in self.crs.items()}
+            result['nodeCrs'] = {crtype.name: value for (crtype, value) in self._crs.items()}
 
         return result
 
@@ -686,6 +686,7 @@ class Job:
         _history (list(JobState, DateTime)): state change history
         _state (JobState): current state
         _messages: recorded error messages
+        _runtime (dict): runtime information
         _queue_pos: current job's position in scheduling queue
      """
 
@@ -781,6 +782,11 @@ class Job:
 
         # position in scheduling queue - None if not set
         self._queue_pos = None
+
+    @property
+    def name(self):
+        """str: job's name"""
+        return self._name
 
     def get_name(self, iteration=None):
         """Return job's or job's iteration name.
@@ -910,6 +916,11 @@ class Job:
             SubJobState: job's iteration state object
         """
         return self._subjobs[iteration - self._iteration.start]
+
+    @property
+    def iteration_states(self):
+        """list(SubJobState): list of iteration states"""
+        return self._subjobs
 
     def set_state(self, state, iteration=None, err_msg=None):
         """Set current job's or job's iteration state.

@@ -82,7 +82,7 @@ class TextFileReport(JobReport):
             iteration (int): job's iteration index
             ostream (io.StringIO): buffer to output job's report
         """
-        jname = job.getName(iteration)
+        jname = job.get_name(iteration)
         jstate = job.str_state(iteration)
         jmessages = job.messages(iteration)
         jhistory = job.history(iteration)
@@ -116,7 +116,7 @@ class JsonFileReport(JobReport):
             iteration (int): job's iteration index
             ostream (io.StringIO): buffer to output job's report
         """
-        jname = job.getName(iteration)
+        jname = job.get_name(iteration)
         jstate = job.str_state(iteration)
         jmessages = job.messages(iteration)
         jhistory = job.history(iteration)
@@ -126,7 +126,7 @@ class JsonFileReport(JobReport):
             'name': jname,
             'state': jstate,
             'history': [{'state': e[0].name, 'date': e[1].isoformat()} for e in jhistory],
-            'runtime': jruntime.items(),
+            'runtime': jruntime,
         }
 
         if iteration is None:
@@ -175,4 +175,4 @@ def get_reporter(format_name, report_file):
     if format_name not in _available_formats:
         raise ValueError('reporter {} not available'.format(format_name))
 
-    return _available_formats[format](report_file)
+    return _available_formats[format_name](report_file)
