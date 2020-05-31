@@ -19,7 +19,7 @@ class JobInfo:
 
         jinfo.wdir = child_data.get('runtime', {}).get('wd')
         jinfo.nodes = JobInfo.__parse_allocation(child_data.get('runtime', {}).get('allocation', ''))
-        jinfo.totalCores = sum(len(cores) for _, cores in jinfo.nodes.items())
+        jinfo.total_cores = sum(len(cores) for _, cores in jinfo.nodes.items())
 
         if child_data.get('runtime', {}).get('rtime'):
             jinfo.time = JobInfo.__parse_runtime(child_data.get('runtime', {}).get('rtime'))
@@ -35,7 +35,7 @@ class JobInfo:
             name (str) - job name
             status (str) - job status
             nodes (dict(str, int[])) (optional) - dictionary with node names and list of allocated cores
-            totalCores (int) - number of total allocated cores
+            total_cores (int) - number of total allocated cores
             wdir (str) - working directory path
             time (timedelta) (optional) - job run time
             iterations (dict) (optional) - info about iterations
@@ -50,11 +50,11 @@ class JobInfo:
         jinfo.status = job_data.get('status')
 
         jinfo.nodes = {}
-        jinfo.totalCores = 0
+        jinfo.total_cores = 0
         allocation = job_data.get('runtime', {}).get('allocation')
         if allocation:
             jinfo.nodes = JobInfo.__parse_allocation(allocation)
-            jinfo.totalCores = sum(len(cores) for _, cores in jinfo.nodes.items())
+            jinfo.total_cores = sum(len(cores) for _, cores in jinfo.nodes.items())
 
         jinfo.wdir = job_data.get('runtime', {}).get('wd')
         time = job_data.get('runtime', {}).get('rtime')

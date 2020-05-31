@@ -1011,7 +1011,7 @@ class DirectManagerHandler:
                     return Response.error('Job \'{}\' doesn\'t exist'.format(request.job_name))
 
                 result[job_name] = {'status': int(ResponseCode.OK), 'data': {
-                    'job_name': job_name,
+                    'jobName': job_name,
                     'status': str(job.str_state())
                 }}
             except Exception as exc:
@@ -1194,10 +1194,10 @@ class DirectManagerHandler:
         """
         resources = self._manager.resources
         return Response.ok(data={
-            'totalNodes': resources.total_nodes,
-            'totalCores': resources.total_cores,
-            'usedCores': resources.used_cores,
-            'freeCores': resources.free_cores
+            'total_nodes': resources.total_nodes,
+            'total_cores': resources.total_cores,
+            'used_cores': resources.used_cores,
+            'free_cores': resources.free_cores
         })
 
     async def handle_finish_req(self, iface, request): #pylint: disable=W0613
