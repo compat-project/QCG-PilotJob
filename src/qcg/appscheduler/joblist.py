@@ -154,7 +154,7 @@ class ResourceSize:
             exact (int, optional): exact number of resources
             min (int, optional): minimum number of resources
             max (int, optional): maximum number of resources
-            scheduler (str, optional): the iteration resources schedulers name
+            scheduler (dict, optional): the iteration resources scheduler, the ``name`` and ``params`` (optional) keys
 
         Raises:
             IllegalResourceRequirements raised when:
