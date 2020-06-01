@@ -1,7 +1,7 @@
 # QCG-PilotJob
 The QCG Pilot Job service for execution of many computing tasks inside one allocation
 =======
-# The QCG Pilot Manager v 0.7.2
+# The QCG Pilot Manager v 0.8.0
 
 
 Author: Piotr Kopta <pkopta@man.poznan.pl>, Tomasz Piontek <piontek@man.poznan.pl>, Bartosz Bosak <bbosak@man.poznan.pl>
@@ -43,13 +43,18 @@ The QCG Pilot Job Manager module provides wrapper command for running Manager se
 ```bash
 $ qcg-pm-service --help
 usage: qcg-pm-service [-h] [--net] [--net-port NET_PORT]
-                  [--net-port-min NET_PORT_MIN] [--net-port-max NET_PORT_MAX]
-                  [--file] [--file-path FILE_PATH] [--wd WD]
-                  [--envschema ENVSCHEMA] [--resources RESOURCES]
-                  [--report-format REPORT_FORMAT] [--report-file REPORT_FILE]
-                  [--nodes NODES]
-                  [--log {critical,error,warning,info,debug,notset}]
-                  [--system-core]
+                      [--net-port-min NET_PORT_MIN]
+                      [--net-port-max NET_PORT_MAX] [--file]
+                      [--file-path FILE_PATH] [--wd WD]
+                      [--envschema ENVSCHEMA] [--resources RESOURCES]
+                      [--report-format REPORT_FORMAT]
+                      [--report-file REPORT_FILE] [--nodes NODES]
+                      [--log {critical,error,warning,info,debug,notset}]
+                      [--system-core] [--disable-nl] [--show-progress]
+                      [--governor] [--parent PARENT] [--id ID] [--tags TAGS]
+                      [--slurm-partition-nodes SLURM_PARTITION_NODES]
+                      [--slurm-limit-nodes-range-begin SLURM_LIMIT_NODES_RANGE_BEGIN]
+                      [--slurm-limit-nodes-range-end SLURM_LIMIT_NODES_RANGE_END]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -81,6 +86,25 @@ optional arguments:
   --log {critical,error,warning,info,debug,notset}
                         log level
   --system-core         reserve one of the core for the QCG-PJM
+  --disable-nl          disable custom launching method
+  --show-progress       print information about executing tasks
+  --governor            run manager in the governor mode, where jobs will be
+                        scheduled to execute to the dependant managers
+  --parent PARENT       address of the parent manager, current instance will
+                        receive jobs from the parent manaqger
+  --id ID               optional manager instance identifier - will be
+                        generated automatically when not defined
+  --tags TAGS           optional manager instance tags separated by commas
+  --slurm-partition-nodes SLURM_PARTITION_NODES
+                        split Slurm allocation by given number of nodes, where
+                        each group will be controlled by separate manager
+                        (implies --governor)
+  --slurm-limit-nodes-range-begin SLURM_LIMIT_NODES_RANGE_BEGIN
+                        limit Slurm allocation to specified range of nodes
+                        (starting node)
+  --slurm-limit-nodes-range-end SLURM_LIMIT_NODES_RANGE_END
+                        limit Slurm allocation to specified range of nodes
+                        (ending node)
 ```
 
 The same Manager service, can by run directly with the python command:
@@ -117,15 +141,15 @@ $ cat <<EOF > jobs.json
 }
 ]
 EOF
-$ qcg-pm-service --file --file-path jobs.json
+$ qcg-pm-service --file-path jobs.json
 ```
-In the current directory there should be created a subdirectory '.qcgpjm' with a bunch of files, where the most important are:
+In the current directory there should be created a subdirectory with prefix '.qcgpjm-service' with a bunch of files, where the most important are:
 * `service.log` - with the manager logs
 * `jobs.report` - the report from job execution
 
 The number of available resources discovered by the QCG PJM can be checked with:
 ```bash
-$ grep 'available resources' .qcgpjm/service.log
+$ grep 'available resources:' .qcgpjm/service.log
 ```
 
 ## MODULES
@@ -193,12 +217,13 @@ Submit a list of jobs to be processed by the system. The `jobs` key must contain
 
 ##### Job description format
 The Job description is a dictionary with the following keys:
-- `name` (required) `String` - job name, must be unique
-- `iterate` (optional) `Array of Number` - defines a loop for iterative jobs, the two element array with the start and stop index; the total number of iterations will be *stop_index - start_index* (the last index of the sub-job will be *stop_index - 1*)
+- `name` (required) `String` - job name, must be unique among all other submitted jobs
+- `iteration` (optional) `Dict` - defines a loop for iterative jobs, the *start* (optional) and *stop* keys must be defined; the total number of iterations will be *stop - start* (the last index of the sub-job will be *stop - 1*)
 - `execution` (required) `Dict` - execution description with the following keys:
-  - `exec` (required) `String` - executable name (if available in *$PATH*) or absolute path to the executable,
+  - `exec` (optional) `String` - executable name (if available in *$PATH*) or absolute path to the executable,
   - `args` (optional) `Array of String` - list of arguments that will be passed to
     the executable,
+  - `script` (optional) `String` - commands for *bash* environment, mutually exclusive with `exec` and `args`
   - `env` (optional) `Dict (String: String)` - environment variables that will
     be appended to the execution environment,
   - `wd` (optional) `String` - a working directory, if not defined the
@@ -218,6 +243,7 @@ The Job description is a dictionary with the following keys:
     - `exact` (optional) `Number` - the exact number of cores,
     - `min` (optional) `Number` - minimal number of cores,
     - `max` (optional) `Number` - maximal number of cores,
+    - `scheduler` (optional) `Dict` - the type of resource iteration scheduler, the key *name* specify type of scheduler and currently the *maximum-iters* and *split-into* names are supported, the optional *params* dictionary specifies the scheduler parameters
     (the `exact` and `min` /  `max` are mutually exclusive)
 
 	If `resources` is not defined, the `numCores` with `exact` set to 1 is taken as the default value.
@@ -233,7 +259,7 @@ The Job description is a dictionary with the following keys:
     the current job is taken into consideration by the scheduler and can be executed.
 
 ##### Job description variables
-The job description may contain variables in the format:
+The job description may contain variables (except the job name, which cannot contain any variable or special character) in the format:
 
 ```${ variable-name }```
 
@@ -287,6 +313,7 @@ The sample submit job request is presented below:
 
 The example response is presented below:
 ```json
+{
   "code": 0,
   "message": "2 jobs submitted",
   "data": {
@@ -478,10 +505,10 @@ The example response is presented below:
 ```json
 {
   "data": {
-    "totalCores": 8,
-    "totalNodes": 1,
-    "usedCores": 2,
-    "freeCores": 6
+    "total_cores": 8,
+    "total_nodes": 1,
+    "used_cores": 2,
+    "free_cores": 6
   },
   "code": 0
 }
@@ -569,8 +596,8 @@ In the `bac16.json` we define the following requests (commands):
     "request": "submit",
     "jobs": [
     {
-        "name": "namd_bac16_${it}",
-        "iterate": [ 1, 17 ],
+        "name": "namd_bac16",
+        "iteratation": { 'start': 1, 'stop': 17 },
         "execution": {
           "exec": "bash",
           "args": [ "${root_wd}/bac-namd.sh", "${it}" ],
@@ -585,8 +612,8 @@ In the `bac16.json` we define the following requests (commands):
         }
     },
     {
-        "name": "amber_bac16_${it}",
-        "iterate": [ 1, 17 ],
+        "name": "amber_bac16",
+        "iteration": { 'start': 1, 'stop': 17 },
         "execution": {
           "exec": "bash",
           "args": [ "${root_wd}/bac-amber.sh", "${it}" ],
@@ -599,7 +626,7 @@ In the `bac16.json` we define the following requests (commands):
           }
         },
         "dependencies": {
-          "after": [ "namd_bac16_${it}" ]
+          "after": [ "namd_bac16:${it}" ]
         }
     }
     ]
@@ -617,7 +644,7 @@ is used to tell the Manager to finish after all jobs will be handled and
 finished (with any result).
 
 ## API
-QCG PilotJob Manager provides a client side Python API which allows users to dynamically control the instance of the Pilot Job and all its jobs. To avoid communication issues, we assume that the user's program (Application Controller) that refers via API to the QCG PilotJob Manager is run inside an allocation as one of the jobs. The communication is done through the network interface provided by QCG PilotJob Manager. The Python API is provided in the `qcg.appscheduler.api` package.
+QCG PilotJob Manager provides a client side Python API which allows users to dynamically control the instance of the Pilot Job and all its jobs. There are two classes that enables communication with QCG PilotJob Manager instance. The `qcg.appscheduler.api.Manager` class can be used to connect to already running instance of QCG PilotJob Manager, where the `qcg.appscheduler.api.LocalManager` class (that inherits from `Manager` class) enables starting the instance in the background thread and connection to this instance. The communication in both cases is done through the network interface provided by QCG-PilotJob Manager. The Python API is provided in the `qcg.appscheduler.api` package.
 
 ### Manager
 The `qcg.appscheduler.api.Manager` class is the main actor of the API. This class is responsible for the initialisation of the client and handles communication with a single instance of QCG PilotJob Manager. The class provides interface for:
@@ -629,10 +656,13 @@ The `qcg.appscheduler.api.Manager` class is the main actor of the API. This clas
 - removing jobs (the `remove` method),
 - synchronisation of the job execution (the `wait4` method).
 
+The `qcg.appscheduler.api.LocalManager` class differs from `Manager` class only in initialization, where starting parameters of the QCG PilotJob Manager instance can be specified. The rest of the functionality is the same as in the parent class.
 
 #### Initialization
+
+##### Initialization of the Manager class
 ```python
-def __init__(address = None, cfg = { })
+def __init__(address=None, cfg=None)
 ```
 
 To its proper work, the `Manager` class needs to know the address of the QCG PilotJob Manager instance. In case where the client application is run as one of jobs in QCG PilotJob Manager this address is stored in the `QCG_PM_ZMQ_ADDRESS` environment variable, and is automatically used by the API when it was not provided explicitly.
@@ -642,6 +672,12 @@ During the initialisation of the `Manager` class the user can specify some varia
 * `log_file` - a location of the log file
 * `log_level` - a logging level (e.g. `DEBUG`); by default the logging level is set to INFO. Levels allowed and supported so far are: *DEBUG* and *INFO*.
 
+##### Initialization of the LocalManager class
+```python
+def __init__(server_args=None, cfg=None)
+```
+
+The first argument is the list of QCG PilotJob Manager instance command line arguments. Those parameters are described in the [run section](#run). The second, *cfg* parameter has the same meaning as in the *Manager* class.
 
 #### `resources`
 ```python
@@ -764,7 +800,7 @@ The simplified job description format contains the following keys:
 * `model` (required - `False`, allowed types - `str`) - the model of execution, currently only *threads* explicit model is supported which should be used for OpenMP jobs; if not defined - the default, dedicated to the multi processes execution model is used
 * `numCores` (required - `False`, allowed types - `dict`) - number of cores requirements (described in [section](#job-description-format)),
 * `wt` (required - `False`, allowed types - `str`) - a wall-time specification,
-* `iterate` (required - `False`, allowed types - `list`) - a list describing iterations, it should contain two or three elements: `start iteration`, `end iteration` and optionally, `the step iteration`,
+* `iteration` (required - `False`, allowed types - `dict`) - a dictionary describing iterations, it should contain at least `stop` key and optionally `start` key
 * `after` (required - `False`, allowed types - `list`, `str`) - a list of (or single entry) of tasks that should finish before current one starts.
 
 
