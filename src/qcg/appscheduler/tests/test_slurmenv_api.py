@@ -61,7 +61,7 @@ def test_slurmenv_api_submit_simple():
         m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
 
         jobs = Jobs().\
-            addStd({ 'name': 'host',
+            add_std({ 'name': 'host',
                      'execution': {
                          'exec': '/bin/hostname',
                          'args': [ '--fqdn' ],
@@ -91,7 +91,7 @@ def test_slurmenv_api_submit_many_cores():
         m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
 
         jobs = Jobs(). \
-            addStd({ 'name': 'host',
+            add_std({ 'name': 'host',
                      'execution': {
                          'exec': '/bin/hostname',
                          'args': [ '--fqdn' ],
@@ -128,7 +128,7 @@ def test_slurmenv_api_submit_resource_ranges():
         m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
 
         jobs = Jobs(). \
-            addStd({ 'name': 'host',
+            add_std({ 'name': 'host',
                      'execution': {
                          'exec': '/bin/hostname',
                          'args': [ '--fqdn' ],
@@ -142,7 +142,7 @@ def test_slurmenv_api_submit_resource_ranges():
         assert "Both core's range boundaries (min, max) must be defined" in jinfo.messages, str(jinfo)
 
         jobs = Jobs(). \
-            addStd({ 'name': 'host2',
+            add_std({ 'name': 'host2',
                      'execution': {
                          'exec': '/bin/hostname',
                          'args': [ '--fqdn' ],
@@ -158,7 +158,7 @@ def test_slurmenv_api_submit_resource_ranges():
         assert all((len(jinfo.nodes) == 1, jinfo.total_cores == resources.nodes[0].total)), str(jinfo)
 
         jobs = Jobs(). \
-            addStd({ 'name': 'host3',
+            add_std({ 'name': 'host3',
                      'execution': {
                          'exec': '/bin/hostname',
                          'args': [ '--fqdn' ],
@@ -194,7 +194,7 @@ def test_slurmenv_api_submit_exceed_total_cores():
         m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
 
         jobs = Jobs(). \
-            addStd({ 'name': 'date',
+            add_std({ 'name': 'date',
                      'execution': { 'exec': '/bin/date' },
                      'resources': {
                          'numCores': { 'exact': resources.total_cores + 1 }
@@ -204,7 +204,7 @@ def test_slurmenv_api_submit_exceed_total_cores():
         assert len(m.list()) == 0
 
         jobs = Jobs(). \
-        addStd({ 'name': 'date',
+        add_std({ 'name': 'date',
                      'execution': { 'exec': '/bin/date' },
                      'resources': {
                          'numNodes': { 'exact': resources.total_nodes + 1 }
@@ -214,7 +214,7 @@ def test_slurmenv_api_submit_exceed_total_cores():
         assert len(m.list()) == 0
 
         jobs = Jobs(). \
-            addStd({ 'name': 'date',
+            add_std({ 'name': 'date',
                      'execution': {
                          'exec': '/bin/date',
                          'stdout': 'std.out',
@@ -245,7 +245,7 @@ def test_slurmenv_api_std_streams():
         m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
 
         jobs = Jobs(). \
-            addStd({ 'name': 'host',
+            add_std({ 'name': 'host',
                      'execution': {
                          'exec': 'cat',
                          'stdin': '/etc/system-release',
@@ -285,7 +285,7 @@ def test_slurmenv_api_std_streams_many_cores():
         m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
 
         jobs = Jobs(). \
-            addStd({ 'name': 'host',
+            add_std({ 'name': 'host',
                      'execution': {
                          'exec': 'cat',
                          'stdin': '/etc/system-release',
@@ -330,7 +330,7 @@ def test_slurmenv_api_iteration_simple():
 
         its = 2
         jobs = Jobs(). \
-            addStd({ 'name': 'host',
+            add_std({ 'name': 'host',
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'hostname', 'args': [ '--fqdn' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'exact': 1 } }
@@ -345,7 +345,7 @@ def test_slurmenv_api_iteration_simple():
 
         its = 2
         jobs = Jobs(). \
-            addStd({ 'name': 'host2',
+            add_std({ 'name': 'host2',
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'hostname', 'args': [ '--fqdn' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'exact': 1 } }
@@ -389,7 +389,7 @@ def test_slurmenv_api_iteration_core_scheduling():
         jname = 'host'
         its = 2
         jobs = Jobs(). \
-           addStd({ 'name': jname,
+           add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'hostname', 'args': [ '--fqdn' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': 1,
@@ -416,7 +416,7 @@ def test_slurmenv_api_iteration_core_scheduling():
         jname = 'host2'
         its = 2
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'hostname', 'args': [ '--fqdn' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': 1,
@@ -443,7 +443,7 @@ def test_slurmenv_api_iteration_core_scheduling():
         jname = 'host3'
         its = 2
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'hostname', 'args': [ '--fqdn' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': 1,
@@ -470,7 +470,7 @@ def test_slurmenv_api_iteration_core_scheduling():
         jname = 'host4'
         its = 10
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'hostname', 'args': [ '--fqdn' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': 1,
@@ -495,7 +495,7 @@ def test_slurmenv_api_iteration_core_scheduling():
         jname = 'host5'
         its = 2
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': 1,
@@ -520,7 +520,7 @@ def test_slurmenv_api_iteration_core_scheduling():
         jname = 'host6'
         its = resources.total_cores
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': 1,
@@ -546,7 +546,7 @@ def test_slurmenv_api_iteration_core_scheduling():
         jname = 'host7'
         its = resources.total_cores
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': 1,
@@ -573,7 +573,7 @@ def test_slurmenv_api_iteration_core_scheduling():
         jname = 'host8'
         its = resources.total_cores * 2
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': 1,
@@ -600,7 +600,7 @@ def test_slurmenv_api_iteration_core_scheduling():
         jname = 'host9'
         its = resources.total_cores + 1
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': 1,
@@ -629,7 +629,7 @@ def test_slurmenv_api_iteration_core_scheduling():
         jname = 'host10'
         its = resources.total_nodes
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': resources.total_cores - 1,
@@ -678,7 +678,7 @@ def test_slurmenv_api_iteration_node_scheduling():
         jname = 'host'
         its = 2
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out_${it}', 'stderr': 'err_${it}' },
                      'resources': { 'numCores': { 'exact': resources.nodes[0].total },
@@ -706,7 +706,7 @@ def test_slurmenv_api_iteration_node_scheduling():
         jname = 'host2'
         its = 2
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'exact': resources.nodes[0].total },
@@ -734,7 +734,7 @@ def test_slurmenv_api_iteration_node_scheduling():
         jname = 'host3'
         its = 4
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'exact': resources.nodes[0].total },

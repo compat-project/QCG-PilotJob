@@ -92,10 +92,10 @@ def test_api_jobs_smpl():
 
     jobs.add(exec='/bin/date').add(exec='/bin/echo')
 
-    assert all((len(jobs.jobNames()) == 2, len(jobs.jobs()) == 2, len(jobs.orderedJobs()) == 2,
-                len(jobs.orderedJobNames()) == 2))
+    assert all((len(jobs.job_names()) == 2, len(jobs.jobs()) == 2, len(jobs.ordered_jobs()) == 2,
+                len(jobs.ordered_job_names()) == 2))
 
-    ordered_jobs = jobs.orderedJobs()
+    ordered_jobs = jobs.ordered_jobs()
     assert ordered_jobs[0].get('execution', {}).get('exec', None) == '/bin/date', str(ordered_jobs[0])
     assert ordered_jobs[1].get('execution', {}).get('exec', None) == '/bin/echo', str(ordered_jobs[0])
     assert all((ordered_jobs[0].get('name'), ordered_jobs[1].get('name'),
@@ -104,8 +104,8 @@ def test_api_jobs_smpl():
 
     jobs.add(name='j1', iterate=10, exec='cat', args=['-v'], stdin='/etc/hostname', stdout='host.out', stderr='host.err',
              numCores=2, numNodes=1, wt='10:00', after='j2')
-    assert 'j1' in jobs.jobNames()
-    j1_job = jobs.orderedJobs()[0]
+    assert 'j1' in jobs.job_names()
+    j1_job = jobs.ordered_jobs()[0]
     assert all((j1_job.get('name') == 'j1',
                 j1_job.get('execution', {}).get('exec') == 'cat',
                 j1_job.get('execution', {}).get('args', []) == ['-v'],
@@ -122,8 +122,8 @@ def test_api_jobs_smpl():
 
     jobs.add({'exec': 'cat', 'args': ['-v'], 'stdin': '/etc/hostname', 'stdout': 'host.out', 'stderr': 'host.err'},
              name='j1', iterate=10, numCores=2, numNodes=1, wt='10:00', after='j2')
-    assert 'j1' in jobs.jobNames()
-    j1_job = jobs.orderedJobs()[0]
+    assert 'j1' in jobs.job_names()
+    j1_job = jobs.ordered_jobs()[0]
     assert all((j1_job.get('name') == 'j1',
                 j1_job.get('execution', {}).get('exec') == 'cat',
                 j1_job.get('execution', {}).get('args', []) == ['-v'],
@@ -140,8 +140,8 @@ def test_api_jobs_smpl():
 
     jobs.add({'exec': 'cat', 'args': ['-v'], 'stdin': '/etc/hostname', 'stdout': 'host.out', 'stderr': 'host.err',
              'name': 'j1', 'iterate': 10, 'numCores': 2, 'numNodes': 1, 'wt': '10:00', 'after': 'j2'})
-    assert 'j1' in jobs.jobNames()
-    j1_job = jobs.orderedJobs()[0]
+    assert 'j1' in jobs.job_names()
+    j1_job = jobs.ordered_jobs()[0]
     assert all((j1_job.get('name') == 'j1',
                 j1_job.get('execution', {}).get('exec') == 'cat',
                 j1_job.get('execution', {}).get('args', []) == ['-v'],
@@ -160,32 +160,32 @@ def test_api_jobs_std_errors():
     jobs = Jobs()
 
     with pytest.raises(InvalidJobDescriptionError, match=r".*Missing \"execution/exec\" key.*"):
-        jobs.addStd()
+        jobs.add_std()
     with pytest.raises(InvalidJobDescriptionError, match=r".*Missing \"execution/exec\" key.*"):
-        jobs.addStd(name='j1')
+        jobs.add_std(name='j1')
     with pytest.raises(InvalidJobDescriptionError, match=r".*Missing \"execution/exec\" key.*"):
-        jobs.addStd(name='j1', execution={})
+        jobs.add_std(name='j1', execution={})
     with pytest.raises(InvalidJobDescriptionError, match=r".*Missing \"execution/exec\" key.*"):
-        jobs.addStd(name='j1', execution={'stdout': 'out'})
+        jobs.add_std(name='j1', execution={'stdout': 'out'})
     with pytest.raises(InvalidJobDescriptionError, match=r".*Missing \"execution/exec\" key.*"):
-        jobs.addStd(name='j1', resources={'numCores': { 'exact': 2 }})
+        jobs.add_std(name='j1', resources={'numCores': { 'exact': 2 }})
 
-    jobs.addStd(name='j1', execution={'exec': '/bin/date'})
+    jobs.add_std(name='j1', execution={'exec': '/bin/date'})
 
     with pytest.raises(InvalidJobDescriptionError, match=r".*Job j1 already in list"):
-        jobs.addStd(name='j1', execution={'exec': '/bin/date'})
+        jobs.add_std(name='j1', execution={'exec': '/bin/date'})
 
 
 def test_api_jobs_std():
     jobs = Jobs()
 
-    jobs.addStd(name='j1', iterate={'stop': 10},
+    jobs.add_std(name='j1', iterate={'stop': 10},
                 execution={'exec': 'cat', 'args': ['-v'], 'stdin': '/etc/hostname', 'stdout': 'host.out',
                            'stderr': 'host.err'},
                 resources={'numCores': {'exact': 2}, 'numNodes': {'exact': 1}, 'wt': '10:00'},
                 dependencies={'after': ['j2']})
-    assert 'j1' in jobs.jobNames()
-    j1_job = jobs.orderedJobs()[0]
+    assert 'j1' in jobs.job_names()
+    j1_job = jobs.ordered_jobs()[0]
     assert all((j1_job.get('name') == 'j1',
                 j1_job.get('execution', {}).get('exec') == 'cat',
                 j1_job.get('execution', {}).get('args', []) == ['-v'],
@@ -200,13 +200,13 @@ def test_api_jobs_std():
     jobs.clear()
 
 
-    jobs.addStd({'name': 'j1', 'iterate': {'stop': 10}},
+    jobs.add_std({'name': 'j1', 'iterate': {'stop': 10}},
                 execution={'exec': 'cat', 'args': ['-v'], 'stdin': '/etc/hostname', 'stdout': 'host.out',
                            'stderr': 'host.err'},
                 resources={'numCores': {'exact': 2}, 'numNodes': {'exact': 1}, 'wt': '10:00'},
                 dependencies={'after': ['j2']})
-    assert 'j1' in jobs.jobNames()
-    j1_job = jobs.orderedJobs()[0]
+    assert 'j1' in jobs.job_names()
+    j1_job = jobs.ordered_jobs()[0]
     assert all((j1_job.get('name') == 'j1',
                 j1_job.get('execution', {}).get('exec') == 'cat',
                 j1_job.get('execution', {}).get('args', []) == ['-v'],
@@ -226,8 +226,8 @@ def test_api_jobs_load_save(tmpdir):
              numCores=2, numNodes=1, wt='10:00')
     jobs.add(name='j2', iterate=10, exec='date', args=['-v'], stdout='date.out',
              numCores={'exact': 1}, wt='10:00', after='j1')
-    assert 'j1' in jobs.jobNames()
-    j1_job = jobs.orderedJobs()[0]
+    assert 'j1' in jobs.job_names()
+    j1_job = jobs.ordered_jobs()[0]
     assert all((j1_job.get('name') == 'j1',
                 j1_job.get('execution', {}).get('exec') == 'cat',
                 j1_job.get('execution', {}).get('args', []) == ['-v'],
@@ -238,8 +238,8 @@ def test_api_jobs_load_save(tmpdir):
                 j1_job.get('resources', {}).get('numNodes', {}).get('exact') == 1,
                 j1_job.get('resources', {}).get('wt') == '10:00',
                 j1_job.get('iteration', {}).get('stop', 0) == 10))
-    assert 'j2' in jobs.jobNames()
-    j2_job = jobs.orderedJobs()[1]
+    assert 'j2' in jobs.job_names()
+    j2_job = jobs.ordered_jobs()[1]
     assert all((j2_job.get('name') == 'j2',
                 j2_job.get('execution', {}).get('exec') == 'date',
                 j2_job.get('execution', {}).get('args', []) == ['-v'],
@@ -252,24 +252,24 @@ def test_api_jobs_load_save(tmpdir):
     file_path = join(str(tmpdir), 'jobs.json')
 
     with pytest.raises(FileError):
-        jobs.loadFromFile(file_path)
+        jobs.load_from_file(file_path)
     assert len(jobs.jobs()) == 2
 
     with pytest.raises(FileError):
-        jobs.saveToFile(join(str(tmpdir), 'unexisting_dir', 'jobs.json'))
+        jobs.save_to_file(join(str(tmpdir), 'unexisting_dir', 'jobs.json'))
     assert len(jobs.jobs()) == 2
 
-    jobs.saveToFile(file_path)
+    jobs.save_to_file(file_path)
 
     assert all((exists(file_path), stat(file_path).st_size > 0)), file_path
 
     jobs.clear()
     assert len(jobs.jobs()) == 0
 
-    jobs.loadFromFile(file_path)
+    jobs.load_from_file(file_path)
     assert len(jobs.jobs()) == 2
-    j1_job_clone = jobs.orderedJobs()[0]
-    j2_job_clone = jobs.orderedJobs()[1]
+    j1_job_clone = jobs.ordered_jobs()[0]
+    j2_job_clone = jobs.ordered_jobs()[1]
     assert all((j1_job_clone == j1_job, j2_job_clone == j2_job))
 
     rmtree(tmpdir)
@@ -295,7 +295,7 @@ def test_api_submit_simple(tmpdir):
 
         m.wait4(m.list())
 
-        jinfos = m.infoParsed(ids)
+        jinfos = m.info_parsed(ids)
         assert all((len(jinfos) == 1, jid in jinfos, jinfos[jid].status  == 'SUCCEED'))
 
         aux_dir = find_single_aux_dir(str(tmpdir))
@@ -312,7 +312,7 @@ def test_api_submit_simple(tmpdir):
         jid = ids[0]
         assert len(m.list()) == 1
         m.wait4(m.list())
-        jinfos = m.infoParsed(ids)
+        jinfos = m.info_parsed(ids)
         assert all((len(jinfos) == 1, jid in jinfos, jinfos[jid].status  == 'SUCCEED'))
         assert all((exists(tmpdir.join('host.out')),
                     exists(tmpdir.join('host2.out')), stat(tmpdir.join('host2.out')).st_size > 0,
@@ -343,7 +343,7 @@ def test_api_submit_iterate(tmpdir):
 
         m.wait4(m.list())
 
-        jinfos = m.infoParsed(ids, withChilds=True)
+        jinfos = m.info_parsed(ids, withChilds=True)
         assert all((len(jinfos) == 1, jid in jinfos, jinfos[jid].status  == 'SUCCEED'))
         assert all((jinfos[jid].iterations, jinfos[jid].iterations.get('start', -1) == 0,
                     jinfos[jid].iterations.get('stop', 0) == iters, jinfos[jid].iterations.get('total', 0) == iters,
@@ -379,7 +379,7 @@ def test_api_submit_resources(tmpdir):
         assert len(m.list()) == 1
         m.wait4(m.list())
 
-        jinfos = m.infoParsed(ids)
+        jinfos = m.info_parsed(ids)
         assert all((len(jinfos) == 1, jid in jinfos, jinfos[ids[0]].status  == 'SUCCEED',
                     jinfos[ids[0]].total_cores == 2))
     finally:
@@ -410,7 +410,7 @@ def test_api_submit_slurm_resources():
         assert len(m.list()) == 1
         m.wait4(m.list())
 
-        jinfos = m.infoParsed(ids)
+        jinfos = m.info_parsed(ids)
         assert all((len(jinfos) == 1, jid in jinfos, jinfos[jid].status  == 'SUCCEED',
                     len(jinfos[jid].nodes) == nodes, jinfos[jid].total_cores == cores * nodes))
         assert all(len(node_cores) == cores for node, node_cores in jinfos[jid].nodes.items())

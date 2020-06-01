@@ -210,10 +210,10 @@ def get_slurm_resources_binded():
 
 def submit_2_manager_and_wait_4_info(manager, jobs, expected_status, **infoKwargs):
     ids = manager.submit(jobs)
-    assert len(ids) == len(jobs.jobNames())
+    assert len(ids) == len(jobs.job_names())
 
     manager.wait4all()
-    jinfos = manager.infoParsed(ids, **infoKwargs)
+    jinfos = manager.info_parsed(ids, **infoKwargs)
     print('parsed job infos: {}'.format(str(jinfos)))
 
     # check # of jobs is correct

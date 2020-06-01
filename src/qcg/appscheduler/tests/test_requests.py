@@ -17,11 +17,11 @@ def test_request_general(tmpdir):
     try:
         # missing 'request' element
         with pytest.raises(ConnectionError, match=r".*Invalid request.*"):
-            m.sendRequest({ 'notARequestElement': 'some value'})
+            m.send_request({ 'notARequestElement': 'some value'})
 
         # unknown 'request'
         with pytest.raises(ConnectionError, match=r".*Unknown request name.*"):
-            m.sendRequest({ 'request': 'some unknown request'})
+            m.send_request({ 'request': 'some unknown request'})
     finally:
         m.finish()
 
@@ -37,14 +37,14 @@ def test_request_control(tmpdir):
     try:
         # missing 'command' for control request
         with pytest.raises(ConnectionError, match=r".*Wrong control request - missing command.*"):
-            m.sendRequest({ 'request': 'control'})
+            m.send_request({ 'request': 'control'})
 
         # unknown 'command' for control request
         with pytest.raises(ConnectionError, match=r".*Wrong control request - unknown command.*"):
-            m.sendRequest({ 'request': 'control', 'command': 'unknown command'})
+            m.send_request({ 'request': 'control', 'command': 'unknown command'})
 
         # finishAfterAllTasksDone 'command' for control request
-        res =  m.sendRequest({ 'request': 'control', 'command': 'finishAfterAllTasksDone'})
+        res =  m.send_request({ 'request': 'control', 'command': 'finishAfterAllTasksDone'})
         assert all((res.get('code', -1) == 0, res.get('message', None) == 'finishAfterAllTasksDone command accepted'))
     finally:
         try:
@@ -52,9 +52,6 @@ def test_request_control(tmpdir):
             m.finish()
         except Exception:
             pass
-
-        m.wait4ManagerFinish()
-        m.cleanup()
 
 
 def test_request_submit(tmpdir):
@@ -73,37 +70,37 @@ def test_request_submit(tmpdir):
     try:
         # missing 'jobs' for submit request
         with pytest.raises(ConnectionError, match=r".*Wrong submit request - missing jobs data.*"):
-            m.sendRequest({ 'request': 'submit'})
+            m.send_request({ 'request': 'submit'})
 
         # wrong 'jobs' data format for submit request
         with pytest.raises(ConnectionError, match=r".*Wrong submit request - missing jobs data.*"):
-            m.sendRequest({ 'request': 'submit', 'jobs': None })
+            m.send_request({ 'request': 'submit', 'jobs': None })
 
         # wrong 'jobs' data format for submit request
         with pytest.raises(ConnectionError, match=r".*Wrong submit request - missing jobs data.*"):
-            m.sendRequest({ 'request': 'submit', 'jobs': 'not a list' })
+            m.send_request({ 'request': 'submit', 'jobs': 'not a list' })
 
         # wrong 'jobs' data format for submit request
         with pytest.raises(ConnectionError, match=r".*Wrong submit request - wrong job data.*"):
-            m.sendRequest({ 'request': 'submit', 'jobs': [ 'not a dictionary' ] })
+            m.send_request({ 'request': 'submit', 'jobs': [ 'not a dictionary' ] })
 
         # missing job's name
         with pytest.raises(ConnectionError, match=r".*Missing name in job description.*"):
-            m.sendRequest({ 'request': 'submit', 'jobs': [ { 'execution': '/bin/date' } ] })
+            m.send_request({ 'request': 'submit', 'jobs': [ { 'execution': '/bin/date' } ] })
 
         # missing execution element
         with pytest.raises(ConnectionError, match=r".*Missing execution element in job description.*"):
-            m.sendRequest({ 'request': 'submit', 'jobs': [ { 'name': 'date' } ] })
+            m.send_request({ 'request': 'submit', 'jobs': [ { 'name': 'date' } ] })
 
         # wrong iterations format
         with pytest.raises(ConnectionError, match=r".*Wrong format of iteration directive: not a dictionary.*"):
-            m.sendRequest({ 'request': 'submit', 'jobs': [ { 'name': 'date',
+            m.send_request({ 'request': 'submit', 'jobs': [ { 'name': 'date',
                                                              'execution': { 'exec': '/bin/date' },
                                                              'iteration': 'not a list' } ] })
 
         # wrong iterations format
         with pytest.raises(ConnectionError, match=r".*Wrong format of iteration directive: start index larger then stop one.*"):
-            m.sendRequest({ 'request': 'submit', 'jobs': [ { 'name': 'date',
+            m.send_request({ 'request': 'submit', 'jobs': [ { 'name': 'date',
                                                              'execution': { 'exec': '/bin/date' },
                                                              'iteration': { 'start': 2, 'stop': 1 } } ] })
 
@@ -122,15 +119,15 @@ def test_request_job_status(tmpdir):
     try:
         # missing 'jobNames' for jobStatus request
         with pytest.raises(ConnectionError, match=r".*Wrong job status request - missing job names.*"):
-            m.sendRequest({ 'request': 'jobStatus'})
+            m.send_request({ 'request': 'jobStatus'})
 
         # wrong format of 'jobNames' element
         with pytest.raises(ConnectionError, match=r".*Wrong job status request - missing job names.*"):
-            m.sendRequest({ 'request': 'jobStatus', 'jobNames': 'not a list' })
+            m.send_request({ 'request': 'jobStatus', 'jobNames': 'not a list' })
 
         # wrong format of 'jobNames' element - empty list
         with pytest.raises(ConnectionError, match=r".*Wrong job status request - missing job names.*"):
-            m.sendRequest({ 'request': 'jobStatus', 'jobNames': [ ] })
+            m.send_request({ 'request': 'jobStatus', 'jobNames': [ ] })
     finally:
         m.finish()
 
@@ -150,15 +147,15 @@ def test_request_job_info(tmpdir):
     try:
         # missing 'jobNames' for jobInfo request
         with pytest.raises(ConnectionError, match=r".*Wrong job info request - missing job names.*"):
-            m.sendRequest({ 'request': 'jobInfo'})
+            m.send_request({ 'request': 'jobInfo'})
 
         # wrong format of 'jobNames' element
         with pytest.raises(ConnectionError, match=r".*Wrong job info request - missing job names.*"):
-            m.sendRequest({ 'request': 'jobInfo', 'jobNames': 'not a list' })
+            m.send_request({ 'request': 'jobInfo', 'jobNames': 'not a list' })
 
         # wrong format of 'jobNames' element - empty list
         with pytest.raises(ConnectionError, match=r".*Wrong job info request - missing job names.*"):
-            m.sendRequest({ 'request': 'jobInfo', 'jobNames': [ ] })
+            m.send_request({ 'request': 'jobInfo', 'jobNames': [ ] })
     finally:
         m.finish()
 
@@ -174,15 +171,15 @@ def test_request_cancel_job(tmpdir):
     try:
         # missing 'jobNames' for jobInfo request
         with pytest.raises(ConnectionError, match=r".*Wrong cancel job request - missing job names.*"):
-            m.sendRequest({ 'request': 'cancelJob'})
+            m.send_request({ 'request': 'cancelJob'})
 
         # wrong format of 'jobNames' element
         with pytest.raises(ConnectionError, match=r".*Wrong cancel job request - missing job names.*"):
-            m.sendRequest({ 'request': 'cancelJob', 'jobNames': 'not a list' })
+            m.send_request({ 'request': 'cancelJob', 'jobNames': 'not a list' })
 
         # wrong format of 'jobNames' element - empty list
         with pytest.raises(ConnectionError, match=r".*Wrong cancel job request - missing job names.*"):
-            m.sendRequest({ 'request': 'cancelJob', 'jobNames': [ ] })
+            m.send_request({ 'request': 'cancelJob', 'jobNames': [ ] })
     finally:
         m.finish()
 
@@ -198,15 +195,15 @@ def test_request_remove_job(tmpdir):
     try:
         # missing 'jobNames' for jobInfo request
         with pytest.raises(ConnectionError, match=r".*Wrong remove job request - missing job names.*"):
-            m.sendRequest({ 'request': 'removeJob'})
+            m.send_request({ 'request': 'removeJob'})
 
         # wrong format of 'jobNames' element
         with pytest.raises(ConnectionError, match=r".*Wrong remove job request - missing job names.*"):
-            m.sendRequest({ 'request': 'removeJob', 'jobNames': 'not a list' })
+            m.send_request({ 'request': 'removeJob', 'jobNames': 'not a list' })
 
         # wrong format of 'jobNames' element - empty list
         with pytest.raises(ConnectionError, match=r".*Wrong remove job request - missing job names.*"):
-            m.sendRequest({ 'request': 'removeJob', 'jobNames': [ ] })
+            m.send_request({ 'request': 'removeJob', 'jobNames': [ ] })
     finally:
         m.finish()
 
@@ -248,27 +245,27 @@ def test_request_notify(tmpdir):
     try:
         # missing 'entity' for notify request
         with pytest.raises(ConnectionError, match=r".*Wrong notify request - missing/unknown entity.*"):
-            m.sendRequest({ 'request': 'notify'})
+            m.send_request({ 'request': 'notify'})
 
         # unknown 'entity' for notify request
         with pytest.raises(ConnectionError, match=r".*Wrong notify request - missing/unknown entity.*"):
-            m.sendRequest({ 'request': 'notify', 'entity': 'task' })
+            m.send_request({ 'request': 'notify', 'entity': 'task' })
 
         # missing params
         with pytest.raises(ConnectionError, match=r".*Wrong notify request - missing register parameters.*"):
-            m.sendRequest({ 'request': 'notify', 'entity': 'job' })
+            m.send_request({ 'request': 'notify', 'entity': 'job' })
 
         # missing key params
         with pytest.raises(ConnectionError, match=r".*Wrong notify request - missing key notify parameters.*"):
-            m.sendRequest({ 'request': 'notify', 'entity': 'job', 'params': { 'name': 'j1' } })
+            m.send_request({ 'request': 'notify', 'entity': 'job', 'params': { 'name': 'j1' } })
 
         # missing key params
         with pytest.raises(ConnectionError, match=r".*Wrong notify request - missing key notify parameters.*"):
-            m.sendRequest({ 'request': 'notify', 'entity': 'job', 'params': { 'name': 'j1', 'state': 'FINISHED' } })
+            m.send_request({ 'request': 'notify', 'entity': 'job', 'params': { 'name': 'j1', 'state': 'FINISHED' } })
 
         # missing key params
         with pytest.raises(ConnectionError, match=r".*Wrong notify request - missing key notify parameters.*"):
-            m.sendRequest({ 'request': 'notify', 'entity': 'job', 'params': { 'state': 'FINISHED',
+            m.send_request({ 'request': 'notify', 'entity': 'job', 'params': { 'state': 'FINISHED',
                                                                               'attributes': 'a1' } })
 
     finally:
@@ -288,28 +285,28 @@ def test_request_register(tmpdir):
     try:
         # missing 'entity' for register request
         with pytest.raises(ConnectionError, match=r".*Wrong register request - missing/unknown entity.*"):
-            m.sendRequest({ 'request': 'register'})
+            m.send_request({ 'request': 'register'})
 
         # unknown 'entity' for register request
         with pytest.raises(ConnectionError, match=r".*Wrong register request - missing/unknown entity.*"):
-            m.sendRequest({ 'request': 'register', 'entity': 'job' })
+            m.send_request({ 'request': 'register', 'entity': 'job' })
 
         # missing params
         with pytest.raises(ConnectionError, match=r".*Wrong register request - missing register parameters.*"):
-            m.sendRequest({ 'request': 'register', 'entity': 'manager' })
+            m.send_request({ 'request': 'register', 'entity': 'manager' })
 
         # missing key params
         with pytest.raises(ConnectionError, match=r".*Wrong register request - missing key register parameters.*"):
-            m.sendRequest({ 'request': 'register', 'entity': 'manager', 'params': { 'id': 'm1' } })
+            m.send_request({ 'request': 'register', 'entity': 'manager', 'params': { 'id': 'm1' } })
 
         # missing key params
         with pytest.raises(ConnectionError, match=r".*Wrong register request - missing key register parameters.*"):
-            m.sendRequest({ 'request': 'register', 'entity': 'manager', 'params': { 'id': 'm1',
+            m.send_request({ 'request': 'register', 'entity': 'manager', 'params': { 'id': 'm1',
                                                                                     'address': '0.0.0.0' } })
 
         # missing key params
         with pytest.raises(ConnectionError, match=r".*Wrong register request - missing key register parameters.*"):
-            m.sendRequest({ 'request': 'register', 'entity': 'manager', 'params': { 'resources': { 'nodes': 1 },
+            m.send_request({ 'request': 'register', 'entity': 'manager', 'params': { 'resources': { 'nodes': 1 },
                                                                                     'address': '0.0.0.0' } })
 
     finally:
