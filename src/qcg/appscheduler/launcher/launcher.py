@@ -184,7 +184,7 @@ class Launcher:
             pass
 
         # kill agent processes
-        self._cancel_agents()
+        await self._cancel_agents()
         logging.debug('launcher agents canceled')
 
         # cancel input interface task
@@ -247,17 +247,23 @@ class Launcher:
                     # ingore errors in this place
                     pass
 
-    def _cancel_agents(self):
+    async def _cancel_agents(self):
         """Kill agent processes. """
         for agent_id, agent in self.agents.items():
             if agent.get('process', None):
                 logging.debug('killing agent %s ...', agent_id)
                 try:
-                    agent['process'].join(5)
-#                    agent['process'].kill()
-                    agent['process'].terminate()
+                    await asyncio.wait_for(agent['process'].wait(), 5)
+                    agent['process'] = None
                 except Exception:
                     logging.warning('Failed to kill agent: %s', str(sys.exc_info()))
+                finally:
+                    try:
+                        if agent['process']:
+                            agent['process'].terminate()
+                    except Exception:
+                        # ignore errors in this place
+                        pass
 
         self.agents.clear()
 
