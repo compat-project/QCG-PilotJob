@@ -127,10 +127,10 @@ def test_register_manager_resources_single(tmpdir):
 
         resources_reply = send_request_valid(governor_address, { 'request': 'resourcesInfo' })
         assert all((resources_reply['code'] == 0, 'data' in resources_reply))
-        assert all((resources_reply['data'].get('totalNodes', 0) == direct_nodes,
-                    resources_reply['data'].get('totalCores', 0) == direct_nodes * direct_cores,
-                    resources_reply['data'].get('usedCores', -1) == 0,
-                    resources_reply['data'].get('freeCores', 0) == direct_nodes * direct_cores)), str(resources_reply)
+        assert all((resources_reply['data'].get('total_nodes', 0) == direct_nodes,
+                    resources_reply['data'].get('total_cores', 0) == direct_nodes * direct_cores,
+                    resources_reply['data'].get('used_cores', -1) == 0,
+                    resources_reply['data'].get('free_cores', 0) == direct_nodes * direct_cores)), str(resources_reply)
 
         send_request_valid(governor_address, { 'request': 'finish' })
         governor_process.join()
@@ -144,7 +144,7 @@ def test_register_manager_resources_single(tmpdir):
         if direct_process:
             direct_process.terminate()
 
-        rmtree(str(tmpdir))
+#    rmtree(str(tmpdir))
 
 
 def test_register_manager_resources_many(tmpdir):
@@ -186,10 +186,10 @@ def test_register_manager_resources_many(tmpdir):
         resources_reply = send_request_valid(governor_address, { 'request': 'resourcesInfo' })
         print('got total resource reply: {}'.format(str(resources_reply)))
         assert all((resources_reply['code'] == 0, 'data' in resources_reply))
-        assert all((resources_reply['data'].get('totalNodes', 0) == sum(direct_nodes),
-                    resources_reply['data'].get('totalCores', 0) == sum([direct_nodes[i] * direct_cores[i] for i in range(instances)]),
-                    resources_reply['data'].get('usedCores', -1) == 0,
-                    resources_reply['data'].get('freeCores', 0) == sum([direct_nodes[i] * direct_cores[i] for i in range(instances)]))),\
+        assert all((resources_reply['data'].get('total_nodes', 0) == sum(direct_nodes),
+                    resources_reply['data'].get('total_cores', 0) == sum([direct_nodes[i] * direct_cores[i] for i in range(instances)]),
+                    resources_reply['data'].get('used_cores', -1) == 0,
+                    resources_reply['data'].get('free_cores', 0) == sum([direct_nodes[i] * direct_cores[i] for i in range(instances)]))),\
             str(resources_reply)
 
         send_request_valid(governor_address, { 'request': 'finish' })
@@ -208,7 +208,7 @@ def test_register_manager_resources_many(tmpdir):
             if proc:
                 proc.terminate()
 
-        rmtree(str(tmpdir))
+    rmtree(str(tmpdir))
 
 
 def test_submit_single_direct_single_job(tmpdir):
@@ -239,10 +239,10 @@ def test_submit_single_direct_single_job(tmpdir):
 
         resources_reply = send_request_valid(governor_address, { 'request': 'resourcesInfo' })
         assert all((resources_reply['code'] == 0, 'data' in resources_reply))
-        assert all((resources_reply['data'].get('totalNodes', 0) == direct_nodes,
-                    resources_reply['data'].get('totalCores', 0) == direct_nodes * direct_cores,
-                    resources_reply['data'].get('usedCores', -1) == 0,
-                    resources_reply['data'].get('freeCores', 0) == direct_nodes * direct_cores)), str(resources_reply)
+        assert all((resources_reply['data'].get('total_nodes', 0) == direct_nodes,
+                    resources_reply['data'].get('total_cores', 0) == direct_nodes * direct_cores,
+                    resources_reply['data'].get('used_cores', -1) == 0,
+                    resources_reply['data'].get('free_cores', 0) == direct_nodes * direct_cores)), str(resources_reply)
 
         # submit job
         jname = 'date'
@@ -286,7 +286,7 @@ def test_submit_single_direct_single_job(tmpdir):
         if direct_process:
             direct_process.terminate()
 
-        rmtree(str(tmpdir))
+    rmtree(str(tmpdir))
 
 
 def test_governor_wait_for_all_jobs_single(tmpdir):
@@ -317,10 +317,10 @@ def test_governor_wait_for_all_jobs_single(tmpdir):
 
         resources_reply = send_request_valid(governor_address, { 'request': 'resourcesInfo' })
         assert all((resources_reply['code'] == 0, 'data' in resources_reply))
-        assert all((resources_reply['data'].get('totalNodes', 0) == direct_nodes,
-                    resources_reply['data'].get('totalCores', 0) == direct_nodes * direct_cores,
-                    resources_reply['data'].get('usedCores', -1) == 0,
-                    resources_reply['data'].get('freeCores', 0) == direct_nodes * direct_cores)), str(resources_reply)
+        assert all((resources_reply['data'].get('total_nodes', 0) == direct_nodes,
+                    resources_reply['data'].get('total_cores', 0) == direct_nodes * direct_cores,
+                    resources_reply['data'].get('used_cores', -1) == 0,
+                    resources_reply['data'].get('free_cores', 0) == direct_nodes * direct_cores)), str(resources_reply)
 
         # submit a single job
         jname = 'date'
@@ -366,7 +366,7 @@ def test_governor_wait_for_all_jobs_single(tmpdir):
         if direct_process:
             direct_process.terminate()
 
-        rmtree(str(tmpdir))
+    rmtree(str(tmpdir))
 
 
 def test_governor_wait_for_all_jobs_many(tmpdir):
@@ -397,10 +397,10 @@ def test_governor_wait_for_all_jobs_many(tmpdir):
 
         resources_reply = send_request_valid(governor_address, { 'request': 'resourcesInfo' })
         assert all((resources_reply['code'] == 0, 'data' in resources_reply))
-        assert all((resources_reply['data'].get('totalNodes', 0) == direct_nodes,
-                    resources_reply['data'].get('totalCores', 0) == direct_nodes * direct_cores,
-                    resources_reply['data'].get('usedCores', -1) == 0,
-                    resources_reply['data'].get('freeCores', 0) == direct_nodes * direct_cores)), str(resources_reply)
+        assert all((resources_reply['data'].get('total_nodes', 0) == direct_nodes,
+                    resources_reply['data'].get('total_cores', 0) == direct_nodes * direct_cores,
+                    resources_reply['data'].get('used_cores', -1) == 0,
+                    resources_reply['data'].get('free_cores', 0) == direct_nodes * direct_cores)), str(resources_reply)
 
         # submit a bunch of jobs
         njobs = 10
@@ -451,7 +451,7 @@ def test_governor_wait_for_all_jobs_many(tmpdir):
         if direct_process:
             direct_process.terminate()
 
-        rmtree(str(tmpdir))
+    rmtree(str(tmpdir))
 
 
 def test_governor_submit_many_instances(tmpdir):
@@ -501,10 +501,10 @@ def test_governor_submit_many_instances(tmpdir):
         resources_reply = send_request_valid(governor_address, { 'request': 'resourcesInfo' })
         print('got total resource reply: {}'.format(str(resources_reply)))
         assert all((resources_reply['code'] == 0, 'data' in resources_reply))
-        assert all((resources_reply['data'].get('totalNodes', 0) == sum(direct_nodes),
-                    resources_reply['data'].get('totalCores', 0) == sum([direct_nodes[i] * direct_cores[i] for i in range(instances)]),
-                    resources_reply['data'].get('usedCores', -1) == 0,
-                    resources_reply['data'].get('freeCores', 0) == sum([direct_nodes[i] * direct_cores[i] for i in range(instances)]))),\
+        assert all((resources_reply['data'].get('total_nodes', 0) == sum(direct_nodes),
+                    resources_reply['data'].get('total_cores', 0) == sum([direct_nodes[i] * direct_cores[i] for i in range(instances)]),
+                    resources_reply['data'].get('used_cores', -1) == 0,
+                    resources_reply['data'].get('free_cores', 0) == sum([direct_nodes[i] * direct_cores[i] for i in range(instances)]))),\
             str(resources_reply)
 
         # submit a bunch of jobs
@@ -573,7 +573,7 @@ def test_governor_submit_many_instances(tmpdir):
             if process:
                 process.terminate()
 
-        rmtree(str(tmpdir))
+    rmtree(str(tmpdir))
 
 
 def test_slurm_partition_resources():
@@ -601,10 +601,10 @@ def test_slurm_partition_resources():
         # as 1 core is reserved for each partition manager, total number of allocated cores
         # will be the same as number of partition managers - in our case 1 partition manager
         # per node
-        assert all((resources_reply['data'].get('totalNodes', 0) == resources.totalNodes,
-                    resources_reply['data'].get('totalCores', 0) == resources.totalCores,
-                    resources_reply['data'].get('usedCores', -1) == resources.totalNodes,
-                    resources_reply['data'].get('freeCores', 0) == resources.totalCores - resources.totalNodes)),\
+        assert all((resources_reply['data'].get('total_nodes', 0) == resources.total_nodes,
+                    resources_reply['data'].get('total_cores', 0) == resources.total_cores,
+                    resources_reply['data'].get('used_cores', -1) == resources.total_nodes,
+                    resources_reply['data'].get('free_cores', 0) == resources.total_cores - resources.total_nodes)),\
             str(resources_reply)
 
         send_request_valid(governor_address, {'request': 'finish'})
@@ -614,7 +614,7 @@ def test_slurm_partition_resources():
         if governor_process:
             governor_process.terminate()
 
-        rmtree(governor_dir)
+    rmtree(governor_dir)
 
 
 def test_slurm_partition_submit():
@@ -643,10 +643,10 @@ def test_slurm_partition_submit():
         # as 1 core is reserved for each partition manager, total number of allocated cores
         # will be the same as number of partition managers - in our case 1 partition manager
         # per node
-        assert all((resources_reply['data'].get('totalNodes', 0) == resources.totalNodes,
-                    resources_reply['data'].get('totalCores', 0) == resources.totalCores,
-                    resources_reply['data'].get('usedCores', -1) == resources.totalNodes,
-                    resources_reply['data'].get('freeCores', 0) == resources.totalCores - resources.totalNodes)), str(resources_reply)
+        assert all((resources_reply['data'].get('total_nodes', 0) == resources.total_nodes,
+                    resources_reply['data'].get('total_cores', 0) == resources.total_cores,
+                    resources_reply['data'].get('used_cores', -1) == resources.total_nodes,
+                    resources_reply['data'].get('free_cores', 0) == resources.total_cores - resources.total_nodes)), str(resources_reply)
 
         # submit a bunch of jobs
         njobs = 100
@@ -704,5 +704,5 @@ def test_slurm_partition_submit():
         if governor_process:
             governor_process.terminate()
 
-        rmtree(str(governor_dir))
+    rmtree(str(governor_dir))
 

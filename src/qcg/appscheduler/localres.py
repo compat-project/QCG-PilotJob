@@ -6,6 +6,19 @@ from qcg.appscheduler.config import Config
 
 
 def parse_local_resources(config):
+    """Parse resources passed in configuration.
+
+    The user can specify in configuration "virtual" resources such as number of nodes and cores.
+
+    Args:
+        config (dict): QCG-PilotJob configuration
+
+    Returns:
+        Resources: available resources
+
+    Raises:
+        ValueError: in case of missing node configuration or wrong number of cores configuration
+    """
     nodes_conf = Config.EXECUTION_NODES.get(config)
 
     if nodes_conf:
@@ -20,7 +33,7 @@ def parse_local_resources(config):
 
             nodes.append(Node(nname, int(ncores), 0))
     else:
-        nodes = [ Node(socket.gethostname(), mp.cpu_count(), 0) ]
+        nodes = [Node(socket.gethostname(), mp.cpu_count(), 0)]
 
     if not nodes:
         raise ValueError('no node available')

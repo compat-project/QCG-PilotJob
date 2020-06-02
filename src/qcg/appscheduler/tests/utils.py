@@ -26,7 +26,7 @@ def save_jobs_to_file(jobs, file_path):
         remove(file_path)
 
     with open(file_path, 'w') as f:
-        f.write(json.dumps([ job.toDict() for job in jobs ], indent=2))
+        f.write(json.dumps([ job.to_dict() for job in jobs ], indent=2))
 
 
 def save_reqs_to_file(reqs, file_path):
@@ -142,7 +142,7 @@ def wait_for_job_finish_success(manager_address, jobnames, timeout_secs=0):
             assert all((jstatus['status'] == 0, jstatus['data']['jobName'] == jname))
 
             jstate = JobState[jstatus['data']['status']]
-            if jstate.isFinished():
+            if jstate.is_finished():
                 assert jstate == JobState.SUCCEED, str(jstate)
             else:
                 current_jobnames.append(jname)
@@ -191,13 +191,13 @@ def get_slurm_resources():
     resources = get_resources(config)
     assert not resources is None
     assert all((resources.rtype == ResourcesType.SLURM,
-                resources.totalNodes == int(allocation.get('NumNodes', '-1')),
-                resources.totalCores == int(allocation.get('NumCPUs', '-1')))), \
+                resources.total_nodes == int(allocation.get('NumNodes', '-1')),
+                resources.total_cores == int(allocation.get('NumCPUs', '-1')))), \
         'resources: {}, allocation: {}'.format(str(resources), str(allocation))
 
-    assert all((resources.freeCores == resources.totalCores,
-                resources.usedCores == 0,
-                resources.totalNodes == len(resources.nodes)))
+    assert all((resources.free_cores == resources.total_cores,
+                resources.used_cores == 0,
+                resources.total_nodes == len(resources.nodes)))
 
     return resources, allocation
 
@@ -210,10 +210,10 @@ def get_slurm_resources_binded():
 
 def submit_2_manager_and_wait_4_info(manager, jobs, expected_status, **infoKwargs):
     ids = manager.submit(jobs)
-    assert len(ids) == len(jobs.jobNames())
+    assert len(ids) == len(jobs.job_names())
 
     manager.wait4all()
-    jinfos = manager.infoParsed(ids, **infoKwargs)
+    jinfos = manager.info_parsed(ids, **infoKwargs)
     print('parsed job infos: {}'.format(str(jinfos)))
 
     # check # of jobs is correct

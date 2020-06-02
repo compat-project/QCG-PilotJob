@@ -29,8 +29,8 @@ def test_slurmenv_api_resources():
         m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
         api_res = m.resources()
 
-        assert all(('totalNodes' in api_res, 'totalCores' in api_res))
-        assert all((api_res['totalNodes'] == resources.totalNodes, api_res['totalCores'] == resources.totalCores))
+        assert all(('total_nodes' in api_res, 'total_cores' in api_res))
+        assert all((api_res['total_nodes'] == resources.total_nodes, api_res['total_cores'] == resources.total_cores))
 
         aux_dir = find_single_aux_dir(str(tmpdir))
 
@@ -61,7 +61,7 @@ def test_slurmenv_api_submit_simple():
         m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
 
         jobs = Jobs().\
-            addStd({ 'name': 'host',
+            add_std({ 'name': 'host',
                      'execution': {
                          'exec': '/bin/hostname',
                          'args': [ '--fqdn' ],
@@ -91,20 +91,20 @@ def test_slurmenv_api_submit_many_cores():
         m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
 
         jobs = Jobs(). \
-            addStd({ 'name': 'host',
+            add_std({ 'name': 'host',
                      'execution': {
                          'exec': '/bin/hostname',
                          'args': [ '--fqdn' ],
                          'stdout': 'out',
                      },
-                     'resources': { 'numCores': { 'exact': resources.totalCores } }
+                     'resources': { 'numCores': { 'exact': resources.total_cores } }
                      })
         jinfos = submit_2_manager_and_wait_4_info(m, jobs, 'SUCCEED')
 
         # check working directories of job's inside working directory of service
         assert tmpdir == jinfos['host'].wdir, str(jinfos['host'].wdir)
-        assert all((len(jinfos['host'].nodes) == resources.totalNodes,
-                    jinfos['host'].totalCores == resources.totalCores)), str(jinfos['host'])
+        assert all((len(jinfos['host'].nodes) == resources.total_nodes,
+                    jinfos['host'].total_cores == resources.total_cores)), str(jinfos['host'])
 
     finally:
         if m:
@@ -128,7 +128,7 @@ def test_slurmenv_api_submit_resource_ranges():
         m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
 
         jobs = Jobs(). \
-            addStd({ 'name': 'host',
+            add_std({ 'name': 'host',
                      'execution': {
                          'exec': '/bin/hostname',
                          'args': [ '--fqdn' ],
@@ -142,7 +142,7 @@ def test_slurmenv_api_submit_resource_ranges():
         assert "Both core's range boundaries (min, max) must be defined" in jinfo.messages, str(jinfo)
 
         jobs = Jobs(). \
-            addStd({ 'name': 'host2',
+            add_std({ 'name': 'host2',
                      'execution': {
                          'exec': '/bin/hostname',
                          'args': [ '--fqdn' ],
@@ -155,10 +155,10 @@ def test_slurmenv_api_submit_resource_ranges():
         # job should run on single node (the first free) with all available cores
         jinfos = submit_2_manager_and_wait_4_info(m, jobs, 'SUCCEED')
         jinfo = jinfos['host2']
-        assert all((len(jinfo.nodes) == 1, jinfo.totalCores == resources.nodes[0].total)), str(jinfo)
+        assert all((len(jinfo.nodes) == 1, jinfo.total_cores == resources.nodes[0].total)), str(jinfo)
 
         jobs = Jobs(). \
-            addStd({ 'name': 'host3',
+            add_std({ 'name': 'host3',
                      'execution': {
                          'exec': '/bin/hostname',
                          'args': [ '--fqdn' ],
@@ -170,7 +170,7 @@ def test_slurmenv_api_submit_resource_ranges():
         # job should run on at least two nodes with total maximum given cores
         jinfos = submit_2_manager_and_wait_4_info(m, jobs, 'SUCCEED')
         jinfo = jinfos['host3']
-        assert all((len(jinfo.nodes) == 2, jinfo.totalCores == resources.nodes[0].total + 1)), str(jinfo)
+        assert all((len(jinfo.nodes) == 2, jinfo.total_cores == resources.nodes[0].total + 1)), str(jinfo)
 
     finally:
         if m:
@@ -194,35 +194,35 @@ def test_slurmenv_api_submit_exceed_total_cores():
         m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
 
         jobs = Jobs(). \
-            addStd({ 'name': 'date',
+            add_std({ 'name': 'date',
                      'execution': { 'exec': '/bin/date' },
                      'resources': {
-                         'numCores': { 'exact': resources.totalCores + 1 }
+                         'numCores': { 'exact': resources.total_cores + 1 }
                      }})
         with pytest.raises(ConnectionError, match=r".*Not enough resources.*"):
             m.submit(jobs)
         assert len(m.list()) == 0
 
         jobs = Jobs(). \
-        addStd({ 'name': 'date',
+        add_std({ 'name': 'date',
                      'execution': { 'exec': '/bin/date' },
                      'resources': {
-                         'numNodes': { 'exact': resources.totalNodes + 1 }
+                         'numNodes': { 'exact': resources.total_nodes + 1 }
                      }})
         with pytest.raises(ConnectionError, match=r".*Not enough resources.*"):
             ids = m.submit(jobs)
         assert len(m.list()) == 0
 
         jobs = Jobs(). \
-            addStd({ 'name': 'date',
+            add_std({ 'name': 'date',
                      'execution': {
                          'exec': '/bin/date',
                          'stdout': 'std.out',
                      },
-                     'resources': { 'numCores': { 'exact': resources.totalCores  } }
+                     'resources': { 'numCores': { 'exact': resources.total_cores  } }
                      })
         jinfos = submit_2_manager_and_wait_4_info(m, jobs, 'SUCCEED')
-        assert jinfos['date'].totalCores == resources.totalCores
+        assert jinfos['date'].total_cores == resources.total_cores
     finally:
         if m:
             m.finish()
@@ -245,7 +245,7 @@ def test_slurmenv_api_std_streams():
         m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
 
         jobs = Jobs(). \
-            addStd({ 'name': 'host',
+            add_std({ 'name': 'host',
                      'execution': {
                          'exec': 'cat',
                          'stdin': '/etc/system-release',
@@ -285,7 +285,7 @@ def test_slurmenv_api_std_streams_many_cores():
         m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
 
         jobs = Jobs(). \
-            addStd({ 'name': 'host',
+            add_std({ 'name': 'host',
                      'execution': {
                          'exec': 'cat',
                          'stdin': '/etc/system-release',
@@ -330,7 +330,7 @@ def test_slurmenv_api_iteration_simple():
 
         its = 2
         jobs = Jobs(). \
-            addStd({ 'name': 'host',
+            add_std({ 'name': 'host',
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'hostname', 'args': [ '--fqdn' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'exact': 1 } }
@@ -345,7 +345,7 @@ def test_slurmenv_api_iteration_simple():
 
         its = 2
         jobs = Jobs(). \
-            addStd({ 'name': 'host2',
+            add_std({ 'name': 'host2',
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'hostname', 'args': [ '--fqdn' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'exact': 1 } }
@@ -361,7 +361,7 @@ def test_slurmenv_api_iteration_simple():
         for iteration in range(its):
             job_it = jinfo.childs[iteration]
             assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format('host2', iteration),
-                        job_it.wdir == tmpdir, job_it.totalCores == 1))
+                        job_it.wdir == tmpdir, job_it.total_cores == 1))
     finally:
         if m:
             m.finish()
@@ -389,7 +389,7 @@ def test_slurmenv_api_iteration_core_scheduling():
         jname = 'host'
         its = 2
         jobs = Jobs(). \
-           addStd({ 'name': jname,
+           add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'hostname', 'args': [ '--fqdn' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': 1,
@@ -406,17 +406,17 @@ def test_slurmenv_api_iteration_core_scheduling():
             job_it = jinfo.childs[iteration]
             print('job iteration {}: {}'.format(iteration, str(job_it)))
             assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format(jname, iteration),
-                        job_it.totalCores >= 1, job_it.totalCores < resources.totalCores)), str(job_it)
+                        job_it.total_cores >= 1, job_it.total_cores < resources.total_cores)), str(job_it)
         # all iterations has been scheduled across all resources
-        assert sum([ child.totalCores for child in jinfo.childs ]) == resources.totalCores
-        assert all(child.totalCores == resources.totalCores / its for child in jinfo.childs)
+        assert sum([ child.total_cores for child in jinfo.childs ]) == resources.total_cores
+        assert all(child.total_cores == resources.total_cores / its for child in jinfo.childs)
 
         # we explicity specify the 'split-into' parameter to 2, behavior should be the same as in the
         # previous example
         jname = 'host2'
         its = 2
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'hostname', 'args': [ '--fqdn' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': 1,
@@ -433,17 +433,17 @@ def test_slurmenv_api_iteration_core_scheduling():
             job_it = jinfo.childs[iteration]
             print('job iteration {}: {}'.format(iteration, str(job_it)))
             assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format(jname, iteration),
-                        job_it.totalCores >= 1, job_it.totalCores < resources.totalCores)), str(job_it)
+                        job_it.total_cores >= 1, job_it.total_cores < resources.total_cores)), str(job_it)
         # all iterations has been scheduled across all resources
-        assert sum([ child.totalCores for child in jinfo.childs ]) == resources.totalCores
-        assert all(child.totalCores == resources.totalCores / 2 for child in jinfo.childs)
+        assert sum([ child.total_cores for child in jinfo.childs ]) == resources.total_cores
+        assert all(child.total_cores == resources.total_cores / 2 for child in jinfo.childs)
 
         # we explicity specify the 'split-into' parameter to 4, the two iterations should be sheduled
         # on half of the available resources
         jname = 'host3'
         its = 2
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'hostname', 'args': [ '--fqdn' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': 1,
@@ -460,17 +460,17 @@ def test_slurmenv_api_iteration_core_scheduling():
             job_it = jinfo.childs[iteration]
             print('job iteration {}: {}'.format(iteration, str(job_it)))
             assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format(jname, iteration),
-                        job_it.totalCores >= 1, job_it.totalCores < resources.totalCores)), str(job_it)
+                        job_it.total_cores >= 1, job_it.total_cores < resources.total_cores)), str(job_it)
         # all iterations has been scheduled across all resources
-        assert sum([ child.totalCores for child in jinfo.childs ]) == resources.totalCores / 2
-        assert all(child.totalCores == resources.totalCores / 4 for child in jinfo.childs)
+        assert sum([ child.total_cores for child in jinfo.childs ]) == resources.total_cores / 2
+        assert all(child.total_cores == resources.total_cores / 4 for child in jinfo.childs)
 
         # we explicity specify the 'split-into' parameter to 2, but the number of iterations is larger than
         # available partitions in the same time, so they should be executed serially (by parts)
         jname = 'host4'
         its = 10
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'hostname', 'args': [ '--fqdn' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': 1,
@@ -487,15 +487,15 @@ def test_slurmenv_api_iteration_core_scheduling():
             job_it = jinfo.childs[iteration]
             print('job iteration {}: {}'.format(iteration, str(job_it)))
             assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format(jname, iteration),
-                        job_it.totalCores >= 1, job_it.totalCores < resources.totalCores)), str(job_it)
-        assert all(child.totalCores == resources.totalCores / 2 for child in jinfo.childs)
+                        job_it.total_cores >= 1, job_it.total_cores < resources.total_cores)), str(job_it)
+        assert all(child.total_cores == resources.total_cores / 2 for child in jinfo.childs)
 
         # the 'maximum-iters' scheduler is trying to launch as many iterations in the same time on all available
         # resources
         jname = 'host5'
         its = 2
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': 1,
@@ -512,15 +512,15 @@ def test_slurmenv_api_iteration_core_scheduling():
             job_it = jinfo.childs[iteration]
             print('job iteration {}: {}'.format(iteration, str(job_it)))
             assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format(jname, iteration),
-                        job_it.totalCores >= 1, job_it.totalCores < resources.totalCores)), str(job_it)
-        assert sum([ child.totalCores for child in jinfo.childs ]) == resources.totalCores
+                        job_it.total_cores >= 1, job_it.total_cores < resources.total_cores)), str(job_it)
+        assert sum([ child.total_cores for child in jinfo.childs ]) == resources.total_cores
 
         # the 'maximum-iters' scheduler is trying to launch as many iterations in the same time on all available
         # resources
         jname = 'host6'
-        its = resources.totalCores
+        its = resources.total_cores
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': 1,
@@ -537,16 +537,16 @@ def test_slurmenv_api_iteration_core_scheduling():
             job_it = jinfo.childs[iteration]
             print('job iteration {}: {}'.format(iteration, str(job_it)))
             assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format(jname, iteration),
-                        job_it.totalCores >= 1, job_it.totalCores < resources.totalCores)), str(job_it)
-        assert sum([ child.totalCores for child in jinfo.childs ]) == resources.totalCores
+                        job_it.total_cores >= 1, job_it.total_cores < resources.total_cores)), str(job_it)
+        assert sum([ child.total_cores for child in jinfo.childs ]) == resources.total_cores
 
         # in case where number of iterations exceeds the number of available resources, the 'maximum-iters' schedulers
         # splits iterations into 'steps' minimizing this number, and allocates as many resources as possible for each
         # iteration inside 'step'
         jname = 'host7'
-        its = resources.totalCores
+        its = resources.total_cores
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': 1,
@@ -563,17 +563,17 @@ def test_slurmenv_api_iteration_core_scheduling():
             job_it = jinfo.childs[iteration]
             print('job iteration {}: {}'.format(iteration, str(job_it)))
             assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format(jname, iteration),
-                        job_it.totalCores >= 1, job_it.totalCores < resources.totalCores)), str(job_it)
-        assert (child.totalCores == 1 for child in jinfo.childs)
-        assert sum([ child.totalCores for child in jinfo.childs ]) == resources.totalCores
+                        job_it.total_cores >= 1, job_it.total_cores < resources.total_cores)), str(job_it)
+        assert (child.total_cores == 1 for child in jinfo.childs)
+        assert sum([ child.total_cores for child in jinfo.childs ]) == resources.total_cores
 
         # in case where number of iterations exceeds the number of available resources, the 'maximum-iters' schedulers
         # splits iterations into 'steps' minimizing this number, and allocates as many resources as possible for each
         # iteration inside 'step'
         jname = 'host8'
-        its = resources.totalCores * 2
+        its = resources.total_cores * 2
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': 1,
@@ -590,17 +590,17 @@ def test_slurmenv_api_iteration_core_scheduling():
             job_it = jinfo.childs[iteration]
             print('job iteration {}: {}'.format(iteration, str(job_it)))
             assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format(jname, iteration),
-                        job_it.totalCores >= 1, job_it.totalCores < resources.totalCores)), str(job_it)
-        assert (child.totalCores == 1 for child in jinfo.childs)
-        assert sum([ child.totalCores for child in jinfo.childs ]) == resources.totalCores * 2
+                        job_it.total_cores >= 1, job_it.total_cores < resources.total_cores)), str(job_it)
+        assert (child.total_cores == 1 for child in jinfo.childs)
+        assert sum([ child.total_cores for child in jinfo.childs ]) == resources.total_cores * 2
 
         # in case where number of iterations exceeds the number of available resources, the 'maximum-iters' schedulers
         # splits iterations into 'steps' minimizing this number, and allocates as many resources as possible for each
         # iteration inside 'step'
         jname = 'host9'
-        its = resources.totalCores + 1
+        its = resources.total_cores + 1
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'min': 1,
@@ -617,22 +617,22 @@ def test_slurmenv_api_iteration_core_scheduling():
             job_it = jinfo.childs[iteration]
             print('job iteration {}: {}'.format(iteration, str(job_it)))
             assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format(jname, iteration),
-                        job_it.totalCores >= 1)), str(job_it)
-        assert (child.totalCores == 1 for child in jinfo.childs)
+                        job_it.total_cores >= 1)), str(job_it)
+        assert (child.total_cores == 1 for child in jinfo.childs)
         # because all iterations will be splited in two 'steps' and in each step the iterations that has been assigned
         # for the step should usage maximum available resources
-        assert sum([ child.totalCores for child in jinfo.childs ]) == resources.totalCores * 2
+        assert sum([ child.total_cores for child in jinfo.childs ]) == resources.total_cores * 2
 
 
         # in this case where two iterations can't fit at once on resources, all the iterations should be scheduled
         # serially on all available resources
         jname = 'host10'
-        its = resources.totalNodes
+        its = resources.total_nodes
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out' },
-                     'resources': { 'numCores': { 'min': resources.totalCores - 1,
+                     'resources': { 'numCores': { 'min': resources.total_cores - 1,
                                                   'scheduler': { 'name': 'maximum-iters' } } }
                      })
         jinfos = submit_2_manager_and_wait_4_info(m, jobs, 'SUCCEED', withChilds=True)
@@ -646,7 +646,7 @@ def test_slurmenv_api_iteration_core_scheduling():
             job_it = jinfo.childs[iteration]
             print('job iteration {}: {}'.format(iteration, str(job_it)))
             assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format(jname, iteration),
-                        job_it.totalCores == resources.totalCores, len(job_it.nodes) == resources.totalNodes)),\
+                        job_it.total_cores == resources.total_cores, len(job_it.nodes) == resources.total_nodes)),\
                 str(job_it)
     finally:
         if m:
@@ -678,9 +678,9 @@ def test_slurmenv_api_iteration_node_scheduling():
         jname = 'host'
         its = 2
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
-                     'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out' },
+                     'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out_${it}', 'stderr': 'err_${it}' },
                      'resources': { 'numCores': { 'exact': resources.nodes[0].total },
                                     'numNodes': { 'min': 1,
                                                   'scheduler': { 'name': 'split-into' } } }
@@ -695,9 +695,9 @@ def test_slurmenv_api_iteration_node_scheduling():
         for iteration in range(its):
             job_it = jinfo.childs[iteration]
             assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format(jname, iteration),
-                        job_it.totalCores == resources.nodes[0].total, len(job_it.nodes) == 1)), str(job_it)
+                        job_it.total_cores == resources.nodes[0].total, len(job_it.nodes) == 1)), str(job_it)
         # all iterations has been scheduled across all nodes
-        assert sum([ len(child.nodes) for child in jinfo.childs ]) == resources.totalNodes
+        assert sum([ len(child.nodes) for child in jinfo.childs ]) == resources.total_nodes
         # the iterations should execute on different node
         assert list(jinfo.childs[0].nodes)[0] != list(jinfo.childs[1].nodes)[0]
 
@@ -706,7 +706,7 @@ def test_slurmenv_api_iteration_node_scheduling():
         jname = 'host2'
         its = 2
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'exact': resources.nodes[0].total },
@@ -723,9 +723,9 @@ def test_slurmenv_api_iteration_node_scheduling():
         for iteration in range(its):
             job_it = jinfo.childs[iteration]
             assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format(jname, iteration),
-                        job_it.totalCores == resources.nodes[0].total, len(job_it.nodes) == 1)), str(job_it)
+                        job_it.total_cores == resources.nodes[0].total, len(job_it.nodes) == 1)), str(job_it)
         # all iterations has been scheduled across all nodes
-        assert sum([ len(child.nodes) for child in jinfo.childs ]) == resources.totalNodes
+        assert sum([ len(child.nodes) for child in jinfo.childs ]) == resources.total_nodes
         # the iterations should execute on different node
         assert list(jinfo.childs[0].nodes)[0] != list(jinfo.childs[1].nodes)[0]
 
@@ -734,7 +734,7 @@ def test_slurmenv_api_iteration_node_scheduling():
         jname = 'host3'
         its = 4
         jobs = Jobs(). \
-            addStd({ 'name': jname,
+            add_std({ 'name': jname,
                      'iteration': { 'stop': its },
                      'execution': { 'exec': 'sleep', 'args': [ '2s' ], 'stdout': 'out' },
                      'resources': { 'numCores': { 'exact': resources.nodes[0].total },
@@ -752,7 +752,7 @@ def test_slurmenv_api_iteration_node_scheduling():
             job_it = jinfo.childs[iteration]
             print('job iteration {}: {}'.format(iteration, str(job_it)))
             assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format(jname, iteration),
-                        job_it.totalCores == resources.nodes[0].total, len(job_it.nodes) == 1)), str(job_it)
+                        job_it.total_cores == resources.nodes[0].total, len(job_it.nodes) == 1)), str(job_it)
         assert sum([len(child.nodes) for child in jinfo.childs]) == its
 
     finally:

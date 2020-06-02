@@ -1,117 +1,130 @@
 import json
 import uuid
 
-from qcg.appscheduler.api.errors import *
 
 
 # top level job description attributes
+from qcg.appscheduler.api.errors import InvalidJobDescriptionError, JobNotDefinedError, QCGPJMAError, FileError
+
 JOB_TOP_ATTRS = {
-    "name":    { 'req': True,  'types': [ str ]       },
-    "exec":    { 'req': False, 'types': [ str ]       },
-    "script":  { 'req': False, 'types': [ str ]       },
-    "args":    { 'req': False, 'types': [ list, str ] },
-    "stdin":   { 'req': False, 'types': [ str ]       },
-    "stdout":  { 'req': False, 'types': [ str ]       },
-    "stderr":  { 'req': False, 'types': [ str ]       },
-    "wd":      { 'req': False, 'types': [ str ]       },
-    "modules": { 'req': False, 'types': [ list, str ] },
-    "venv":    { 'req': False, 'types': [ str ]       },
-    "model":   { 'req': False, 'types': [ str ]       },
-    "numNodes":{ 'req': False, 'types': [ int, dict ] },
-    "numCores":{ 'req': False, 'types': [ int, dict ] },
-    "wt":      { 'req': False, 'types': [ str ]       },
-    "iterate": { 'req': False, 'types': [ int, dict ] },
-    "after":   { 'req': False, 'types': [ list, str ] }
+    "name": {'req': True, 'types': [str]},
+    "exec": {'req': False, 'types': [str]},
+    "script": {'req': False, 'types': [str]},
+    "args": {'req': False, 'types': [list, str]},
+    "stdin": {'req': False, 'types': [str]},
+    "stdout": {'req': False, 'types': [str]},
+    "stderr": {'req': False, 'types': [str]},
+    "wd": {'req': False, 'types': [str]},
+    "modules": {'req': False, 'types': [list, str]},
+    "venv": {'req': False, 'types': [str]},
+    "model": {'req': False, 'types': [str]},
+    "numNodes": {'req': False, 'types': [int, dict]},
+    "numCores": {'req': False, 'types': [int, dict]},
+    "wt": {'req': False, 'types': [str]},
+    "iterate": {'req': False, 'types': [int, dict]},
+    "after": {'req': False, 'types': [list, str]}
 }
 
 # resources (nodes, cores) attributes of job description
 JOB_RES_ATTRS = {
-    "min":        { 'req': False,  'types': [ int ] },
-    "max":        { 'req': False,  'types': [ int ] },
-    "exact":      { 'req': False,  'types': [ int ] },
-    "split-into": { 'req': False,  'types': [ int ] },
-    "scheduler":  { 'req': False,  'types': [ str ] }
+    "min": {'req': False, 'types': [int]},
+    "max": {'req': False, 'types': [int]},
+    "exact": {'req': False, 'types': [int]},
+    "split-into": {'req': False, 'types': [int]},
+    "scheduler": {'req': False, 'types': [str]}
 }
 
+# iterations attributes of job description
 ITERATE_ATTRS = {
-    "start":     { 'req': False, 'types': [ int ]  },
-    "stop":      { 'req': True,  'types': [ int ]  }
+    "start": {'req': False, 'types': [int]},
+    "stop": {'req': True, 'types': [int]}
 }
 
+# maximum number of iterations
 MAX_ITERATIONS = 64 * 1024
 
 
 class Jobs:
+    """Group of job descriptions to submit
+
+    Attributes:
+        _list (dict(str,dict)): map with added job descriptions
+        _job_idx (int): counter which is used to return ordered lists
+    """
 
     def __init__(self):
-        """
-        Group of job descriptions to submit
-        """
-        self.__list = {}
-        self.__jobIdx = 0
+        """Initialize instance."""
+        self._list = {}
+        self._job_idx = 0
 
+    @staticmethod
+    def _generate_default_name():
+        """Generate job's default name if non specified.
 
-    def __generate_default_name(self):
+        The UUID4 function is used to generate unique job name.
+
+        Returns:
+            str: unique job name
+        """
         return str(uuid.uuid4())
 
+    def _validate_smpl_job(self, attrs):
+        """Validate job description attributes.
 
-    def __validateSmplJob(self, attrs):
-        """
-        Validate job description attributes.
         It's is not a full validation, only the attributes names and types are checked.
 
         Args:
-            attrs (dict) - job description attributes
+            attrs (dict): job description attributes
 
         Raises:
-            InvalidJobDescriptionError - in case of invalid job description
+            InvalidJobDescriptionError: in case of invalid job description
         """
         if 'name' not in attrs:
-            attrs['name'] = self.__generate_default_name()
+            attrs['name'] = Jobs._generate_default_name()
 
-        if attrs['name'] in self.__list:
+        if attrs['name'] in self._list:
             raise InvalidJobDescriptionError("Job {} already in list".format(attrs['name']))
 
         for attr in attrs:
             if attr not in JOB_TOP_ATTRS:
                 raise InvalidJobDescriptionError("Unknown attribute {}".format(attr))
 
-            typeValid = False
-            for t in JOB_TOP_ATTRS[attr]['types']:
-                if isinstance(attrs[attr], t):
-                    typeValid = True
+            type_valid = False
+            for attr_type in JOB_TOP_ATTRS[attr]['types']:
+                if isinstance(attrs[attr], attr_type):
+                    type_valid = True
                     break
 
-            if not typeValid:
+            if not type_valid:
                 raise InvalidJobDescriptionError("Invalid attribute {} type {}".format(attr, type(attrs[attr])))
 
         if 'after' in attrs and isinstance(attrs['after'], str):
             # convert after string to single element list
-            attrs['after'] = [ attrs['after'] ]
+            attrs['after'] = [attrs['after']]
 
-        for reqAttr in JOB_TOP_ATTRS:
-            if JOB_TOP_ATTRS[reqAttr]['req'] and reqAttr not in attrs:
-                raise InvalidJobDescriptionError("Required attribute '%s' not defined" % reqAttr)
+        for req_attr in JOB_TOP_ATTRS:
+            if JOB_TOP_ATTRS[req_attr]['req'] and req_attr not in attrs:
+                raise InvalidJobDescriptionError("Required attribute '{}' not defined".format(req_attr))
 
-        if not 'exec' in attrs and not 'script' in attrs:
+        if 'exec' not in attrs and 'script' not in attrs:
             raise InvalidJobDescriptionError("No 'exec' nor 'script' defined")
 
         if 'exec' in attrs and 'script' in attrs:
             raise InvalidJobDescriptionError("Both 'exec' and 'script' defined")
 
         if 'numCores' in attrs and isinstance(attrs['numCores'], int):
-            attrs['numCores'] = { 'exact': attrs['numCores'] }
+            attrs['numCores'] = {'exact': attrs['numCores']}
 
         if 'numNodes' in attrs and isinstance(attrs['numNodes'], int):
-            attrs['numNodes'] = { 'exact': attrs['numNodes'] }
+            attrs['numNodes'] = {'exact': attrs['numNodes']}
 
-        self.__validateSmplElementDefinition(['numNodes', 'numCores'], attrs, JOB_RES_ATTRS)
+        Jobs._validate_smpl_element_definition(['numNodes', 'numCores'], attrs, JOB_RES_ATTRS)
 
         if 'iterate' in attrs:
             if isinstance(attrs['iterate'], int):
                 attrs['iterate'] = {'start': 0, 'stop': attrs['iterate']}
 
-            self.__validateSmplElementDefinition(['iterate'], attrs, ITERATE_ATTRS)
+            Jobs._validate_smpl_element_definition(['iterate'], attrs, ITERATE_ATTRS)
 
             iter_start = attrs['iterate']['start'] if 'start' in attrs['iterate'] else 0
             niters = attrs['iterate']['stop'] - iter_start
@@ -120,262 +133,249 @@ class Jobs:
                 raise InvalidJobDescriptionError("Wrong number of iterations - outside range (0, {})".format(
                     MAX_ITERATIONS))
 
+    @staticmethod
+    def _validate_smpl_element_definition(element_names, element_attributes, element_definition):
+        """Validate job description elements according to specification.
 
-    def __validateSmplElementDefinition(self, element_names, element_attributes, element_definition):
+        Args:
+            element_names (list(str)): names of attributes of job description to validate
+            element_attributes (dict): job description
+            element_definition (dict): elements specification with allowed types
+        """
         for element_name in element_names:
             if element_name in element_attributes:
                 for element_attr in element_attributes[element_name]:
                     if element_attr not in element_definition:
                         raise InvalidJobDescriptionError("Unknown {} attribute {}".format(element_name, element_attr))
 
-                    typeValid = False
-                    for t in element_definition[element_attr]['types']:
-                        if isinstance(element_attributes[element_name][element_attr], t):
-                            typeValid = True
+                    type_valid = False
+                    for elem_type in element_definition[element_attr]['types']:
+                        if isinstance(element_attributes[element_name][element_attr], elem_type):
+                            type_valid = True
                             break
 
-                if not typeValid:
-                    raise InvalidJobDescriptionError("Invalid {} attribute {} type {}".format(
-                        element_name, element_attr, type(element_attributes[element_name][element_attr])))
+                    if not type_valid:
+                        raise InvalidJobDescriptionError("Invalid {} attribute {} type {}".format(
+                            element_name, element_attr, type(element_attributes[element_name][element_attr])))
 
                 for req_attr in element_definition:
                     if element_definition[req_attr]['req'] and req_attr not in element_attributes[element_name]:
                         raise InvalidJobDescriptionError("Required attribute {} of element {} not defined".format(
                             req_attr, element_name))
 
+    def _validate_std_job(self, std_job):
+        """Perform simple validation of a job in format acceptable (std_job) by the QCG-PJM
 
-    def __validateStdJob(self, stdJob):
-        """
-        Perform simple validation of a job in format acceptable (StdJob) by the QCG-PJM
+        The default name is assigned if none defined. The existence of all required elements is checked.
 
         Args:
-            stdJob (dict) - job description
+            std_job (dict): job description
 
         Raises:
             InvalidJobDescriptionError - in case of invalid job description
         """
-        if 'name' not in stdJob:
-            stdJob['name'] = self.__generate_default_name()
+        if 'name' not in std_job:
+            std_job['name'] = self._generate_default_name()
 
-        if 'execution' not in stdJob or ('exec' not in stdJob['execution'] and 'script' not in stdJob['execution']):
+        if 'execution' not in std_job or ('exec' not in std_job['execution'] and 'script' not in std_job['execution']):
             raise InvalidJobDescriptionError('Missing "execution/exec" key')
 
-        if stdJob['name'] in self.__list:
-            raise InvalidJobDescriptionError("Job {} already in list".format(stdJob['name']))
+        if std_job['name'] in self._list:
+            raise InvalidJobDescriptionError("Job {} already in list".format(std_job['name']))
 
-
-    def __convertSimpleToStd(self, smplJob):
-        """
-        Convert simple job description to a standard format.
+    @staticmethod
+    def _convert_smpl_to_std(smpl_job):
+        """Convert simple job description to a standard format.
 
         Args:
-            jName (str) - a job name
-            smplJob (dict) - simple job description
+            smpl_job (dict): simple job description
 
         Returns:
-            dict - simple job description
+            dict: standard job description
         """
-        stdJob = {}
+        std_job = {}
 
-        stdJob['name'] = smplJob['name']
-        if 'exec' in smplJob:
-            stdJob.setdefault('execution', {})['exec'] = smplJob['exec']
+        std_job['name'] = smpl_job['name']
+        if 'exec' in smpl_job:
+            std_job.setdefault('execution', {})['exec'] = smpl_job['exec']
         else:
-            stdJob.setdefault('execution', {})['script'] = smplJob['script']
+            std_job.setdefault('execution', {})['script'] = smpl_job['script']
 
-        for key in [ 'args', 'stdin', 'stdout', 'stderr', 'wd', 'modules', 'venv', 'model' ]:
-            if key in smplJob:
-                stdJob['execution'][key] = smplJob[key]
+        for key in ['args', 'stdin', 'stdout', 'stderr', 'wd', 'modules', 'venv', 'model']:
+            if key in smpl_job:
+                std_job['execution'][key] = smpl_job[key]
 
-        resources = { }
-        for mKey in [ 'numCores', 'numNodes' ]:
-            if mKey in smplJob:
-                resources[mKey] = smplJob[mKey]
-
-        for rKey in [ 'wt' ]:
-            if rKey in smplJob:
-                resources[rKey] = smplJob[rKey]
+        resources = {}
+        for r_key in ['numCores', 'numNodes', 'wt']:
+            if r_key in smpl_job:
+                resources[r_key] = smpl_job[r_key]
 
         if len(resources) > 0:
-            stdJob['resources'] = resources
+            std_job['resources'] = resources
 
-        for key in [ 'iterate' ]:
-            if key in smplJob:
-                stdJob['iteration'] = smplJob[key]
+        for key in ['iterate']:
+            if key in smpl_job:
+                std_job['iteration'] = smpl_job[key]
 
-        if 'after' in smplJob:
-            stdJob['dependencies'] = { 'after': smplJob['after'] }
+        if 'after' in smpl_job:
+            std_job['dependencies'] = {'after': smpl_job['after']}
 
-        return stdJob
+        return std_job
 
+    def add(self, job_attrs=None, **kw_attrs):
+        """Add a new, simple job description to the group.
 
-    """
-    Add a new, simple job description to the group.
-    If both arguments are present, they are merged and processed as a single dictionary.
-    
-    Args:
-        dAttrs (dict) - attributes as a dictionary in a simple format
-        stdAttrs (dict) - attributes as a named arguments in a simple format
+        If both arguments are present, they are merged and processed as a single dictionary.
 
-    Raises:
-        InvalidJobDescriptionError - in case of non-unique job name or invalid job description
-    """
-    def add(self, dAttrs = None, **attrs):
-        data = attrs
+        Args:
+            job_attrs (dict): job description attributes in a simple format
+            kw_attrs (dict): job description attributes as a named arguments in a simple format
 
-        if dAttrs is not None:
+        Raises:
+            InvalidJobDescriptionError: in case of non-unique job name or invalid job description
+        """
+        data = kw_attrs
+
+        if job_attrs is not None:
             if data is not None:
-                data = { **dAttrs, **data }
+                data = {**job_attrs, **data}
             else:
-                data = dAttrs
+                data = job_attrs
 
-        self.__validateSmplJob(data)
-        self.__appendJob(data['name'], self.__convertSimpleToStd(data))
+        self._validate_smpl_job(data)
+        self._append_job(data['name'], Jobs._convert_smpl_to_std(data))
 
         return self
 
+    def _append_job(self, job_name, job_attrs):
+        """Append a new job to internal list.
 
-    def __appendJob(self, jName, jData):
-        """
-        Append a new job to internal list.
         All jobs should be appended by this function, which also put each of the job the index,
         which will be used to return ordered list of jobs.
 
         Args:
-            jName (str) - job name
-            jData (dict) - job attributes in standard format
+            job_name (str): job name
+            job_attrs (dict): job attributes in standard format
         """
-        self.__list[jName] = { 'idx': self.__jobIdx, 'data': jData }
-        self.__jobIdx += 1
+        self._list[job_name] = {'idx': self._job_idx, 'data': job_attrs}
+        self._job_idx += 1
 
+    def add_std(self, job_attrs=None, **kw_attrs):
+        """Add a new, standard job description (acceptable by the QCG PJM) to the group.
 
-    def addStd(self, dAttrs = None, **stdAttrs):
-        """
-        Add a new, standard job description (acceptable by the QCG PJM) to the group.
         If both arguments are present, they are merged and processed as a single dictionary.
 
         Args:
-            dAttrs (dict) - attributes as a dictionary in a standard format
-            stdAttrs (dict) - attributes as a named arguments in a standard format
+            job_attrs (dict): job description attributes in a standard format
+            kw_attrs (dict): job description attributes as a named arguments in a standard format
 
         Raises:
-            InvalidJobDescriptionError - in case of non-unique job name or invalid job description
-
+            InvalidJobDescriptionError: in case of non-unique job name or invalid job description
         """
-        data = stdAttrs
+        data = kw_attrs
 
-        if dAttrs is not None:
+        if job_attrs is not None:
             if data is not None:
-                data = { **dAttrs, **data }
+                data = {**job_attrs, **data}
             else:
-                data = dAttrs
+                data = job_attrs
 
-        self.__validateStdJob(data)
-        self.__appendJob(data['name'], data)
+        self._validate_std_job(data)
+        self._append_job(data['name'], data)
 
         return self
 
-
     def remove(self, name):
-        """
-        Remote a job from the group.
-        
+        """Remote a job from the group.
+
         Args:
-            name (str) - name of the job to remove
+            name (str): name of the job to remove
 
         Raises:
-            JobNotDefinedError - in case of missing job in a group with given name
+            JobNotDefinedError: in case of missing job in a group with given name
         """
-        if name not in self.__list:
+        if name not in self._list:
             raise JobNotDefinedError(name)
 
-        del self.__list[name]
-
+        del self._list[name]
 
     def clear(self):
-        """
-        Remove all jobs from the group.
+        """Remove all jobs from the group.
 
         Returns:
-            int - number of removed elements
+            int: number of removed elements
         """
-        njobs = len(self.__list)
-        self.__list.clear()
+        njobs = len(self._list)
+        self._list.clear()
         return njobs
 
+    def job_names(self):
+        """Return a list with job names in group.
 
-    def jobNames(self):
+        Returns:
+            list(str): job names in group
         """
-        Return a list with job names in grup.
-        """
-        return list(self.__list)
+        return list(self._list)
 
+    def ordered_job_names(self):
+        """Return a list with job names in group in order they were appended.
 
-    def orderedJobNames(self):
+        Returns:
+            list(str): ordered job names
         """
-        Return a list with job names in group in order they were appended.
-        """
-        return [j[0] for j in sorted(list(self.__list.items()), key=lambda j: j[1]['idx'])]
-
+        return [j[0] for j in sorted(list(self._list.items()), key=lambda j: j[1]['idx'])]
 
     def jobs(self):
-        """
-        Return job descriptions in format acceptable by the QCG-PJM
+        """Return job descriptions in format acceptable by the QCG-PJM
 
         Returns:
-            list - a list of jobs in the format acceptable by the QCG PJM (standard format)
+            list(dict): a list of jobs in the format acceptable by the QCG PJM (standard format)
         """
-        return [j['data'] for j in list(self.__list.values())]
+        return [j['data'] for j in list(self._list.values())]
 
-
-    def orderedJobs(self):
-        """
-        Return job descriptions in format acceptable by the QCG-PJM in order they were appended.
+    def ordered_jobs(self):
+        """Return job descriptions in format acceptable by the QCG-PJM in order they were appended.
 
         Returns:
-            list - a list of jobs in the format acceptable by the QCG PJM (standard format)
+            list(dict): a list of jobs in the format acceptable by the QCG PJM (standard format)
         """
-        return [j['data'] for j in sorted(list(self.__list.values()), key=lambda j: j['idx'])]
+        return [j['data'] for j in sorted(list(self._list.values()), key=lambda j: j['idx'])]
 
-
-    def loadFromFile(self, filePath):
-        """
-        Read job's descriptions from JSON file in format acceptable (StdJob) by the QCG-PJM
+    def load_from_file(self, file_path):
+        """Read job's descriptions from JSON file in format acceptable (StdJob) by the QCG-PJM
 
         Args:
-            filePath (str) - path to the file with jobs descriptions in a standard format
+            file_path (str): path to the file with jobs descriptions in a standard format
 
         Raises:
-            InvalidJobDescriptionError - in case of invalid job description
+            InvalidJobDescriptionError: in case of invalid job description
         """
         try:
-            with open(filePath, 'r') as f:
-                for job in json.load(f):
-                    self.__validateStdJob(job)
+            with open(file_path, 'r') as file_h:
+                for job in json.load(file_h):
+                    self._validate_std_job(job)
 
                     name = job['name']
-                    if name in self.__list:
+                    if name in self._list:
                         raise InvalidJobDescriptionError('Job "{}" already defined"'.format(name))
 
-                    self.__appendJob(name, job)
-        except QCGPJMAError as qe:
-            raise qe
-        except Exception as e:
-            raise FileError('File to open/write file "{}": {}'.format(filePath, e.args[0]))
+                    self._append_job(name, job)
+        except QCGPJMAError as exc:
+            raise
+        except Exception as exc:
+            raise FileError('File to open/write file "{}": {}'.format(file_path, exc.args[0]))
 
-
-    def saveToFile(self, filePath):
-        """
-        Save job list to JSON file in a standard format.
+    def save_to_file(self, file_path):
+        """Save job list to JSON file in a standard format.
 
         Args:
-            filePath (str) - path to the destination file
+            file_path (str): path to the destination file
 
         Raises:
-            FileError - in case of problems with opening / writing output file.
+            FileError: in case of problems with opening / writing output file.
         """
         try:
-            with open(filePath, 'w') as f:
-                f.write(json.dumps(self.orderedJobs(), indent=2))
-        except Exception as e:
-            raise FileError('File to open/write file "%s": %s', filePath, e.args[0])
+            with open(file_path, 'w') as file_h:
+                file_h.write(json.dumps(self.ordered_jobs(), indent=2))
+        except Exception as exc:
+            raise FileError('File to open/write file "{}": {}'.format(file_path, exc.args[0]))

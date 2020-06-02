@@ -17,7 +17,7 @@ def test_local_manager_resources(tmpdir):
 
     res = m.resources()
 
-    assert all(('totalNodes' in res, 'totalCores' in res, res['totalNodes'] == 1, res['totalCores'] == cores))
+    assert all(('total_nodes' in res, 'total_cores' in res, res['total_nodes'] == 1, res['total_cores'] == cores))
 
     m.finish()
 #    m.stopManager()
@@ -34,7 +34,7 @@ def test_local_manager_resources_nodes(tmpdir):
 
     res = m.resources()
 
-    assert all(('totalNodes' in res, 'totalCores' in res, res['totalNodes'] == 2, res['totalCores'] == cores_per_node * nodes))
+    assert all(('total_nodes' in res, 'total_cores' in res, res['total_nodes'] == 2, res['total_cores'] == cores_per_node * nodes))
 
     m.finish()
 #    m.stopManager()
@@ -50,7 +50,7 @@ def test_local_manager_submit_simple(tmpdir):
     try:
         res = m.resources()
 
-        assert all(('totalNodes' in res, 'totalCores' in res, res['totalNodes'] == 1, res['totalCores'] == cores))
+        assert all(('total_nodes' in res, 'total_cores' in res, res['total_nodes'] == 1, res['total_cores'] == cores))
 
         ids = m.submit(Jobs().
             add(name='host', exec='/bin/hostname', args=[ '--fqdn' ], stdout='host.stdout').
@@ -90,7 +90,7 @@ def test_local_manager_wait4all(tmpdir):
 
     res = m.resources()
 
-    assert all(('totalNodes' in res, 'totalCores' in res, res['totalNodes'] == 1, res['totalCores'] == cores))
+    assert all(('total_nodes' in res, 'total_cores' in res, res['total_nodes'] == 1, res['total_cores'] == cores))
 
     ids = m.submit(Jobs().
         add(name='host', exec='/bin/hostname', args=[ '--fqdn' ], stdout='host.stdout').

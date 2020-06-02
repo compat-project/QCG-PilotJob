@@ -1,5 +1,3 @@
-import zmq
-import sys
 import asyncio
 import json
 import sys
@@ -8,10 +6,31 @@ import shutil
 import socket
 import os
 from datetime import datetime
+
+import zmq
 from zmq.asyncio import Context
 
 
 class Launcher:
+    """The launcher service used to launch applications on remote nodes.
+
+    All nodes should have shared file system.
+
+    Attributes:
+        work_dir (str): path to the working directory
+        aux_dir (str): path to the auxilary directory
+        zmq_ctx (zmq.Context): ZMQ context
+        agents (dict): = requested agent instances
+        nodes (dict): registered agent instances
+        jobs_def_cb (def): application finish default callback
+        jobs_cb (dict): application finish callbacks
+        node_local_agent_cmd (list): list of command arguments to start agent on local node
+        node_ssh_agent_cmd (list): list of command arguments to start agent on remote node via ssh
+        in_socket (zmq.Socket):
+        local_address (str):
+        local_export_address (str):
+        iface_task (asyncio.Future):
+    """
 
     MIN_PORT_RANGE = 10000
     MAX_PORT_RANGE = 40000
@@ -19,12 +38,18 @@ class Launcher:
     START_TIMEOUT_SECS = 600
     SHUTDOWN_TIMEOUT_SECS = 30
 
-    def __init__(self, wdir, auxDir):
+    def __init__(self, wdir, aux_dir):
+        """Initialize instance.
+
+        Args:
+            wdir (str): path to the working directory (the same on all nodes)
+            aux_dir (str): path to the auxilary directory (the same on all nodes)
+        """
         # working directory
         self.work_dir = wdir
 
         # auxiliary directory
-        self.aux_dir = auxDir
+        self.aux_dir = aux_dir
 
         # local context
         self.zmq_ctx = {}
@@ -41,30 +66,28 @@ class Launcher:
         # application finish callbacks
         self.jobs_cb = {}
 
-        # only for tests
-        self.app_finished = 0
+        self.node_local_agent_cmd = [sys.executable, '-m', 'qcg.appscheduler.launcher.agent']
+        self.node_ssh_agent_cmd = ['cd {}; {} -m qcg.appscheduler.launcher.agent'.format(self.work_dir, sys.executable)]
 
-        self.node_local_agent_cmd = [ sys.executable, '-m', 'qcg.appscheduler.launcher.agent' ]
-        self.node_ssh_agent_cmd = [ 'cd {}; {} -m qcg.appscheduler.launcher.agent'.format(self.work_dir, sys.executable) ]
-
+        self.in_socket = None
+        self.local_address = None
+        self.local_export_address = None
+        self.iface_task = None
 
     def set_job_finish_callback(self, jobs_finish_cb, *jobs_finish_cb_args):
-        """
-        Set default function for notifing about finished jobs.
+        """Set default function for notifing about finished jobs.
 
         Args:
             jobs_finish_cb - optional default job finish callback
             jobs_finish_cb_args - job finish callback parameters
         """
         if jobs_finish_cb:
-            self.jobs_def_cb = { 'f': jobs_finish_cb, 'args': jobs_finish_cb_args }
+            self.jobs_def_cb = {'f': jobs_finish_cb, 'args': jobs_finish_cb_args}
         else:
             self.jobs_def_cb = None
 
-
     async def start(self, instances, local_port=None):
-        """
-        Initialize launcher with given agent instances.
+        """Initialize launcher with given agent instances.
         The instances data must contain list of places along with the data needed to
         initialize instance services.
 
@@ -78,24 +101,22 @@ class Launcher:
                 the available random port will be chosen from the range
         """
         try:
-            await self.__init_input_iface(local_port=local_port)
-            logging.debug('local manager listening at {}'.format(self.local_address))
+            await self._init_input_iface(local_port=local_port)
+            logging.debug('local manager listening at %s', self.local_address)
 
             await self.__fire_agents(instances)
-        except Exception as e:
-            logging.error('failed to start agents: {}'.format(str(e)))
-            await self.__cleanup()
+        except Exception as exc:
+            logging.error('failed to start agents: %s', str(exc))
+            await self._cleanup()
             raise
 
-
     async def stop(self):
-        await self.__cleanup()
+        """Stop all agents and release resources."""
+        await self._cleanup()
 
-
-    async def submit(self, agent_id, app_id, args, stdin=None, stdout=None, stderr=None, env=None, wdir=None, cores=None,
-            finish_cb=None, finish_cb_args=None):
-        """
-        Submit application to be launched by the selected agent.
+    async def submit(self, agent_id, app_id, args, stdin=None, stdout=None, stderr=None, env=None, wdir=None,
+                     cores=None, finish_cb=None, finish_cb_args=None):
+        """Submit application to be launched by the selected agent.
 
         Args:
             agent_id - agent that should launch applicaton
@@ -110,16 +131,16 @@ class Launcher:
             finish_cb - job finish callback
             finish_cb_args - job finish callback arguments
         """
-        if not agent_id in self.agents:
-            logger.error('agent {} not registered'.format(agent_id))
+        if agent_id not in self.agents:
+            logging.error('agent %s not registered', agent_id)
             raise Exception('agent {} not registered'.format(agent_id))
 
         if finish_cb:
-            self.jobs_cb[app_id] = { 'f': finish_cb, 'args': finish_cb_args }
+            self.jobs_cb[app_id] = {'f': finish_cb, 'args': finish_cb_args}
 
         agent = self.nodes[agent_id]
 
-        out_socket = self.zmq_ctx.socket(zmq.REQ)
+        out_socket = self.zmq_ctx.socket(zmq.REQ) #pylint: disable=maybe-no-member
         try:
             out_socket.connect(agent['address'])
 
@@ -132,41 +153,38 @@ class Launcher:
                 'stderr': stderr,
                 'env': env,
                 'wdir': wdir,
-                'cores': cores })
+                'cores': cores})
             msg = await out_socket.recv_json()
 
             if not msg.get('status', None) == 'OK':
-                logging.error('failed to run application {} by agent {}: {}'.format(app_id, agent_id, str(msg)))
+                logging.error('failed to run application %s by agent %s: %s', app_id, agent_id, str(msg))
 
                 if finish_cb:
                     del self.jobs_cb[app_id]
 
                 raise Exception('failed to run application {} by agent {}: {}'.format(app_id, agent_id, str(msg)))
-            else:
-                logging.debug('application {} successfully launched by agent {}'.format(app_id, agent_id))
+
+            logging.debug('application %s successfully launched by agent %s', app_id, agent_id)
         finally:
             if out_socket:
                 try:
                     out_socket.close()
-                except:
+                except Exception:
                     # ignore errors in this place
                     pass
 
-
-    async def __cleanup(self):
-        """
-        Release all resources.
+    async def _cleanup(self):
+        """ Release all resources.
         Stop all agents, cancel all async tasks and close sockets.
         """
-
         # signal node agent to shutdown
         try:
-            await self.__shutdown_agents()
+            await self._shutdown_agents()
         except Exception:
             pass
 
         # kill agent processes
-        self.__cancel_agents()
+        await self._cancel_agents()
         logging.debug('launcher agents canceled')
 
         # cancel input interface task
@@ -185,42 +203,39 @@ class Launcher:
 
         logging.debug('launcher iface socket closed')
 
-
-    async def __shutdown_agents(self):
-        """
-        Signal all running node agents to shutdown and wait for notification about finishing.
-        """
-        out_socket = self.zmq_ctx.socket(zmq.REQ)
+    async def _shutdown_agents(self):
+        """Signal all running node agents to shutdown and wait for notification about finishing."""
+        out_socket = self.zmq_ctx.socket(zmq.REQ) #pylint: disable=maybe-no-member
 
         try:
             # create copy because elements might be removed when signal finishing
             nodes = self.nodes.copy()
 
             for agent_id, agent in nodes.items():
-                logging.debug('connecting to node agent {} @ {} ...'.format(agent_id, agent['address']))
+                logging.debug('connecting to node agent %s @ %s ...', agent_id, agent['address'])
 
                 try:
                     out_socket.connect(agent['address'])
 
-                    await out_socket.send_json({ 'cmd': 'EXIT' })
+                    await out_socket.send_json({'cmd': 'EXIT'})
 
                     msg = await out_socket.recv_json()
 
                     if not msg.get('status', None) == 'OK':
-                        logging.error('failed to finish node agent {}: {}'.format(agent_id, str(msg)))
+                        logging.error('failed to finish node agent %s: %s', agent_id, str(msg))
                     else:
-                        logging.debug('node agent {} signaled to shutdown'.format(agent_id))
+                        logging.debug('node agent %s signaled to shutdown', agent_id)
 
                     out_socket.disconnect(agent['address'])
-                except Exception as e:
-                    logging.error('failed to signal agent to shutdown: {}'.format(str(e)))
+                except Exception as exc:
+                    logging.error('failed to signal agent to shutdown: %s', str(exc))
 
             start_t = datetime.now()
 
-            error = False
             while len(self.nodes) > 0:
                 if (datetime.now() - start_t).total_seconds() > Launcher.SHUTDOWN_TIMEOUT_SECS:
-                    logging.error('timeout while waiting for agents exit - currenlty not finished {}: {}'.format(len(self.nodes), str(','.join(self.nodes.keys()))))
+                    logging.error('timeout while waiting for agents exit - currenlty not finished %d: %s',
+                                  len(self.nodes), str(','.join(self.nodes.keys())))
                     raise Exception('timeout while waiting for agents exit')
 
                 await asyncio.sleep(0.2)
@@ -228,32 +243,37 @@ class Launcher:
             if out_socket:
                 try:
                     out_socket.close()
-                except:
+                except Exception:
                     # ingore errors in this place
                     pass
 
-
-    def __cancel_agents(self):
-        """
-        Kill agent processes.
-        """
+    async def _cancel_agents(self):
+        """Kill agent processes. """
         for agent_id, agent in self.agents.items():
             if agent.get('process', None):
-                logging.debug('killing agent {} ...'.format(agent_id))
+                logging.debug('killing agent %s ...', agent_id)
                 try:
-                    agent['process'].join(5)
-#                    agent['process'].kill()
-                    agent['process'].terminate()
-                except:
-                    logging.warning('Failed to kill agent: {}'.format(str(sys.exc_info())))
+                    await asyncio.wait_for(agent['process'].wait(), 5)
+                    agent['process'] = None
+                except Exception:
+                    logging.warning('Failed to kill agent: %s', str(sys.exc_info()))
+                finally:
+                    try:
+                        if agent['process']:
+                            agent['process'].terminate()
+                    except Exception:
+                        # ignore errors in this place
+                        pass
 
         self.agents.clear()
 
-
     async def __fire_agents(self, instances):
-        """
-        Launch node agent instances.
+        """Launch node agent instances.
+
         The input interface must be running to get notification about started agents.
+
+        Args:
+            instances (list): specification for agents to launch
         """
         for idata in instances:
             if not all(('agent_id' in idata, 'ssh' in idata or 'slurm' in idata or 'local' in idata)):
@@ -266,8 +286,8 @@ class Launcher:
             proto = 'slurm' if 'slurm' in idata else None
             if not proto:
                 proto = 'local'
-            
-            logging.info('running node agent {} via {}'.format(idata['agent_id'], proto))
+
+            logging.info('running node agent %s via %s', idata['agent_id'], proto)
 
             agent_args = [idata['agent_id'], self.local_export_address]
             if idata.get('options'):
@@ -276,36 +296,35 @@ class Launcher:
             if 'ssh' in idata:
                 process = await self.__fire_ssh_agent(idata['ssh'], agent_args)
             elif 'slurm' in idata:
-                process = await self.__fire_slurm_agent(idata['slurm'], agent_args)
+                process = await self._fire_slurm_agent(idata['slurm'], agent_args)
             elif 'local' in idata:
-                process = await self.__fire_local_agent(idata['local'], agent_args)
+                process = await self._fire_local_agent(idata['local'], agent_args)
             else:
-                raise ValueError('missing start type of node agent {}'.format(idata['agent_id'] ))
+                raise ValueError('missing start type of node agent {}'.format(idata['agent_id']))
 
-            self.agents[idata['agent_id']] = { 'process': process, 'data': idata }
-
+            self.agents[idata['agent_id']] = {'process': process, 'data': idata}
 
         start_t = datetime.now()
 
         while len(self.nodes) < len(self.agents):
             if (datetime.now() - start_t).total_seconds() > Launcher.START_TIMEOUT_SECS:
-                logging.error('timeout while waiting for agents - currenlty registered {} from launched {}'.format(len(self.nodes), len(self.agents)))
+                logging.error('timeout while waiting for agents - currenlty registered %s from launched %s',
+                              len(self.nodes), len(self.agents))
                 raise Exception('timeout while waiting for agents')
 
             await asyncio.sleep(0.2)
 
-        logging.debug('all agents {} registered in {} seconds'.format(len(self.nodes), (datetime.now() - start_t).total_seconds()))
+        logging.debug('all agents %d registered in %d seconds', len(self.nodes),
+                      (datetime.now() - start_t).total_seconds())
 
-
-    async def __fire_ssh_agent(self, ssh_data, args, options):
-        """
-        Launch node agent instance via ssh.
+    async def __fire_ssh_agent(self, ssh_data, args):
+        """Launch node agent instance via ssh.
 
         Args:
             ssh_data (dict) - must contain 'host' attribute, optional attributes: 'account' (str), 'args' (str[])
             args - aguments for node agent application
         """
-        if not 'host' in ssh_data:
+        if 'host' not in ssh_data:
             raise ValueError('missing ssh host definition')
 
         ssh_address = ssh_data['host']
@@ -315,184 +334,191 @@ class Launcher:
         ssh_args = ssh_data.get('args', [])
 
         return await asyncio.create_subprocess_exec(shutil.which('ssh'), ssh_address, *ssh_args,
-                *self.node_ssh_agent_cmd, *args)
+                                                    *self.node_ssh_agent_cmd, *args)
 
-
-    async def __fire_slurm_agent(self, slurm_data, args):
-        """
-        Launch node agent instance via slurm (inside allocation).
+    async def _fire_slurm_agent(self, slurm_data, args):
+        """Launch node agent instance via slurm (inside allocation).
 
         Args:
             slurm_data (dict) - must contain 'node' attribute, optional attributes: 'node' (str), 'args' (str[])
             args - aguments for node agent application
         """
-        if not 'node' in slurm_data:
+        if 'node' not in slurm_data:
             raise ValueError('missing slurm node name')
 
-        slurm_args = [ '-J', 'agent-{}'.format(slurm_data['node']), '-w', slurm_data['node'], '-vvv', '--oversubscribe', '--overcommit', '-N', '1', '-n', '1', '-D', self.work_dir, '-u' ]
-        
+        slurm_args = ['-J', 'agent-{}'.format(slurm_data['node']), '-w', slurm_data['node'], '-vvv',
+                      '--oversubscribe', '--overcommit', '-N', '1', '-n', '1', '-D', self.work_dir, '-u']
+
         if logging.root.level == logging.DEBUG:
             slurm_args.extend(['--slurmd-debug=verbose', '-vvvvv'])
 
         slurm_args.extend(slurm_data.get('args', []))
 
-        stdoutP = asyncio.subprocess.DEVNULL
-        stderrP = asyncio.subprocess.DEVNULL
+        stdout_p = asyncio.subprocess.DEVNULL
+        stderr_p = asyncio.subprocess.DEVNULL
 
         if logging.root.level == logging.DEBUG:
-            stdoutP = open(os.path.join(self.aux_dir, 'nl-{}-start-agent-stdout.log'.format(slurm_data['node'])), 'w')
-            stderrP = open(os.path.join(self.aux_dir, 'nl-{}-start-agent-stderr.log'.format(slurm_data['node'])), 'w')
+            stdout_p = open(os.path.join(self.aux_dir, 'nl-{}-start-agent-stdout.log'.format(slurm_data['node'])), 'w')
+            stderr_p = open(os.path.join(self.aux_dir, 'nl-{}-start-agent-stderr.log'.format(slurm_data['node'])), 'w')
 
-        logging.debug('running agent process with args: {}'.format(' '.join([ shutil.which('srun') ] + slurm_args + self.node_local_agent_cmd + args)))
+        logging.debug('running agent process with args: %s', ' '.join(
+            [shutil.which('srun')] + slurm_args + self.node_local_agent_cmd + args))
 
         return await asyncio.create_subprocess_exec(shutil.which('srun'), *slurm_args,
-                *self.node_local_agent_cmd, *args, stdout=stdoutP, stderr=stderrP)
+                                                    *self.node_local_agent_cmd, *args, stdout=stdout_p, stderr=stderr_p)
 
-
-    async def __fire_local_agent(self, local_data, args):
-        """
-        Launch node agent instance locally.
+    async def _fire_local_agent(self, local_data, args): #pylint: disable=W0613
+        """Launch node agent instance locally.
 
         Args:
-            local_data (dict) - 
+            local_data (dict):
             args - aguments for node agent application
         """
         return await asyncio.create_subprocess_exec(*self.node_local_agent_cmd, *args)
 
-
-    async def __init_input_iface(self, local_port=None, proto='tcp', ip='0.0.0.0', port_min=MIN_PORT_RANGE, port_max=MAX_PORT_RANGE):
-        """
-        Initialize input interface.
+    async def _init_input_iface(self, local_port=None, proto='tcp', ip_addr='0.0.0.0', port_min=MIN_PORT_RANGE,
+                                port_max=MAX_PORT_RANGE):
+        """Initialize input interface.
         The ZMQ socket is created and binded for incoming notifications (from node agents).
 
         Args:
             local_port - optional local port to bind to
             proto - optional protocol for ZMQ socket
-            ip - optional local IP address
+            ip_addr - optional local IP address
             port_min - optional minimum range port number if local_port has not been defined
             port_max - optional maximum range port number if local port has not been defined
         """
         self.zmq_ctx = Context.instance()
-        self.in_socket = self.zmq_ctx.socket(zmq.REP)
+        self.in_socket = self.zmq_ctx.socket(zmq.REP) #pylint: disable=maybe-no-member
 
         if local_port:
-            address = '{}://{}:{}'.format(proto, ip, local_port)
+            address = '{}://{}:{}'.format(proto, ip_addr, local_port)
             port = self.in_socket.bind(address)
         else:
-            addr = '{}://{}'.format(proto, ip)
+            addr = '{}://{}'.format(proto, ip_addr)
             port = self.in_socket.bind_to_random_port(addr, min_port=port_min, max_port=port_max)
             address = '{}:{}'.format(addr, port)
 
         self.local_address = address
         self.local_export_address = '{}://{}:{}'.format(proto, socket.gethostbyname(socket.gethostname()), port)
 
-        logging.debug('local address accessible by other machines: {}'.format(self.local_export_address))
+        logging.debug('local address accessible by other machines: %s', self.local_export_address)
 
-        self.iface_task = asyncio.ensure_future(self.__input_iface())
-                
+        self.iface_task = asyncio.ensure_future(self._input_iface())
 
-    async def __input_iface(self):
-        """
-        The handler for input interface.
+    async def _input_iface(self):
+        """The handler for input interface.
         The incoming notifications are processed and launcher state is modified.
         """
         while True:
             msg = await self.in_socket.recv_json()
 
-            logging.debug('received message: {}'.format(str(msg)))
+            logging.debug('received message: %s', str(msg))
 
             if msg.get('status', None) == 'READY':
                 try:
                     if not all(('agent_id' in msg, 'local_address' in msg)):
                         raise Exception('missing identifier/local address in ready message')
-                except Exception as e:
-                    logging.error('error: {}'.format(str(e)))
-                    await self.in_socket.send_json({ 'status': 'ERROR', 'message': str(e) })
+                except Exception as exc:
+                    logging.error('error: %s', str(exc))
+                    await self.in_socket.send_json({'status': 'ERROR', 'message': str(exc)})
                     next
                 else:
-                    await self.in_socket.send_json({ 'status': 'CONFIRMED'})
+                    await self.in_socket.send_json({'status': 'CONFIRMED'})
 
-                self.nodes[msg['agent_id']] = { 'registered_at': datetime.now(), 'address': msg['local_address'] }
-                logging.debug('registered at ({}) agent ({}) listening at ({})'.format(self.nodes[msg['agent_id']]['registered_at'], msg['agent_id'], self.nodes[msg['agent_id']]['address']))
+                self.nodes[msg['agent_id']] = {'registered_at': datetime.now(), 'address': msg['local_address']}
+                logging.debug('registered at (%s) agent (%s) listening at (%s)',
+                              self.nodes[msg['agent_id']]['registered_at'],
+                              msg['agent_id'], self.nodes[msg['agent_id']]['address'])
             elif msg.get('status', None) in ['APP_FINISHED', 'APP_FAILED']:
-                await self.in_socket.send_json({ 'status': 'CONFIRMED'})
+                await self.in_socket.send_json({'status': 'CONFIRMED'})
 
                 appid = msg.get('appid', 'UNKNOWN')
 
-                logging.debug('received notification with application {} finish {}'.format(appid, str(msg)))
+                logging.debug('received notification with application %s finish %s', appid, str(msg))
 
                 if appid in self.jobs_cb:
                     try:
                         args = (*self.jobs_cb[appid]['args'], msg) if self.jobs_cb[appid]['args'] else (msg)
-                        logging.debug('calling application finish callback with object {} and args {}'.format(self.jobs_cb[appid]['f'], str(args)))
+                        logging.debug('calling application finish callback with object %s and args %s',
+                                      self.jobs_cb[appid]['f'], str(args))
                         self.jobs_cb[appid]['f'](args)
-                    except Exception as e:
-                        logging.error('failed to call application finish callback: {}'.format(str(e)))
+                    except Exception as exc:
+                        logging.error('failed to call application finish callback: %s', str(exc))
 
                     del self.jobs_cb[appid]
                 elif self.jobs_def_cb:
-                    logging.debug('calling application default finish callback with object {}'.format(self.jobs_def_cb['f']))
+                    logging.debug('calling application default finish callback with object %s', self.jobs_def_cb['f'])
                     try:
                         args = (*self.jobs_def_cb['args'], msg) if self.jobs_def_cb['args'] else (msg)
                         self.jobs_def_cb['f'](args)
-                    except Exception as e:
-                        logging.error('failed to call application default finish callback: {}'.format(str(e)))
+                    except Exception as exc:
+                        logging.error('failed to call application default finish callback: %s', str(exc))
                 else:
                     logging.debug('NOT calling application finish callback')
             elif msg.get('status', None) == 'FINISHING':
-                await self.in_socket.send_json({ 'status': 'CONFIRMED'})
+                await self.in_socket.send_json({'status': 'CONFIRMED'})
 
-                logging.debug('received notification with node agent finish: {}'.format(str(msg)))
+                logging.debug('received notification with node agent finish: %s', str(msg))
 
                 if 'agent_id' in msg and msg['agent_id'] in self.nodes:
-                    logging.debug('removing node agent {}'.format(msg['agent_id']))
+                    logging.debug('removing node agent %s', msg['agent_id'])
                     del self.nodes[msg['agent_id']]
                 else:
-                    logging.error('node agent {} notifing FINISH not known'.format(msg.get('agent_id', 'UNKNOWN')))
+                    logging.error('node agent %s notifing FINISH not known', msg.get('agent_id', 'UNKNOWN'))
             else:
-                await self.in_socket.send_json({ 'status': 'ERROR'})
+                await self.in_socket.send_json({'status': 'ERROR'})
 
 
 def finish_callback_default(text, message):
+    """Just for testing."""
     print('got default notifinication with job finish ({}): {}'.format(text, str(message)))
 
+
 def finish_callback(text, jobid, message):
+    """Just for testing."""
     print('got notifinication with job {} finish ({}): {}'.format(jobid, text, str(message)))
 
 
 async def run_job(launcher, agent_id, appid, args, stdin=None, stdout=None, stderr=None, env=None):
-#    await launcher.submit(agent_id, appid, args, wdir='tmp-dir', finish_cb=finish_callback, finish_cb_args=['job finish callback', 'job_ID'])
-    await launcher.submit(agent_id, appid, args, stdin=stdin, stdout=stdout, stderr=stderr, env=env, wdir='tmp-dir', cores=[0,1], finish_cb=finish_callback, finish_cb_args=['job finish callback', 'job_ID'])
-#    await launcher.submit(agent_id, appid, args)
+    """Just for testing."""
+    # await launcher.submit(agent_id, appid, args, wdir='tmp-dir', finish_cb=finish_callback,
+    #   finish_cb_args=['job finish callback', 'job_ID'])
+    await launcher.submit(agent_id, appid, args, stdin=stdin, stdout=stdout, stderr=stderr, env=env, wdir='tmp-dir',
+                          cores=[0, 1], finish_cb=finish_callback, finish_cb_args=['job finish callback', 'job_ID'])
+    # await launcher.submit(agent_id, appid, args)
 
 
 async def test():
+    """Some simple test"""
     logging.basicConfig(level=logging.DEBUG)
 
-    l = Launcher()
+    launcher = Launcher('.', '.')
 
-    l.set_job_finish_callback(finish_callback_default, 'job finish callback')
+    launcher.set_job_finish_callback(finish_callback_default, 'job finish callback')
 
-#    await l.start([{ 'agent_id': 'n1', 'local': { }}])
-#    await l.start([{ 'agent_id': 'n1', 'ssh': { 'host': 'agave13' }}])
-    await l.start([
-        { 'agent_id': 'n1', 'slurm': { 'node': 'e0101' }},
-        { 'agent_id': 'n2', 'slurm': { 'node': 'e0103' }}])
+#    await launcher.start([{ 'agent_id': 'n1', 'local': { }}])
+#    await launcher.start([{ 'agent_id': 'n1', 'ssh': { 'host': 'agave13' }}])
+    await launcher.start([
+        {'agent_id': 'n1', 'slurm': {'node': 'e0101'}},
+        {'agent_id': 'n2', 'slurm': {'node': 'e0103'}}])
 
     try:
-        await run_job(l, 'n1', 'job1', [ '/usr/bin/cat' ], stdin='/etc/system-release', stdout='env.out', stderr='env.err', env={'v1': 'V1_value', 'v2': ''})
-        await run_job(l, 'n2', 'job2', [ '/usr/bin/cat' ], stdin='/etc/system-release', stdout='env2.out', stderr='env2.err', env={'v1': 'V1_value', 'v2': ''})
-    except Exception as e:
-        logger.error(str(e))
+        await run_job(launcher, 'n1', 'job1', ['/usr/bin/cat'], stdin='/etc/system-release', stdout='env.out',
+                      stderr='env.err', env={'v1': 'V1_value', 'v2': ''})
+        await run_job(launcher, 'n2', 'job2', ['/usr/bin/cat'], stdin='/etc/system-release', stdout='env2.out',
+                      stderr='env2.err', env={'v1': 'V1_value', 'v2': ''})
+    except Exception as exc:
+        logging.error(str(exc))
 
     await asyncio.sleep(5)
 
-    await l.stop()
+    await launcher.stop()
 
 
 if __name__ == '__main__':
-#    if len(sys.argv) > 2:
-#        print('error: wrong arguments\n\n\tlauncher {local_address}\n\n')
-#        sys.exit(1)
+    # if len(sys.argv) > 2:
+    #     print('error: wrong arguments\n\n\tlauncher {local_address}\n\n')
+    #     sys.exit(1)
 
     asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(test()))

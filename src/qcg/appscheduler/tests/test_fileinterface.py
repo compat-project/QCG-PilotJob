@@ -23,7 +23,7 @@ def test_local_simple_job(tmpdir):
     print('tmpdir: {}'.format(str(tmpdir)))
 
     jobName = 'mdate'
-    jobs = [job.toDict() for job in [
+    jobs = [job.to_dict() for job in [
         Job(jobName,
             JobExecution(
                 'date',
@@ -60,7 +60,7 @@ def test_local_simple_script_job(tmpdir):
     print('tmpdir: {}'.format(str(tmpdir)))
 
     jobName = 'mdate_script'
-    jobs = [job.toDict() for job in [
+    jobs = [job.to_dict() for job in [
         Job(jobName,
             JobExecution(
                 script = '/bin/date\n/bin/hostname\n',
@@ -99,7 +99,7 @@ def test_local_error_duplicate_name_job(tmpdir):
     print('tmpdir: {}'.format(str(tmpdir)))
 
     jobName = 'mdate'
-    jobs = [job.toDict() for job in [
+    jobs = [job.to_dict() for job in [
         Job(jobName,
             JobExecution(
                 'date',
@@ -141,7 +141,7 @@ def test_local_error_duplicate_name_job_separate_reqs(tmpdir):
     print('tmpdir: {}'.format(str(tmpdir)))
 
     jobName = 'mdate'
-    jobs1 = [job.toDict() for job in [
+    jobs1 = [job.to_dict() for job in [
         Job(jobName,
             JobExecution(
                 'date',
@@ -151,7 +151,7 @@ def test_local_error_duplicate_name_job_separate_reqs(tmpdir):
             ),
             JobResources( numCores=ResourceSize(1) )
         ) ] ]
-    jobs2 = [job.toDict() for job in [
+    jobs2 = [job.to_dict() for job in [
         Job(jobName,
             JobExecution(
                 'sleep',
@@ -661,7 +661,7 @@ def test_local_workflows(tmpdir):
 
     print('tmpdir: {}'.format(str(tmpdir)))
 
-    jobs = [job.toDict() for job in [
+    jobs = [job.to_dict() for job in [
         Job('first',
             JobExecution(
                 'sleep',
@@ -752,7 +752,7 @@ def test_local_workflows_error(tmpdir):
 
     print('tmpdir: {}'.format(str(tmpdir)))
 
-    jobs = [job.toDict() for job in [
+    jobs = [job.to_dict() for job in [
         Job('first',
             JobExecution(
                 'sleep',

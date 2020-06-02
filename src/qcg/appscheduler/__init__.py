@@ -1,2 +1,2 @@
-__version__="issue_40_partitions"
+__version__="issue_62_api_docs"
 
