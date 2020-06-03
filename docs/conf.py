@@ -23,6 +23,7 @@ project = 'QCG-PilotJob'
 copyright = '2020, Piotr Kopta, Tomasz Piontek & Bartosz Bosak'
 author = 'Piotr Kopta, Tomasz Piontek & Bartosz Bosak'
 html_logo = 'images/qcg-pj-logo.png'
+master_doc = 'index'
 
 
 # -- General configuration ---------------------------------------------------
