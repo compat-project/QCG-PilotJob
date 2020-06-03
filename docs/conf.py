@@ -50,6 +50,7 @@ excluded_files = excluded_files1 + excluded_files2
 excluded_files.remove(apidoc_module_dir + '/qcg/pilotjob/__init__.py')
 excluded_paths = ['qcg/pilotjob/launcher', 'qcg/pilotjob/tests', 'qcg/pilotjob/utils']
 apidoc_excluded_paths = excluded_paths + excluded_files
+autodoc_member_order = 'bysource'
 
 
 # Add any paths that contain templates here, relative to this directory.
