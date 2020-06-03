@@ -1,18 +1,18 @@
 from distutils.core import setup
 
 setup(
-	name="QCGPilotManager",
+	name="qcg-pilotjob",
 
 	version="0.8.0",
 
 	author="Piotr Kopta",
 	author_email="pkopta@man.poznan.pl",
 
-	packages=["qcg.appscheduler", "qcg.appscheduler.api", "qcg.appscheduler.launcher"],
+	packages=["qcg.pilotjob", "qcg.pilotjob.api", "qcg.pilotjob.launcher"],
 	package_dir={
-		"qcg.appscheduler": "src/qcg/appscheduler",
-		"qcg.appscheduler.api": "src/qcg/appscheduler/api",
-		"qcg.appscheduler.launcher": "src/qcg/appscheduler/launcher",
+		"qcg.pilotjob": "src/qcg/pilotjob",
+		"qcg.pilotjob.api": "src/qcg/pilotjob/api",
+		"qcg.pilotjob.launcher": "src/qcg/pilotjob/launcher",
 	},
 
 	url="http://github.com/vecma-project/QCG-PilotJob",
@@ -26,6 +26,6 @@ setup(
 		],
 
     entry_points = {
-        'console_scripts': ['qcg-pm-service=qcg.appscheduler.command_line:service','qcg-pm=qcg.appscheduler.client_cmd:qcgpjm'],
+        'console_scripts': ['qcg-pm-service=qcg.pilotjob.command_line:service','qcg-pm=qcg.pilotjob.client_cmd:qcgpjm'],
     },
 )
