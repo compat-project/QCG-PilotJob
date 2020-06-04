@@ -8,10 +8,10 @@ The QCG PilotJob Manager can be used in two different ways:
 
 The second method allows to dynamically control the jobs execution.
 
-Example application
--------------------
+Example API application
+-----------------------
 
-Let's write a simple program that will runs 10 instances of ?? program.
+Let's write a simple program that will runs 4 instances of simple bash script.
 
 First, we must create an instance of QCG PilotJob Manager
 
@@ -53,6 +53,8 @@ method.
 
 Now we can check the status of our submitted job:
 
+.. code:: bash
+
     job_status = manager.status(job_ids)
     print('job status: ', job_status)
 
@@ -60,6 +62,8 @@ The ``job_status`` should contain dictionary ``jobs`` with our job status inform
 dictionary of our job's status, should contain value ``SUCCEED``. If we check current directory, we can see that bunch
 of ``job.out.`` files has been created with a proper content. If we want to get detailed information about our job,
 we can use the ``info`` method:
+
+.. code:: bash
 
     job_info = manager.info(job_ids)
     print('job detailed information: ', job_info)
@@ -70,9 +74,67 @@ finished.
 It is important to call ``finish`` method at the end of our program. This method sent a proper command to QCG PilotJob
 Manager instance, and terminates the background thread in which the instance has been run.
 
+.. code:: bash
+
     manager.finish()
 
 The QCG PilotJob Manager creates a directory `.qcgpjm-service-` where the following files are stored:
 
--
+- ``service.log`` - logs of QCG PilotJob Manager, very useful in case of problems
+- ``jobs.report`` - the file containing information about all finished jobs, by default written in text format, but
+there is an option for JSON format which will be easier to parse.
+
+Example batch usage
+-------------------
+
+The same jobs we can launch using the batch method and prepared input files. In this mode, we have to create JSON file
+with all requests we want to sent to QCG PilotJob Manager. For example, the file contains jobs we submitted in previous
+section will look like this:
+
+.. code:: json
+
+    [
+      {
+        "request": "submit",
+        "jobs": [
+          {
+            "name": "example",
+            "iteration": { "stop": 4 },
+            "execution": {
+              "script": "echo \"job ${it} executed at `date` @ `hostname`\"",
+              "stdout": "job.out.${it}"
+            }
+          }
+        ]
+      },
+      {
+        "request": "control",
+        "command": "finishAfterAllTasksDone"
+      }
+    ]
+
+After placing above content in the JSON file, for example ``jobs.json``, we can execute this workflow with:
+
+.. code:: bash
+
+    $ python -m qcg.pilotjob.service --file-path jobs.json
+
+Alternatively, we can use the ``qcg-pm-service`` command alias, that is installed with ``qcg-pilotjob`` Python package.
+
+.. code:: bash
+
+    $ qcg-pm-service --file-path jobs.json
+
+In the input file, we have placed two requests:
+
+- ``submit`` - with job description we want to run
+- ``control`` - with ``finishAfterAllTasksDone`` command, which is required to finish QCG PilotJob Manager (the service
+might listen also on other interfaces, like ZMQ network interface, and must explicitly know when no more requests will
+come and service may be stopped.
+
+The result of executing QCG PilotJob Manager with presented example file should be the same as using the API - the bunch
+of output files should be created, as well as ``.qcgpjm-service-`` directory with additional files.
+
+Parallelism
+-----------
 
