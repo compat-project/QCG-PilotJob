@@ -40,3 +40,9 @@ To install QCG-PilotJob directly from github.com type the following command:
 .. code:: bash
 
    $ pip install --upgrade git+https://github.com/vecma-project/QCG-PilotJob.git
+
+To install specific branch from QCG-PilotJob github.com repository, the following format should be used:
+
+.. code:: bash
+
+   $ pip install --upgrade git+https://github.com/vecma-project/QCG-PilotJob.git@branch_name

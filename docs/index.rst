@@ -7,7 +7,7 @@ QCG-PilotJob
 ============
 A python service for easy execution of many tasks inside a single allocation.
 
-.. automodule:: qcg.appscheduler.api
+.. automodule:: qcg.pilotjob.api
    :members:
 
 .. toctree::
@@ -16,6 +16,7 @@ A python service for easy execution of many tasks inside a single allocation.
 
    overview
    installation
+   usage
    run
 
 
