@@ -55,11 +55,11 @@ def test_api_jobs_smpl_errors():
 
     # iterate
     ## wrong type
-    with pytest.raises(InvalidJobDescriptionError, match=r".*Invalid attribute iterate type.*"):
+    with pytest.raises(InvalidJobDescriptionError, match=r".*Invalid attribute iteration type.*"):
         jobs.add(name='j1', exec='/bin/date', iteration='some number')
-    with pytest.raises(InvalidJobDescriptionError, match=r".*Invalid attribute iterate type.*"):
+    with pytest.raises(InvalidJobDescriptionError, match=r".*Invalid attribute iteration type.*"):
         jobs.add(name='j1', exec='/bin/date', iteration={'some invalid value '})
-    with pytest.raises(InvalidJobDescriptionError, match=r".*Unknown iterate attribute unknown attribute.*"):
+    with pytest.raises(InvalidJobDescriptionError, match=r".*Unknown iteration attribute unknown attribute.*"):
         jobs.add(name='j1', exec='/bin/date', iteration={'unknown attribute': 3})
     ## # of iterations outside of range
     with pytest.raises(InvalidJobDescriptionError, match=r".*Wrong number of iterations.*"):
@@ -74,7 +74,7 @@ def test_api_jobs_smpl_errors():
         jobs.add(name='j1', exec='/bin/date', iteration={'stop': MAX_ITERATIONS + 1})
     with pytest.raises(InvalidJobDescriptionError, match=r".*Wrong number of iterations.*"):
         jobs.add(name='j1', exec='/bin/date', iteration={'start': 2, 'stop': MAX_ITERATIONS + 3})
-    with pytest.raises(InvalidJobDescriptionError, match=r".*Required attribute stop of element iterate not defined.*"):
+    with pytest.raises(InvalidJobDescriptionError, match=r".*Required attribute stop of element iteration not defined.*"):
         jobs.add(name='j1', exec='/bin/date', iteration={'start': 2})
 
     jobs.add(name='j1', exec='/bin/date')
@@ -139,7 +139,7 @@ def test_api_jobs_smpl():
     jobs.clear()
 
     jobs.add({'exec': 'cat', 'args': ['-v'], 'stdin': '/etc/hostname', 'stdout': 'host.out', 'stderr': 'host.err',
-             'name': 'j1', 'iterate': 10, 'numCores': 2, 'numNodes': 1, 'wt': '10:00', 'after': 'j2'})
+             'name': 'j1', 'iteration': 10, 'numCores': 2, 'numNodes': 1, 'wt': '10:00', 'after': 'j2'})
     assert 'j1' in jobs.job_names()
     j1_job = jobs.ordered_jobs()[0]
     assert all((j1_job.get('name') == 'j1',
@@ -196,11 +196,11 @@ def test_api_jobs_std():
                 j1_job.get('resources', {}).get('numNodes', {}).get('exact') == 1,
                 j1_job.get('resources', {}).get('wt') == '10:00',
                 j1_job.get('dependencies', {}).get('after', []) == ['j2'],
-                j1_job.get('iterate', {}).get('stop', 0) == 10))
+                j1_job.get('iteration', {}).get('stop', 0) == 10))
     jobs.clear()
 
 
-    jobs.add_std({'name': 'j1', 'iterate': {'stop': 10}},
+    jobs.add_std({'name': 'j1', 'iteration': {'stop': 10}},
                 execution={'exec': 'cat', 'args': ['-v'], 'stdin': '/etc/hostname', 'stdout': 'host.out',
                            'stderr': 'host.err'},
                 resources={'numCores': {'exact': 2}, 'numNodes': {'exact': 1}, 'wt': '10:00'},
@@ -217,7 +217,7 @@ def test_api_jobs_std():
                 j1_job.get('resources', {}).get('numNodes', {}).get('exact') == 1,
                 j1_job.get('resources', {}).get('wt') == '10:00',
                 j1_job.get('dependencies', {}).get('after', []) == ['j2'],
-                j1_job.get('iterate', {}).get('stop', 0) == 10))
+                j1_job.get('iteration', {}).get('stop', 0) == 10))
 
 
 def test_api_jobs_load_save(tmpdir):
