@@ -21,7 +21,7 @@ JOB_TOP_ATTRS = {
     "numNodes": {'req': False, 'types': [int, dict]},
     "numCores": {'req': False, 'types': [int, dict]},
     "wt": {'req': False, 'types': [str]},
-    "iterate": {'req': False, 'types': [int, dict]},
+    "iteration": {'req': False, 'types': [int, dict]},
     "after": {'req': False, 'types': [list, str]}
 }
 
@@ -120,14 +120,14 @@ class Jobs:
 
         Jobs._validate_smpl_element_definition(['numNodes', 'numCores'], attrs, JOB_RES_ATTRS)
 
-        if 'iterate' in attrs:
-            if isinstance(attrs['iterate'], int):
-                attrs['iterate'] = {'start': 0, 'stop': attrs['iterate']}
+        if 'iteration' in attrs:
+            if isinstance(attrs['iteration'], int):
+                attrs['iteration'] = {'start': 0, 'stop': attrs['iteration']}
 
-            Jobs._validate_smpl_element_definition(['iterate'], attrs, ITERATE_ATTRS)
+            Jobs._validate_smpl_element_definition(['iteration'], attrs, ITERATE_ATTRS)
 
-            iter_start = attrs['iterate']['start'] if 'start' in attrs['iterate'] else 0
-            niters = attrs['iterate']['stop'] - iter_start
+            iter_start = attrs['iteration']['start'] if 'start' in attrs['iteration'] else 0
+            niters = attrs['iteration']['stop'] - iter_start
 
             if niters < 0 or niters > MAX_ITERATIONS:
                 raise InvalidJobDescriptionError("Wrong number of iterations - outside range (0, {})".format(
@@ -213,7 +213,7 @@ class Jobs:
         if len(resources) > 0:
             std_job['resources'] = resources
 
-        for key in ['iterate']:
+        for key in ['iteration']:
             if key in smpl_job:
                 std_job['iteration'] = smpl_job[key]
 
