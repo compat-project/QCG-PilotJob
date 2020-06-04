@@ -1,9 +1,11 @@
-from distutils.core import setup
+from setuptools import setup
+
+with open("README.md", "r") as fh:
+	long_description = fh.read()
 
 setup(
 	name="qcg-pilotjob",
-
-	version="0.8.0",
+	version="0.8.0-rc3",
 
 	author="Piotr Kopta",
 	author_email="pkopta@man.poznan.pl",
@@ -18,6 +20,8 @@ setup(
 	url="http://github.com/vecma-project/QCG-PilotJob",
 
 	description="Manage many jobs inside one allocation",
+	long_description=long_description,
+	long_description_content_type="text/markdown",
 
 	install_requires=[
 		"zmq",
@@ -25,7 +29,7 @@ setup(
 		"prompt_toolkit"
 		],
 
-    entry_points = {
-        'console_scripts': ['qcg-pm-service=qcg.pilotjob.command_line:service','qcg-pm=qcg.pilotjob.client_cmd:qcgpjm'],
-    },
+	entry_points = {
+		'console_scripts': ['qcg-pm-service=qcg.pilotjob.command_line:service','qcg-pm=qcg.pilotjob.client_cmd:qcgpjm'],
+	},
 )
