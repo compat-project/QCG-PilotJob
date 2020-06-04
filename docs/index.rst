@@ -24,7 +24,7 @@ A python service for easy execution of many tasks inside a single allocation.
    :maxdepth: 1
    :caption: API Docs
 
-   source/qcg
+   api/qcg.pilotjob.api
 
 
 

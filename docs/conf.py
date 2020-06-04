@@ -12,8 +12,9 @@
 #
 import os
 import sys
+import glob
 sys.path.insert(0, os.path.abspath('.'))
-sys.path.insert(0, os.path.abspath('..'))
+sys.path.insert(0, os.path.abspath('../src'))
 
 
 # -- Project information -----------------------------------------------------
@@ -22,6 +23,7 @@ project = 'QCG-PilotJob'
 copyright = '2020, Piotr Kopta, Tomasz Piontek & Bartosz Bosak'
 author = 'Piotr Kopta, Tomasz Piontek & Bartosz Bosak'
 html_logo = 'images/qcg-pj-logo.png'
+master_doc = 'index'
 
 
 # -- General configuration ---------------------------------------------------
@@ -38,10 +40,17 @@ extensions = [
 ]
 
 
-apidoc_module_dir = '../src/qcg'
-apidoc_output_dir = 'source'
+apidoc_module_dir = '../src'
 apidoc_separate_modules = True
 apidoc_module_first = True
+
+excluded_files1 = glob.glob(apidoc_module_dir + "/qcg/pilotjob/*.py")
+excluded_files2 = glob.glob(apidoc_module_dir + "/*.py")
+excluded_files = excluded_files1 + excluded_files2
+excluded_files.remove(apidoc_module_dir + '/qcg/pilotjob/__init__.py')
+excluded_paths = ['qcg/pilotjob/launcher', 'qcg/pilotjob/tests', 'qcg/pilotjob/utils']
+apidoc_excluded_paths = excluded_paths + excluded_files
+autodoc_member_order = 'bysource'
 
 
 # Add any paths that contain templates here, relative to this directory.
