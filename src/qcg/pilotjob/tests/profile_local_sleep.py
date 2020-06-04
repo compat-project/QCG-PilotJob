@@ -31,7 +31,7 @@ with TemporaryDirectory() as tmpdir:
     jobs = [
         {
             "name": jobName,
-            "iterate": [0, nits],
+            "iteration": { 'start': 0, 'stop': nits },
             "execution": {
                 "exec": "/bin/sleep",
                 "args": ["{}s".format(str(jobSleepTime))],

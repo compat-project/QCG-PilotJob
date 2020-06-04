@@ -56,26 +56,26 @@ def test_api_jobs_smpl_errors():
     # iterate
     ## wrong type
     with pytest.raises(InvalidJobDescriptionError, match=r".*Invalid attribute iterate type.*"):
-        jobs.add(name='j1', exec='/bin/date', iterate='some number')
+        jobs.add(name='j1', exec='/bin/date', iteration='some number')
     with pytest.raises(InvalidJobDescriptionError, match=r".*Invalid attribute iterate type.*"):
-        jobs.add(name='j1', exec='/bin/date', iterate={'some invalid value '})
+        jobs.add(name='j1', exec='/bin/date', iteration={'some invalid value '})
     with pytest.raises(InvalidJobDescriptionError, match=r".*Unknown iterate attribute unknown attribute.*"):
-        jobs.add(name='j1', exec='/bin/date', iterate={'unknown attribute': 3})
+        jobs.add(name='j1', exec='/bin/date', iteration={'unknown attribute': 3})
     ## # of iterations outside of range
     with pytest.raises(InvalidJobDescriptionError, match=r".*Wrong number of iterations.*"):
-        jobs.add(name='j1', exec='/bin/date', iterate=-1)
+        jobs.add(name='j1', exec='/bin/date', iteration=-1)
     with pytest.raises(InvalidJobDescriptionError, match=r".*Wrong number of iterations.*"):
-        jobs.add(name='j1', exec='/bin/date', iterate={'start': 2, 'stop': 1})
+        jobs.add(name='j1', exec='/bin/date', iteration={'start': 2, 'stop': 1})
     with pytest.raises(InvalidJobDescriptionError, match=r".*Wrong number of iterations.*"):
-        jobs.add(name='j1', exec='/bin/date', iterate={'stop': -2})
+        jobs.add(name='j1', exec='/bin/date', iteration={'stop': -2})
     with pytest.raises(InvalidJobDescriptionError, match=r".*Wrong number of iterations.*"):
-        jobs.add(name='j1', exec='/bin/date', iterate=MAX_ITERATIONS + 1)
+        jobs.add(name='j1', exec='/bin/date', iteration=MAX_ITERATIONS + 1)
     with pytest.raises(InvalidJobDescriptionError, match=r".*Wrong number of iterations.*"):
-        jobs.add(name='j1', exec='/bin/date', iterate={'stop': MAX_ITERATIONS + 1})
+        jobs.add(name='j1', exec='/bin/date', iteration={'stop': MAX_ITERATIONS + 1})
     with pytest.raises(InvalidJobDescriptionError, match=r".*Wrong number of iterations.*"):
-        jobs.add(name='j1', exec='/bin/date', iterate={'start': 2, 'stop': MAX_ITERATIONS + 3})
+        jobs.add(name='j1', exec='/bin/date', iteration={'start': 2, 'stop': MAX_ITERATIONS + 3})
     with pytest.raises(InvalidJobDescriptionError, match=r".*Required attribute stop of element iterate not defined.*"):
-        jobs.add(name='j1', exec='/bin/date', iterate={'start': 2})
+        jobs.add(name='j1', exec='/bin/date', iteration={'start': 2})
 
     jobs.add(name='j1', exec='/bin/date')
     with pytest.raises(InvalidJobDescriptionError, match=r".*Job j1 already in list.*"):
@@ -102,7 +102,7 @@ def test_api_jobs_smpl():
                 ordered_jobs[0].get('name') != ordered_jobs[1].get('name')))
     assert all((jobs.clear() == 2, len(jobs.jobs()) == 0))
 
-    jobs.add(name='j1', iterate=10, exec='cat', args=['-v'], stdin='/etc/hostname', stdout='host.out', stderr='host.err',
+    jobs.add(name='j1', iteration=10, exec='cat', args=['-v'], stdin='/etc/hostname', stdout='host.out', stderr='host.err',
              numCores=2, numNodes=1, wt='10:00', after='j2')
     assert 'j1' in jobs.job_names()
     j1_job = jobs.ordered_jobs()[0]
@@ -121,7 +121,7 @@ def test_api_jobs_smpl():
     jobs.clear()
 
     jobs.add({'exec': 'cat', 'args': ['-v'], 'stdin': '/etc/hostname', 'stdout': 'host.out', 'stderr': 'host.err'},
-             name='j1', iterate=10, numCores=2, numNodes=1, wt='10:00', after='j2')
+             name='j1', iteration=10, numCores=2, numNodes=1, wt='10:00', after='j2')
     assert 'j1' in jobs.job_names()
     j1_job = jobs.ordered_jobs()[0]
     assert all((j1_job.get('name') == 'j1',
@@ -179,7 +179,7 @@ def test_api_jobs_std_errors():
 def test_api_jobs_std():
     jobs = Jobs()
 
-    jobs.add_std(name='j1', iterate={'stop': 10},
+    jobs.add_std(name='j1', iteration={'stop': 10},
                 execution={'exec': 'cat', 'args': ['-v'], 'stdin': '/etc/hostname', 'stdout': 'host.out',
                            'stderr': 'host.err'},
                 resources={'numCores': {'exact': 2}, 'numNodes': {'exact': 1}, 'wt': '10:00'},
@@ -222,9 +222,9 @@ def test_api_jobs_std():
 
 def test_api_jobs_load_save(tmpdir):
     jobs = Jobs()
-    jobs.add(name='j1', iterate=10, exec='cat', args=['-v'], stdin='/etc/hostname', stdout='host.out', stderr='host.err',
+    jobs.add(name='j1', iteration=10, exec='cat', args=['-v'], stdin='/etc/hostname', stdout='host.out', stderr='host.err',
              numCores=2, numNodes=1, wt='10:00')
-    jobs.add(name='j2', iterate=10, exec='date', args=['-v'], stdout='date.out',
+    jobs.add(name='j2', iteration=10, exec='date', args=['-v'], stdout='date.out',
              numCores={'exact': 1}, wt='10:00', after='j1')
     assert 'j1' in jobs.job_names()
     j1_job = jobs.ordered_jobs()[0]
@@ -336,7 +336,7 @@ def test_api_submit_iterate(tmpdir):
 
         iters = 10
         ids = m.submit(Jobs().
-                       add(iterate=iters, exec='/bin/date', stdout='date_${it}.out')
+                       add(iteration=iters, exec='/bin/date', stdout='date_${it}.out')
                        )
         jid = ids[0]
         assert len(m.list()) == 1
