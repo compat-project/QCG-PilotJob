@@ -135,6 +135,65 @@ come and service may be stopped.
 The result of executing QCG PilotJob Manager with presented example file should be the same as using the API - the bunch
 of output files should be created, as well as ``.qcgpjm-service-`` directory with additional files.
 
+Scheduling systems
+------------------
+
+In the previous examples we submitted a single CPU applications. The QCG PilotJob Manager is intended for use in HPC
+environments, especially with *Slurm* scheduling system. In such environments, we submit a request to scheduling system
+and when requested resources are available, the allocation is created and our application is run inside it. Of course
+we might run our job's directly in scheduling system without any pilot job mechanism, but we have to remember about
+some limitations of scheduling systems such as - maximum number of submitted/executing jobs in the same time, queueing
+time (significant for large number of jobs), job array mechanism only for same resource requirement jobs. Generally,
+scheduling systems wasn't designed for handling very large number of small jobs.
+
+To use QCG PilotJob Manager in HPC environment, we sugest to install QCG PilotJob Manager via virtual environment in
+directory shared among all computing nodes (most of home directories are available from computing nodes). On some
+systems, we need to load a proper Python >= 3.6 module before:
+
+.. code:: bash
+
+    $ module load python/3.7.3
+
+Next we can create virtual environment with QCG PilotJob Manager:
+
+.. code:: bash
+
+    $ python3 -m virtualenv $HOME/qcgpj-venv
+    $ source $HOME/qcgpj-venv/bin/activate
+    $ pip install qcg-pilotjob
+
+Now we can use this virtual environment in our jobs. The example job submission script for *Slurm* scheduling system
+that launched application ``myapp.py`` that uses QCG PilotJob Manager API, may look like this:
+
+.. code:: bash
+
+    #SBATCH --job-name=qcgpilotjob-ex
+    #SBATCH --nodes=2
+    #SBATCH --tasks-per-node=28
+    #SBATCH --time=60
+
+    module load python/3.7.3
+    source $HOME/qcgpj-venv/bin/activate
+
+    python myapp.py
+
+Of course, some scheduing system might require some additional parameters like:
+
+- ``--account`` - name of the account/grant we want to use
+- ``--partition`` - the partition name where our job should be scheduled
+
+To submit a job with QCG PilotJob Manager in batch mode with JSON jobs description file, we have to change the last
+line to:
+
+.. code:: bash
+
+    python -m qcg.pilotjob.service --file-path jobs.json
+
 Parallelism
 -----------
+
+The QCG PilotJob Manager executed as scheduling system job can detect available resources allocated by scheduling system
+and execute user's jobs inside it. To run Python code that uses QCG PilotJob manager API in scheduling system,
+The example submission script for *Slurm* scheduling system that launches
+
 
