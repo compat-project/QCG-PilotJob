@@ -9,6 +9,7 @@ matrix:
       script:
         - python -m pytest --no-print-logs src/
     - stage: deploy
+      language: python
       deploy:
         provider: pypi
         username: TEST_PYPI_USER
