@@ -8,3 +8,11 @@ matrix:
         - pip install -r reqs/requirements.txt
       script:
         - python -m pytest --no-print-logs src/
+    - stage: deploy
+      deploy:
+        provider: pypi
+        username: TEST_PYPI_USER
+        password: TEST_PYPI_PASSWORD
+        server: https://test.pypi.org/legacy/
+        edge: true
+
