@@ -14,4 +14,6 @@ matrix:
         password: $TEST_PYPI_PASSWORD
         server: https://test.pypi.org/legacy/
         edge: true
+        on:
+          all_branches: true
 
