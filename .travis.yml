@@ -9,11 +9,17 @@ matrix:
       script:
         - python -m pytest --no-print-logs src/
       deploy:
-        provider: pypi
-        username: $TEST_PYPI_USER
-        password: $TEST_PYPI_PASSWORD
-        server: https://test.pypi.org/legacy/
-        edge: true
-        on:
-          all_branches: true
+        - provider: pypi
+          username: $TEST_PYPI_USER
+          password: $TEST_PYPI_PASSWORD
+          server: https://test.pypi.org/legacy/
+          edge: true
+          on:
+            branch: devel
+        - provider: pypi
+          username: $PYPI_USER
+          password: $PYPI_PASSWORD
+          edge: true
+          on:
+           tags: true
 
