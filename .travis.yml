@@ -1,23 +1,21 @@
+language: python
+python:
+  - "3.6"
+  -
 matrix:
   include:
     - stage: testing
-      language: python
-      python:
-        - "3.6"
       install:
         - pip install -r reqs/requirements.txt
       script:
         - python -m pytest --no-print-logs src/
     - stage: deploy
-      language: python
-      python:
-        - "3.6"
       install:
         - pip install -r reqs/requirements.txt
       deploy:
         provider: pypi
-        username: TEST_PYPI_USER
-        password: TEST_PYPI_PASSWORD
+        username: $TEST_PYPI_USER
+        password: $TEST_PYPI_PASSWORD
         server: https://test.pypi.org/legacy/
         edge: true
 
