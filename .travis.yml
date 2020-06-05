@@ -1,7 +1,6 @@
 language: python
 python:
   - "3.6"
-  -
 matrix:
   include:
     - stage: testing
@@ -9,9 +8,6 @@ matrix:
         - pip install -r reqs/requirements.txt
       script:
         - python -m pytest --no-print-logs src/
-    - stage: deploy
-      install:
-        - pip install -r reqs/requirements.txt
       deploy:
         provider: pypi
         username: $TEST_PYPI_USER
