@@ -30,7 +30,6 @@ JOB_RES_ATTRS = {
     "min": {'req': False, 'types': [int]},
     "max": {'req': False, 'types': [int]},
     "exact": {'req': False, 'types': [int]},
-    "split-into": {'req': False, 'types': [int]},
     "scheduler": {'req': False, 'types': [str]}
 }
 
@@ -226,6 +225,43 @@ class Jobs:
         """Add a new, simple job description to the group.
 
         If both arguments are present, they are merged and processed as a single dictionary.
+        The following job attributes are currenlty supported:
+
+        - ``name`` (str, optional): the job name
+        - ``exec`` (str, optional): path to the executable program
+        - ``script`` (str, optional): bash script content
+        - ``args`` (str or list(str), optional): executable program arguments
+        - ``stdin`` (str, optional): path to file which content should be passed to the standard input stream
+        - ``stdout`` (str, optional): path to the file where standard output stream should be saved
+        - ``stderr`` (str, optional): path to the file where standard error stream should be saved
+        - ``wd`` (str, optional): path to the working directory where job should be started
+        - ``modules`` (str or list(str), optional): list of modules that should be loaded before job start
+        - ``venv`` (str, optional): path to the virtual environment that should be initialized before job start
+        - ``model`` (str, optional): model of execution
+        - ``numCores`` (int or dict, optional): number of required cores specification
+        - ``numNodes`` (int or dict, optional): number of required nodes specification
+        - ``wt`` (str, optional): job's maximum wall time
+        - ``iteration`` (int or dict, optional): number of job's iterations
+        - ``after`` (str or list(str), optional): name of the job's that must finish successfully before current one start
+
+        The attributes ``exec`` (with optional ``args``) are mutually exclusive with ``script``.
+
+        The ``numCores`` and ``numNodes`` atrributes may contain dictionary with following keys:
+
+        - ``min`` (int, optional): minimum number of resources
+        - ``max`` (int, optional): maximum number of resources
+        - ``exact`` (int, optional): exact number of resources
+        - ``scheduler`` (str, optional): name of iteration resource scheduler
+
+        The ``min``, ``max`` attributes are mutually exclusive with ``exact``. The description of iteration resource
+        schedulers can be found in documentation.
+
+        The ``iteration`` argument may contain dictionary with following keys:
+
+        - ``start`` (int, optional): iterations start index
+        - ``stop`` (int, optional): iterations stop index
+
+        The total number of iterations will be ``stop - start`` (the last iteration index will be ``stop - 1``).
 
         Args:
             job_attrs (dict): job description attributes in a simple format

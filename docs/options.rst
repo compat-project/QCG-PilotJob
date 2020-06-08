@@ -1,8 +1,20 @@
-Run
-===
+The QCG PilotJob Manager options
+================================
 
-The QCG Pilot Job Manager module provides wrapper command for running
-Manager service:
+The list of all options can be obtained by running either the wrapper command:
+
+.. code:: bash
+
+    $ qcg-pm-service --help
+
+or directly call the Python module:
+
+    $ python -m qcg.pilotjob.service --help
+
+Those options can be passed to the QCG PilotJob Manager in file based interface as command line arguments,
+or as an argument ``server_args`` during instantiating the LocalManager class.
+
+The full list of currently supported options is presented below.
 
 .. code:: bash
 
@@ -71,55 +83,3 @@ Manager service:
                            limit Slurm allocation to specified range of nodes
                            (ending node)
 
-The same Manager service, can by run directly with the python command:
-
-.. code:: bash
-
-   $ python -m qcg.appscheduler.service --help
-
-Example
--------
-
-.. code:: bash
-
-   $ mkdir tmpdir
-   $ cd tmpdir
-   $ cat <<EOF > jobs.json
-   [
-   {
-       "request": "submit",
-       "jobs": [  {
-           "name": "date1",
-           "execution": {
-             "exec": "/bin/date",
-             "stdout": "${jname}.stdout",
-             "stderr": "${jname}.stderr"
-           },
-           "resources": {
-             "numCores": {
-                   "exact": 1
-             }
-           }
-       } ]
-   },
-   {
-       "request": "control",
-       "command": "finishAfterAllTasksDone"
-   }
-   ]
-   EOF
-   $ qcg-pm-service --file-path jobs.json
-
-In the current directory there should be created a subdirectory with
-prefix '.qcgpjm-service' with a bunch of files, where the most important
-are:
-
--  ``service.log`` - with the manager logs
--  ``jobs.report`` - the report from job execution
-
-The number of available resources discovered by the QCG PJM can be
-checked with:
-
-.. code:: bash
-
-   $ grep 'available resources:' .qcgpjm/service.log

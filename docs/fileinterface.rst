@@ -3,10 +3,34 @@ File based interface
 
 The "File" interface allows a static sequence of commands (called requests) to be read from a file and performed by the system.
 
-Request file
-------------
+File interface usage
+--------------------
 
-The request file is a JSON format file containing a sequence of commands (requests). The file must be staged into the working directory of the QCG PilotJob Manager job and passed as an argument of this job invocation. The requests are read in an order they are placed in the file. In the file mode, QCG PilotJob Manager outputs all responses to the log file.
+To use QCG PilotJob Manager with the "File" interface we should call either the wrapper command:
+
+.. code:: bash
+
+    $ qcg-pm-service
+
+or directly call the Python module:
+
+.. code:: bash
+
+    $ python -m qcg.pilotjob.service
+
+with the ``--file-path FILE_PATH`` parameter, where ``FILE_PATH`` is a path to the requests file. For example, the command:
+
+.. code:: bash
+
+    $ qcg-pm-service --file-path reqs.json
+
+will run QCG PilotJob Manager on requests written in ``reqs.json`` file.
+
+
+Requests file
+-------------
+
+The requests file is a JSON format file containing a sequence of commands (requests). The file must be staged into the working directory of the QCG PilotJob Manager job and passed as an argument of this job invocation. The requests are read in an order they are placed in the file. In the file mode, QCG PilotJob Manager outputs all responses to the log file.
 
 Commands
 --------
@@ -57,7 +81,7 @@ The Job description is a dictionary with the following keys:
 
     The ``numCores`` element without ``numNodes`` specifies requested number of cores on any number of nodes. The same element used along with the ``numNodes`` determines the number of cores on each requested node.
 
-    The ``scheduler`` optional key defines the iteration resources scheduler. It is futher described in ??? section.
+    The ``scheduler`` optional key defines the iteration resources scheduler. It is futher described in section :ref:`iter-res-schedulers`.
 
 - ``dependencies`` (*optional*) ``Dict`` - a dictionary with the following items:
 
