@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
 	name="qcg-pilotjob",
-	version="0.8.0rc4",
+	version="0.8.0rc5",
 
 	author="Piotr Kopta",
 	author_email="pkopta@man.poznan.pl",

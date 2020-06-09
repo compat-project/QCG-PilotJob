@@ -13,22 +13,23 @@ allows to run only bunch of jobs having the same resource requirements
 while jobs being parts of a multiscale simulation by nature vary in
 requirements and therefore need more flexible solutions.
 
-From the scheduling system perspective, QCG-PilotJob Manager is seen as
-a single job inside a single user allocation. In the other words, the
-manager controls an execution of a complex experiment consisting of many
+The core component of QCG-PilotJob system is QCG-PilotJob Manager.
+From the scheduling system perspective, QCG-PilotJob Manager, is seen as
+a single job inside a single user allocation. It means that QCG-PilotJob Manager controls an execution
+of a complex experiment consisting of many
 jobs on resources reserved for the single job allocation. The manager
 listens to user's requests and executes commands like submit job, cancel
 job and report resources usage. In order to manage the resources and
 jobs the system takes into account both resources availability and
-mutual dependencies between jobs . Two interfaces are defined to
+mutual dependencies between jobs. Two interfaces are defined to
 communicate with the system: file-based and network-based. The former
 one is dedicated and more convenient for a static scenarios when a
-number of jobs is known in advance to the QCG PilotJob Manager start.
+number of jobs is known in advance to the QCG-PilotJob Manager start.
 The network interface is more general and flexible as it allows to
 dynamically send new requests and track execution of previously
 submitted jobs during the run-time.
 
-To allow user's to test their scenarious, the QCG PilotJob Manager
+To allow user's to test their scenarios, QCG-PilotJob Manager
 supports *local* execution mode, in which all job's are executed on
 local machine and doesn't require any scheduling system allocation.
 

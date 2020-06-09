@@ -1,7 +1,7 @@
 Installation
 ============
 
-The QCG PilotJob Manager requires Python version >= 3.6.
+QCG-PilotJob Manager requires Python version >= 3.6.
 
 Optionally the latest version of *pip* package manager and *virtualenv*
 can be insalled in user's directory by following commands:
