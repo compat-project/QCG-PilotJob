@@ -4,9 +4,9 @@ Examples
 QCG-PilotJob Manager can be used in two different ways:
 
 - as an service accessible with API
-- as a command line utility to execute static, prepared job workflows
+- as a command line utility to execute static, prepared job workflows in a batch mode
 
-The second method allows to dynamically control the jobs execution.
+The first method allows to dynamically control the jobs execution.
 
 Example API application
 -----------------------
@@ -97,6 +97,9 @@ QCG-PilotJob Manager creates a directory `.qcgpjm-service-` where the following 
 - ``service.log`` - logs of QCG-PilotJob Manager, very useful in case of problems
 - ``jobs.report`` - the file containing information about all finished jobs, by default written in text format, but
   there is an option for JSON format which will be easier to parse.
+
+.. note::
+    The full documentation of the API methods and it's arguments is available in the API Docs section.
 
 Example batch usage
 -------------------

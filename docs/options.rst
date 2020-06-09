@@ -11,7 +11,7 @@ or directly call the Python module:
 
     $ python -m qcg.pilotjob.service --help
 
-Those options can be passed to QCG-PilotJob Manager in file based interface as command line arguments,
+Those options can be passed to QCG-PilotJob Manager in batch mode as command line arguments,
 or as an argument ``server_args`` during instantiating the LocalManager class.
 
 The full list of currently supported options is presented below.

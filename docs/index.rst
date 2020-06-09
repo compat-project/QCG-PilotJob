@@ -28,25 +28,19 @@ A python service for easy execution of many tasks inside a single allocation.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Advanced functionality
-
-   fileinterface
-   resourceschedulers
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Architecture
+   :caption: Further reading
 
    architecture
+   fileinterface
+   resourceschedulers
+   performance_tuning
 
 .. toctree::
    :maxdepth: 2
    :caption: Miscellaneous
 
    logs
-   performance_tuning
    dictionary
-
 
 .. toctree::
    :maxdepth: 1

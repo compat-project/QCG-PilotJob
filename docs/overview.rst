@@ -22,10 +22,10 @@ listens to user's requests and executes commands like submit job, cancel
 job and report resources usage. In order to manage the resources and
 jobs the system takes into account both resources availability and
 mutual dependencies between jobs. Two interfaces are defined to
-communicate with the system: file-based and network-based. The former
+communicate with the system: file-based (batch mode) and API based. The former
 one is dedicated and more convenient for a static scenarios when a
 number of jobs is known in advance to the QCG-PilotJob Manager start.
-The network interface is more general and flexible as it allows to
+The API based interface is more general and flexible as it allows to
 dynamically send new requests and track execution of previously
 submitted jobs during the run-time.
 
