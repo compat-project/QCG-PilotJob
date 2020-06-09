@@ -1,5 +1,5 @@
-Architecture
-============
+Main concepts
+=============
 
 Modules
 -------
@@ -26,8 +26,8 @@ All the jobs submitted to the QCG PilotJob Manger system are placed in the queue
 - If the algorithm finishes processing the given job and some resources still remain unassigned the whole procedure is repeated for the next job.
 
 
-Executor
---------
+Executors
+---------
 
 The QCG PilotJob Manager module named Executor is responsible for execution and control of jobs by interacting with the cluster resource management system. The current implementation contains three different methods of executing jobs:
 

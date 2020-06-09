@@ -96,7 +96,7 @@ The QCG PilotJob Manager creates a directory `.qcgpjm-service-` where the follow
 
 - ``service.log`` - logs of QCG PilotJob Manager, very useful in case of problems
 - ``jobs.report`` - the file containing information about all finished jobs, by default written in text format, but
-there is an option for JSON format which will be easier to parse.
+  there is an option for JSON format which will be easier to parse.
 
 Example batch usage
 -------------------
@@ -143,14 +143,17 @@ In the input file, we have placed two requests:
 
 - ``submit`` - with job description we want to run
 - ``control`` - with ``finishAfterAllTasksDone`` command, which is required to finish QCG PilotJob Manager (the service
-might listen also on other interfaces, like ZMQ network interface, and must explicitly know when no more requests will
-come and service may be stopped.
+  might listen also on other interfaces, like ZMQ network interface, and must explicitly know when no more requests will
+  come and service may be stopped.
 
 The result of executing QCG PilotJob Manager with presented example file should be the same as using the API - the bunch
 of output files should be created, as well as ``.qcgpjm-service-`` directory with additional files.
 
-Scheduling systems
+Modes of execution
 ------------------
+
+Scheduling systems
+~~~~~~~~~~~~~~~~~~
 
 In the previous examples we submitted a single CPU applications. The QCG PilotJob Manager is intended for use in HPC
 environments, especially with *Slurm* scheduling system. In such environments, we submit a request to scheduling system
@@ -202,6 +205,39 @@ line to:
 .. code:: bash
 
     python -m qcg.pilotjob.service --file-path jobs.json
+
+Local execution
+~~~~~~~~~~~~~~~
+
+The QCG PilotJob Manager supports *local* mode that is suitable for locally testing executiong scenarious. In contrast
+to execution mode, where QCG PilotJob Manager is executed in scheduling system allocation, all jobs are launched with
+the usage of scheduling system. In the *local* mode, the user itself can define the size of available resources and
+execute it's scenario on such defined resources without the having access to scheduling system. It's worth remembering
+that QCG PilotJob Manager doesn't verify the physically available resources, also the executed jobs are not launched
+with any core/processor affinity. Thus the performance of jobs might not be optimal.
+
+The choice between *allocation* (in scheduling system allocation) or *local* mode is made automatically by the QCG
+PilotJob Manager during the start. If scheduling system environment will be detected, the *allocation* mode will be
+chosen. In other case, the local mode will be active, and if resources are not defined by the user, the default number
+of available cores in the system will be taken.
+
+The command line arguments, that also might by passed as argument ``server_args`` during instantiating the LocalManager
+, related to the *local* mode are presented below:
+
+- ``--nodes NODES`` - the available resources definition; the ``NODES`` parameter should have format::
+
+    `[NODE_NAME]:CORES[,[NODE_NAME]:CORES]...`
+
+- ``--envschema ENVSCHEMA`` - job execution environment; for each job the QCG PilotJob Manager can create environment
+  similar to the Slurm execution environment
+
+Some examples of resources definition:
+
+- ``--nodes 4`` - single node with 4 available cores
+- ``--nodes n1:2`` - single named node with 2 available cores
+- ``--nodes 4,2,2`` - three unnnamed nodes with 8 total cores
+- ``--nodes n1:4, n2:4, n3:4`` - three named nodes with 12 total cores
+
 
 Parallelism
 -----------

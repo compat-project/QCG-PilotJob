@@ -18,10 +18,24 @@ A python service for easy execution of many tasks inside a single allocation.
    installation
    usage
    options
-   architecture
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Advances functionality
+
    fileinterface
    resourceschedulers
-   localmode
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Architecture
+
+   architecture
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Miscellaneous
+
    miscellaneous
    dictionary
 
