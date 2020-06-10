@@ -64,7 +64,8 @@ line to:
 .. note::
     Once QCG-PilotJob is submitted via Slurm or QCG middleware, it inherits the execution environment set
     by those systems. Some environment variables, such as the location of a shared directory,
-    may be useful in a user's tasks. In order to get more detailed information on this topic please see :ref:`Executors`.
+    may be useful in a user's tasks. In order to get more detailed information on this topic please see
+    :ref:`Execution environments`.
 
 Local execution
 ---------------
