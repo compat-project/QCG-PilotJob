@@ -30,7 +30,8 @@ A python service for easy execution of many tasks inside a single allocation.
    :maxdepth: 2
    :caption: Further reading
 
-   architecture
+   concepts
+   execution_environments
    fileinterface
    resourceschedulers
    performance_tuning
