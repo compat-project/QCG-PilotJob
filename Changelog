@@ -1,3 +1,19 @@
+Version 0.8   2020-06-10 Piotr Kopta <pkopta@man.poznan.pl>
+	* documentation in rst format
+	* documentation available in readthedocs.io
+	* python modules available in pypi
+	* code cleanup (pep & pylint)
+	* code documentation
+	* changed module name qcg.appscheduler -> qcg.pilotjob
+	* changed package name QCG-PilotManager -> qcg-pilotjob
+	* initial support for partitioning resources by many instances
+	* changed handling of iteration jobs
+	* changed element 'iterate' (list) -> 'iteration' (dict) in job
+	description
+	* job names cannot contain variables
+	* job's iterations with automatically assigned names
+	* changed names in API (lowercase)
+
 Version 0.7   2020-03-11 Piotr Kopta <pkopta@man.poznan.pl>
 	* bugfix related to 'step creation temporarily disabled' 
 	* bugfix extended node launcher agent wait time
