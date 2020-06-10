@@ -1,4 +1,7 @@
-Version 0.8   2020-06-05 Piotr Kopta <pkopta@man.poznan.pl>
+Version 0.8   2020-06-10 Piotr Kopta <pkopta@man.poznan.pl>
+	* documentation in rst format
+	* documentation available in readthedocs.io
+	* python modules available in pypi
 	* code cleanup (pep & pylint)
 	* code documentation
 	* changed module name qcg.appscheduler -> qcg.pilotjob
