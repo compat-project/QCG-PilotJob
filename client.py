@@ -21,7 +21,7 @@ import json
 import logging
 import sys
 
-from qcg.appscheduler.utils.auxdir import find_single_aux_dir
+from qcg.pilotjob.utils.auxdir import find_single_aux_dir
 
 
 CommandCompleter = WordCompleter(['jobs', 'status', 'jinfo', 'load', 'edit',
