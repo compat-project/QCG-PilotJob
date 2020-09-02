@@ -149,8 +149,7 @@ class ExecutionJob:
 
             bash_cmd = ''
             if self.job_execution.modules:
-                bash_cmd += ' '.join(['source /etc/profile && module load {};'.format(mod)
-                                      for mod in self.job_execution.modules])
+                bash_cmd += f'source /etc/profile && module load {" ".join(self.job_execution.modules)}; '
 
             if self.job_execution.venv:
                 bash_cmd += 'source {}/bin/activate;'.format(self.job_execution.venv)
@@ -243,8 +242,8 @@ class LocalSchemaExecutionJob(ExecutionJob):
         """Prepare environment for job execution.
         Setup environment and modify exec according to the execution schema.
         """
-        super().preprocess()
         self._schema.preprocess(self)
+        super().preprocess()
 
     async def _execute_local_process(self):
         """Asynchronous task to launch local process with job iteration"""

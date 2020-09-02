@@ -1,4 +1,5 @@
 import os
+import logging
 
 from qcg.pilotjob.errors import InternalError
 from qcg.pilotjob.resources import ResourcesType
@@ -66,64 +67,14 @@ class SlurmExecution(ExecutionSchema):
 
     EXEC_NAME = 'slurm'
 
-    def preprocess(self, ex_job):
-        """"Preprocess job iteration description before launching.
-        Prepare job iteration execution arguments.
+    JOB_MODELS = {
+        "threads": "_preprocess_threads",
+        "intelmpi": "_preprocess_intelmpi",
+        "openmpi": "_preprocess_openmpi",
+        "default": "_preprocess_default"
+    }
 
-        Args
-            ex_job (ExecutionJob): execution job iteration data
-        """
-        job_exec = ex_job.job_execution.exec
-        job_args = ex_job.job_execution.args
-
-        job_model = ex_job.job_execution.model
-
-        # create run configuration
-        if job_model != "threads":
-            run_conf_file = os.path.join(ex_job.wd_path, ".{}.runconfig".format(ex_job.job_iteration.name))
-            with open(run_conf_file, 'w') as conf_f:
-                conf_f.write("0\t%s %s\n" % (
-                    job_exec,
-                    ' '.join('{0}'.format(str(arg).replace(" ", "\\ ")) for arg in job_args)))
-                if ex_job.ncores > 1:
-                    if ex_job.ncores > 2:
-                        conf_f.write("1-%d /bin/true\n" % (ex_job.ncores - 1))
-                    else:
-                        conf_f.write("1 /bin/true\n")
-
-            if self.resources.binding:
-                core_ids = []
-                for node in ex_job.allocation.nodes:
-                    core_ids.extend([str(core) for core in node.cores])
-                cpu_bind = "--cpu-bind=verbose,map_cpu:{}".format(','.join(core_ids))
-            else:
-                cpu_bind = "--cpu-bind=verbose,cores"
-
-            ex_job.job_execution.args = [
-                "-n", str(ex_job.ncores),
-                "--overcommit",
-                "--mem-per-cpu=0",
-                cpu_bind,
-                "--multi-prog"]
-        else:
-            cpu_mask = 0
-            if self.resources.binding:
-                core_ids = []
-                for node in ex_job.allocation.nodes:
-                    for core in node.cores:
-                        cpu_mask = cpu_mask | 1 << core
-                cpu_bind = "--cpu-bind=verbose,mask_cpu:{}".format(hex(cpu_mask))
-            else:
-                cpu_bind = "--cpu-bind=verbose,cores"
-
-            ex_job.job_execution.args = [
-                "-n", "1",
-                "--cpus-per-task", str(ex_job.ncores),
-                "--overcommit",
-                "--mem-per-cpu=0",
-                cpu_bind]
-
-        ex_job.job_execution.exec = 'srun'
+    def _preprocess_common(self, ex_job):
 
         if ex_job.job_execution.stdin:
             ex_job.job_execution.args.extend(["-i", os.path.join(ex_job.wd_path, ex_job.job_execution.stdin)])
@@ -141,14 +92,187 @@ class SlurmExecution(ExecutionSchema):
             ex_job.job_execution.args.extend(["--time", "0:{}".format(
                 int(ex_job.job_iteration.resources.wt.total_seconds()))])
 
-        if job_model != "threads":
-            ex_job.job_execution.args.append(run_conf_file)
-        else:
-            ex_job.job_execution.args.extend([job_exec, *job_args])
-
         if self.resources.binding:
             ex_job.env.update({'QCG_PM_CPU_SET': ','.join([str(c) for c in sum(
                 [alloc.cores for alloc in ex_job.allocation.nodes], [])])})
+
+
+    def _preprocess_threads(self, ex_job):
+        """Prepare execution description for threads execution model.
+
+        Args:
+            ex_job (ExecutionJob): job execution description
+        """
+        job_exec = ex_job.job_execution.exec
+        job_args = ex_job.job_execution.args
+
+        cpu_mask = 0
+        if self.resources.binding:
+            core_ids = []
+            for node in ex_job.allocation.nodes:
+                for core in node.cores:
+                    cpu_mask = cpu_mask | 1 << core
+            cpu_bind = "--cpu-bind=verbose,mask_cpu:{}".format(hex(cpu_mask))
+        else:
+            cpu_bind = "--cpu-bind=verbose,cores"
+
+        ex_job.job_execution.args = [
+            "-n", "1",
+            "--cpus-per-task", str(ex_job.ncores),
+            "--overcommit",
+            "--mem-per-cpu=0",
+            cpu_bind]
+
+        self._preprocess_common(ex_job)
+
+        ex_job.job_execution.exec = 'srun'
+        ex_job.job_execution.args.extend([job_exec, *job_args])
+
+    def _preprocess_default(self, ex_job):
+        """Prepare execution description for default execution model.
+
+        Args:
+            ex_job (ExecutionJob): job execution description
+        """
+        job_exec = ex_job.job_execution.exec
+        job_args = ex_job.job_execution.args
+
+        run_conf_file = os.path.join(ex_job.wd_path, ".{}.runconfig".format(ex_job.job_iteration.name))
+        with open(run_conf_file, 'w') as conf_f:
+            conf_f.write("0\t%s %s\n" % (
+                job_exec,
+                ' '.join('{0}'.format(str(arg).replace(" ", "\\ ")) for arg in job_args)))
+            if ex_job.ncores > 1:
+                if ex_job.ncores > 2:
+                    conf_f.write("1-%d /bin/true\n" % (ex_job.ncores - 1))
+                else:
+                    conf_f.write("1 /bin/true\n")
+
+        if self.resources.binding:
+            core_ids = []
+            for node in ex_job.allocation.nodes:
+                core_ids.extend([str(core) for core in node.cores])
+            cpu_bind = "--cpu-bind=verbose,map_cpu:{}".format(','.join(core_ids))
+        else:
+            cpu_bind = "--cpu-bind=verbose,cores"
+
+        ex_job.job_execution.args = [
+            "-n", str(ex_job.ncores),
+            "--overcommit",
+            "--mem-per-cpu=0",
+            cpu_bind,
+            "--multi-prog"]
+
+        self._preprocess_common(ex_job)
+
+        ex_job.job_execution.exec = 'srun'
+        ex_job.job_execution.args.append(run_conf_file)
+
+    def _preprocess_openmpi(self, ex_job):
+        """Prepare execution description for openmpi execution model.
+
+        Args:
+            ex_job (ExecutionJob): job execution description
+        """
+        job_exec = ex_job.job_execution.exec
+        job_args = ex_job.job_execution.args
+
+        # create rank file
+        if self.resources.binding:
+            rank_file = os.path.join(ex_job.wd_path, ".{}.rankfile".format(ex_job.job_iteration.name))
+            rank_id = 0
+            with open(rank_file, 'w') as rank_f:
+                for node in ex_job.allocation.nodes:
+                    for core in node.cores:
+                        rank_f.write(f'rank {rank_id}={node.node.name} slot={core}\n')
+                        rank_id = rank_id + 1
+
+            ex_job.job_execution.args = [
+                '--rankfile',
+                str(rank_file),
+            ]
+        else:
+            ex_job.job_execution.args = [
+                '-n',
+                str(ex_job.ncores),
+            ]
+
+        ex_job.job_execution.exec = 'bash'
+        ex_job.job_execution.args = ['-c',
+                'source /etc/profile & module load openmpi; exec mpirun {} {}'.format(
+                    job_exec, '' if not job_args else ' '.join(job_args))]
+#        ex_job.job_execution.args.extend([job_exec, *job_args])
+
+    def _preprocess_intelmpi(self, ex_job):
+        """Prepare execution description for intelmpi execution model.
+
+        Args:
+            ex_job (ExecutionJob): job execution description
+        """
+        job_exec = ex_job.job_execution.exec
+        job_args = ex_job.job_execution.args
+
+        mpi_args = []
+        first = True
+
+        # create rank file
+        if self.resources.binding:
+#            mpi_segments = []
+
+            for node in ex_job.allocation.nodes:
+#                mpi_segments.append(f'-host {node.node.name} -n {len(node.cores)} '
+#                                    f'-env I_MPI_PIN_PROCESSOR_LIST={",".join([str(core) for core in node.cores])} {job_exec}')
+                if not first:
+                    mpi_args.append(':')
+
+                mpi_args.extend([
+                    '-host',
+                    f'{node.node.name}',
+                    '-n',
+                    f'{len(node.cores)}',
+                    '-env',
+                    f'I_MPI_PIN_PROCESSOR_LIST={",".join([str(core) for core in node.cores])}',
+                    f'{job_exec}'])
+
+                first = False
+#            mpi_args = [' : '.join(mpi_segments)]
+
+            ex_job.env.update({'I_MPI_PIN': '1'})
+        else:
+            mpi_args = ['-n', f'{str(ex_job.ncores)}', f'{job_exec}']
+
+        if ex_job.job_execution.modules:
+            ex_job.job_execution.modules.append('impi')
+        else:
+            ex_job.job_execution.modules = ['impi']
+
+        ex_job.job_execution.exec = 'mpirun'
+        ex_job.job_execution.args = [*mpi_args]
+        if job_args:
+            ex_job.job_execution.args.extend(job_args)
+
+#        ex_job.job_execution.exec = 'bash'
+#        ex_job.job_execution.args = ['-c',
+#                                     'source /etc/profile & module load impi; exec mpirun {} {}'.format(
+#                                         ' '.join(mpi_args), ' '.join(job_args) if job_args else '')]
+#    #        ex_job.job_execution.args.extend([job_exec, *job_args])
+
+    def preprocess(self, ex_job):
+        """"Preprocess job iteration description before launching.
+        Prepare job iteration execution arguments.
+
+        Args
+            ex_job (ExecutionJob): execution job iteration data
+        """
+        job_model = ex_job.job_execution.model or 'default'
+
+        logging.info(f'looking for job model {job_model}')
+        preprocess_method = SlurmExecution.JOB_MODELS.get(job_model)
+        if not preprocess_method:
+            raise InternalError(f"unknown job execution model '{job_model}'")
+
+        method = getattr(self, preprocess_method)
+        method(ex_job)
 
 
 class DirectExecution(ExecutionSchema):
