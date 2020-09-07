@@ -200,9 +200,14 @@ def parse_slurm_resources(config):
     slurm_tasks_def = os.environ['SLURM_TASKS_PER_NODE']
     job_tasks = parse_slurm_job_cpus(slurm_tasks_def)
 
+
+    if Config.PARENT_MANAGER.get(config) and len(node_names) != len(job_tasks):
+        # TODO: dirty hack - to fix problems with ht & governor manaagers
+        job_tasks = job_cpus
+
     if len(node_names) != len(job_cpus) or len(node_names) != len(job_tasks):
         raise SlurmEnvError("failed to parse slurm env: number of nodes ({}) mismatch number of job cpus ({})"
-                            "/job tasks ({})".format(len(node_names), len(job_cpus), len(job_tasks)))
+                            "/job tasks ({}), ({})".format(len(node_names), len(job_cpus), len(job_tasks), slurm_tasks_def))
     core_ids = None
     binding = False
 
