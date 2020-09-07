@@ -71,6 +71,7 @@ class SlurmExecution(ExecutionSchema):
         "threads": "_preprocess_threads",
         "intelmpi": "_preprocess_intelmpi",
         "openmpi": "_preprocess_openmpi",
+        "srunmpi": "_preprocess_srunmpi",
         "default": "_preprocess_default"
     }
 
@@ -106,12 +107,16 @@ class SlurmExecution(ExecutionSchema):
         job_exec = ex_job.job_execution.exec
         job_args = ex_job.job_execution.args
 
+        core_ids = []
+        if self.resources.binding:
+            for node in ex_job.allocation.nodes:
+                for slot in node.cores:
+                    core_ids.extend(slot.split(','))
+
         cpu_mask = 0
         if self.resources.binding:
-            core_ids = []
-            for node in ex_job.allocation.nodes:
-                for core in node.cores:
-                    cpu_mask = cpu_mask | 1 << core
+            for cpu in core_ids:
+                cpu_mask = cpu_mask | 1 << int(cpu)
             cpu_bind = "--cpu-bind=verbose,mask_cpu:{}".format(hex(cpu_mask))
         else:
             cpu_bind = "--cpu-bind=verbose,cores"
@@ -217,11 +222,8 @@ class SlurmExecution(ExecutionSchema):
 
         # create rank file
         if self.resources.binding:
-#            mpi_segments = []
 
             for node in ex_job.allocation.nodes:
-#                mpi_segments.append(f'-host {node.node.name} -n {len(node.cores)} '
-#                                    f'-env I_MPI_PIN_PROCESSOR_LIST={",".join([str(core) for core in node.cores])} {job_exec}')
                 if not first:
                     mpi_args.append(':')
 
@@ -235,7 +237,6 @@ class SlurmExecution(ExecutionSchema):
                     f'{job_exec}'])
 
                 first = False
-#            mpi_args = [' : '.join(mpi_segments)]
 
             ex_job.env.update({'I_MPI_PIN': '1'})
         else:
@@ -251,11 +252,42 @@ class SlurmExecution(ExecutionSchema):
         if job_args:
             ex_job.job_execution.args.extend(job_args)
 
-#        ex_job.job_execution.exec = 'bash'
-#        ex_job.job_execution.args = ['-c',
-#                                     'source /etc/profile & module load impi; exec mpirun {} {}'.format(
-#                                         ' '.join(mpi_args), ' '.join(job_args) if job_args else '')]
-#    #        ex_job.job_execution.args.extend([job_exec, *job_args])
+    def _preprocess_srunmpi(self, ex_job):
+        """Prepare execution description for mpi with slurm's srun execution model.
+
+        Args:
+            ex_job (ExecutionJob): job execution description
+        """
+        job_exec = ex_job.job_execution.exec
+        job_args = ex_job.job_execution.args
+
+        mpi_args = []
+        first = True
+
+        # create rank file
+        if self.resources.binding:
+            cpu_masks = []
+            for node in ex_job.allocation.nodes:
+                for slot in node.cores:
+                    cpu_mask = 0
+                    for cpu in slot.split(','):
+                        cpu_mask = cpu_mask | 1 << int(cpu)
+                    cpu_masks.append(hex(cpu_mask))
+            cpu_bind = "--cpu-bind=verbose,mask_cpu:{}".format(','.join(cpu_masks))
+        else:
+            cpu_bind = "--cpu-bind=verbose,cores"
+
+        ex_job.job_execution.exec = 'srun'
+        ex_job.job_execution.args = [
+            "-n", str(ex_job.ncores),
+            "--overcommit",
+            "--mem-per-cpu=0",
+            "-m", "arbitrary",
+            cpu_bind ]
+
+        ex_job.job_execution.args.append(job_exec)
+        if job_args:
+            ex_job.job_execution.args.extend(job_args)
 
     def preprocess(self, ex_job):
         """"Preprocess job iteration description before launching.
