@@ -100,11 +100,10 @@ class ExecutionJob:
         """Prepare environment for job execution.
         Setup sandbox and environment variables. Resolve module loading and virtual environment activation.
         """
-        self._setup_sandbox()
         self._prepare_env()
         self._resolve_mods_venv()
 
-    def _setup_sandbox(self):
+    def setup_sandbox(self):
         """Set a job's working directory based on execution description and root working directory of executor.
         An attribute ``wd_path`` is set as an output of this method and directory is created
         """
@@ -242,6 +241,7 @@ class LocalSchemaExecutionJob(ExecutionJob):
         """Prepare environment for job execution.
         Setup environment and modify exec according to the execution schema.
         """
+        super().setup_sandbox()
         self._schema.preprocess(self)
         super().preprocess()
 
@@ -360,6 +360,13 @@ class LauncherExecutionJob(ExecutionJob):
         """
         super().__init__(executor, envs, allocation, job_iteration)
         self.env_opts = {'nohostfile': True}
+
+    def preprocess(self):
+        """Prepare environment for job execution.
+        Setup sandbox and environment variables. Resolve module loading and virtual environment activation.
+        """
+        super().setup_sandbox()
+        super().preprocess()
 
     @profile
     async def launch(self):
