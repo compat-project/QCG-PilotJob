@@ -105,7 +105,7 @@ class CRBind:
         crtype (CRType) - type of CR
         total_count (int) - total number of available crs
         ids (list(str)) - list of all available instances
-        _free (list(int)) - list of unused instances
+        _free (list(str)) - list of unused instances
     """
 
     def __init__(self, crtype, ids, free_ids=None):
