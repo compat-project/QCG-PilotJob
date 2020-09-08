@@ -10,10 +10,15 @@ The environment of parallel job is prepared for *MPI* or *OpenMP* jobs.
 MPI
 ---
 
-In case of *MPI* programs only one process is launched by QCG-PilotJob Manager that should call a proper MPI
-starting program, such as: ``mpirun`` or ``mpiexec``. All the environment for the parallel job, such as
-hosts file, and environment variables are prepared by QCG-PilotJob Manager. For example to run *Quantum Espresso*
-application, the example program may look like this:
+Running *MPI* programs on HPC systems can be a complex process, as it depends on chosen MPI implementation (*OpenMPI*,
+*IntelMPI*) and system configuration. Some sites supports launching MPI programs directly with scheduling system client
+``srun``, but on other ones such applications should be launched with standard ``mpirun`` command. To get a proper
+process binding to the specific cores is even harder, especially where programs are launched with ``mpirun`` command.
+To support running MPI applications, QCG-PilotJob Manager implements different execution models. The detailed description
+about those models can be found in :ref:`Execution models` section. In following example we are using the default model,
+where only single process is started by QCG-PilotJob Manager which is typically script that calls ``mpirun`` or
+``mpiexec`` command. All the environment for the parallel job, such as hosts file, and environment variables are
+prepared by QCG-PilotJob Manager. For example to run *Quantum Espresso* application, the example program may look like this:
 
 .. code:: bash
 

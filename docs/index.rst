@@ -32,6 +32,7 @@ A python service for easy execution of many tasks inside a single allocation.
 
    concepts
    execution_environments
+   execution_models
    fileinterface
    resourceschedulers
    performance_tuning
