@@ -242,11 +242,6 @@ class SlurmExecution(ExecutionSchema):
         else:
             mpi_args = ['-n', f'{str(ex_job.ncores)}', f'{job_exec}']
 
-        if ex_job.job_execution.modules:
-            ex_job.job_execution.modules.append('impi')
-        else:
-            ex_job.job_execution.modules = ['impi']
-
         ex_job.job_execution.exec = 'mpirun'
         ex_job.job_execution.args = [*mpi_args]
         if job_args:
