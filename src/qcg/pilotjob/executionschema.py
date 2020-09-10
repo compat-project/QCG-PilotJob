@@ -234,7 +234,8 @@ class SlurmExecution(ExecutionSchema):
                     f'{len(node.cores)}',
                     '-env',
                     f'I_MPI_PIN_PROCESSOR_LIST={",".join([str(core) for core in node.cores])}',
-                    f'{job_exec}'])
+                    f'{job_exec}',
+                    *job_args])
 
                 first = False
 
