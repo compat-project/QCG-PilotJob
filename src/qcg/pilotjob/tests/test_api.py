@@ -412,7 +412,7 @@ def test_api_submit_slurm_resources():
 
         jinfos = m.info_parsed(ids)
         assert all((len(jinfos) == 1, jid in jinfos, jinfos[jid].status  == 'SUCCEED',
-                    len(jinfos[jid].nodes) == nodes, jinfos[jid].total_cores == cores * nodes))
+                    len(jinfos[jid].nodes) == nodes, jinfos[jid].total_cores == cores * nodes)), str(jinfos)
         assert all(len(node_cores) == cores for node, node_cores in jinfos[jid].nodes.items())
 
     finally:

@@ -100,11 +100,10 @@ class ExecutionJob:
         """Prepare environment for job execution.
         Setup sandbox and environment variables. Resolve module loading and virtual environment activation.
         """
-        self._setup_sandbox()
         self._prepare_env()
         self._resolve_mods_venv()
 
-    def _setup_sandbox(self):
+    def setup_sandbox(self):
         """Set a job's working directory based on execution description and root working directory of executor.
         An attribute ``wd_path`` is set as an output of this method and directory is created
         """
@@ -149,8 +148,7 @@ class ExecutionJob:
 
             bash_cmd = ''
             if self.job_execution.modules:
-                bash_cmd += ' '.join(['source /etc/profile && module load {};'.format(mod)
-                                      for mod in self.job_execution.modules])
+                bash_cmd += f'source /etc/profile && module load {" ".join(self.job_execution.modules)}; '
 
             if self.job_execution.venv:
                 bash_cmd += 'source {}/bin/activate;'.format(self.job_execution.venv)
@@ -161,11 +159,11 @@ class ExecutionJob:
                 bash_cmd += 'exec {} {}'.format(
                     job_exec, ' '.join([str(arg).replace(" ", "\\ ") for arg in job_args]))
 
-            self.job_execution.args = ['-c', bash_cmd]
+            self.job_execution.args = ['-l', '-c', bash_cmd]
         else:
             if self.job_execution.script:
                 self.job_execution.exec = 'bash'
-                self.job_execution.args = ['-c', self.job_execution.script]
+                self.job_execution.args = ['-l', '-c', self.job_execution.script]
 
     def pre_start(self):
         """This method should be executed before job will be started.
@@ -243,8 +241,9 @@ class LocalSchemaExecutionJob(ExecutionJob):
         """Prepare environment for job execution.
         Setup environment and modify exec according to the execution schema.
         """
-        super().preprocess()
+        super().setup_sandbox()
         self._schema.preprocess(self)
+        super().preprocess()
 
     async def _execute_local_process(self):
         """Asynchronous task to launch local process with job iteration"""
@@ -361,6 +360,13 @@ class LauncherExecutionJob(ExecutionJob):
         """
         super().__init__(executor, envs, allocation, job_iteration)
         self.env_opts = {'nohostfile': True}
+
+    def preprocess(self):
+        """Prepare environment for job execution.
+        Setup sandbox and environment variables. Resolve module loading and virtual environment activation.
+        """
+        super().setup_sandbox()
+        super().preprocess()
 
     @profile
     async def launch(self):

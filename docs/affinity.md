@@ -22,15 +22,29 @@ Additionally, for all tasks launched by the Slurm with binding supported, the
 **QCG_PM_CPU_SET** environment variable will be available and set with core
 identifiers separated with comma.
 
-## OpenMP tasks
-Currenlty the OpenMP task can be launched with QCG-PJM as a bash script. Example script is presented below.
+To support process affinity for different parallel applications, QCG-PJM supports
+different execution models. Currently following modes are available:
+* `default` - in this model only single process is launched via `srun` command with
+allocation prepared based on task's resource requirements
+* `threads` - is designed for running OpenMP tasks on a single node, the process is
+started with `srun` command with `--cpus-per-task` parameter set according to number
+of cores defined in resource requirements
+* `openmpi`- the processes are started with `mpirun` command with rankfile created
+based on task's resource requirements; __It is important to define the appropriate OpenMPI
+modules in `executable\modules` element of job description or loading them before staring
+QCG-PJM__
+* `intelmpi`- the processes are started with `mpirun` command (from IntelMPI distribution)
+with defined multiple component, where each component describing execution node, contains
+`-host` element and `I_MPI_PIN_PROCESSOR_LIST` arguments set according to the allocated
+resources; __It is important to define the appropriate IntelMPI
+modules in `executable\modules` element of job description or loading them before staring
+QCG-PJM__
+* `srunmpi` - the processes are started with `srun` command with `--cpu-bind` parameter
+set according to the allocated resources; this model should be used only on sites that
+have properly configured OpenMPI/IntelMPI/Slurm environments; __It is important to define the
+appropriate IntelMPI/OpenMPI modules in `executable\modules` element of job description or loading
+them before staring QCG-PJM__
 
-    #!/bin/bash
+We suggest to use `srunmpi` model for MPI applications on HPC sites wherever such configurations
+are available and properly configured.
 
-	export OMP_NUM_THREADS=$QCG_PM_NPROCS
-	omp_application
-
-## MPI tasks
-The MPI tasks with core binding, can be launched with QCG-PJM with the following command:
-
-	mpirun -cpu-set "${QCG_PM_CPU_SET}" --report-bindings --bind-to core mpi_application
