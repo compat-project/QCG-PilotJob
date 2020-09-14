@@ -159,11 +159,11 @@ class ExecutionJob:
                 bash_cmd += 'exec {} {}'.format(
                     job_exec, ' '.join([str(arg).replace(" ", "\\ ") for arg in job_args]))
 
-            self.job_execution.args = ['-c', bash_cmd]
+            self.job_execution.args = ['-l', '-c', bash_cmd]
         else:
             if self.job_execution.script:
                 self.job_execution.exec = 'bash'
-                self.job_execution.args = ['-c', self.job_execution.script]
+                self.job_execution.args = ['-l', '-c', self.job_execution.script]
 
     def pre_start(self):
         """This method should be executed before job will be started.
