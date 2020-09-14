@@ -243,6 +243,15 @@ class SlurmExecution(ExecutionSchema):
         else:
             mpi_args = ['-n', f'{str(ex_job.ncores)}', f'{job_exec}']
 
+        if logging.root.level == logging.DEBUG:
+            ex_job.env.update({'I_MPI_HYDRA_BOOTSTRAP_EXEC_EXTRA_ARGS':
+                                   '-vvvvvv --overcommit --oversubscribe --cpu-bind=none --mem-per-cpu=0'})
+            ex_job.env.update({'I_MPI_HYDRA_DEBUG': '1'})
+            ex_job.env.update({'I_MPI_DEBUG': '5'})
+        else:
+            ex_job.env.update({'I_MPI_HYDRA_BOOTSTRAP_EXEC_EXTRA_ARGS':
+                                   '-v --overcommit --oversubscribe --mem-per-cpu=0'})
+
         ex_job.job_execution.exec = 'mpirun'
         ex_job.job_execution.args = [*mpi_args]
         if job_args:
