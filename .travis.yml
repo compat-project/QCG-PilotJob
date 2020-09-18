@@ -15,7 +15,7 @@ matrix:
           server: https://test.pypi.org/legacy/
           edge: true
           on:
-            branch: devel
+            branch: develop
         - provider: pypi
           username: $PYPI_USER
           password: $PYPI_PASSWORD
