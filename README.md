@@ -1,7 +1,7 @@
 # QCG-PilotJob
 The QCG-PilotJob service for execution of many computing tasks inside one allocation
 =======
-# QCG-PilotJob v 0.8.0
+# QCG-PilotJob v 0.9.0
 
 
 Author: Piotr Kopta <pkopta@man.poznan.pl>, Tomasz Piontek <piontek@man.poznan.pl>, Bartosz Bosak <bbosak@man.poznan.pl>
