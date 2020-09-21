@@ -3,7 +3,7 @@ from distutils.core import setup
 setup(
 	name='qcg-pilotjob-api',
 
-	version='0.8.0',
+	version='0.9.0rc1',
 
 	author='Piotr Kopta',
 	author_email='pkopta@man.poznan.pl',
