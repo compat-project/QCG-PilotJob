@@ -22,7 +22,7 @@ copyright = '2020, Piotr Kopta'
 author = 'Piotr Kopta'
 
 # The full version, including alpha/beta/rc tags
-release = '0.9.0rc1'
+release = '0.9.0'
 
 
 # -- General configuration ---------------------------------------------------
