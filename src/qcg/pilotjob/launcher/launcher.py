@@ -346,8 +346,9 @@ class Launcher:
         if 'node' not in slurm_data:
             raise ValueError('missing slurm node name')
 
-        slurm_args = ['-J', 'agent-{}'.format(slurm_data['node']), '-w', slurm_data['node'], '-vvv',
-                      '--oversubscribe', '--overcommit', '-N', '1', '-n', '1', '-D', self.work_dir, '-u']
+        slurm_args = ['-J', 'agent-{}'.format(slurm_data['node']), '-w', slurm_data['node'], '--cpu-bind=none', '-vvv',
+                      '--mem-per-cpu=0', '--oversubscribe', '--overcommit', '-N', '1', '-n', '1', '-D', self.work_dir,
+                      '-u']
 
         if logging.root.level == logging.DEBUG:
             slurm_args.extend(['--slurmd-debug=verbose', '-vvvvv'])

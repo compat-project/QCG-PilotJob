@@ -60,6 +60,9 @@ line to:
 
     python -m qcg.pilotjob.service --file-path jobs.json
 
+.. note::
+    Affinity binding supported by Slurm and used by QCG-PilotJob may not work properly when allocation doesn't contain
+    entire nodes, so we recommended running QCG-PilotJob on allocations with entire nodes reserved.
 
 .. note::
     Once QCG-PilotJob is submitted via Slurm or QCG middleware, it inherits the execution environment set

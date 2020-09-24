@@ -332,6 +332,11 @@ class QCGPMService:
                      ','.join(Config.MANAGER_TAGS.get(self._conf)))
         logging.info('log level set to: %s', Config.LOG_LEVEL.get(self._conf).upper())
 
+        env_file_path = join(self._aux_dir, 'env.log')
+        with open(env_file_path, "wt") as env_file:
+            for name, value in os.environ.items():
+                env_file.write(f'{name}={value}\n')
+
     @staticmethod
     def _setup_event_loop():
         """Setup event loop."""
