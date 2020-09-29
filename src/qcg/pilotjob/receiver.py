@@ -89,6 +89,8 @@ class Receiver:
 
         self._handler = handler
 
+        self._active_ifaces = 0
+
         self._ifaces = ifaces
         self._tasks = []
 
@@ -150,13 +152,25 @@ class Receiver:
         """bool: the value of finish flag"""
         return self.finished
 
+    def _started_iface(self, iface):
+        self._active_ifaces = self._active_ifaces + 1
+        logging.info(f'receiver - interface {iface.__class__.__name__} activated ({self._active_ifaces} active)')
+
+    def _stopped_iface(self, iface):
+        self._active_ifaces = self._active_ifaces - 1
+        logging.info(f'receiver - interface {iface.__class__.__name__} stopped ({self._active_ifaces} active)')
+
+        if self._active_ifaces == 0:
+            logging.info('No more active interfaces - finishing')
+            self.set_finish(True)
+
     async def _listen(self, iface):
         """Task that listen on given interface and handles the incoming requests.
 
         Args:
             iface (Interface): interface to listen to
         """
-        logging.info('Listener on interface %s started', iface.__class__.__name__)
+        self._started_iface(iface)
 
         while True:
             try:
@@ -165,6 +179,8 @@ class Receiver:
                 if request is None:
                     # finishing listening - nothing more will come
                     logging.info('Finishing listening on interface %s due to EOD', iface.__class__.__name__)
+
+                    self._stopped_iface(iface)
                     return
 
                 logging.info('Interface %s received request: %s', iface.__class__.__name__, str(request))
@@ -184,9 +200,11 @@ class Receiver:
             except CancelledError:
                 # listener was canceled - finished gracefully
                 logging.info('Finishing listening on interface %s due to interrupt', iface.__class__.__name__)
+                self._stopped_iface(iface)
                 return
             except Exception:
                 logging.exception('Failed to process request from interface %s', iface.__class__.__name__)
+                self._stopped_iface(iface)
 
     async def _handle_request(self, iface, request):
         """Handle single request.
