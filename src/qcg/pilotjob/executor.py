@@ -1,5 +1,6 @@
 import logging
 from os.path import abspath
+from datetime import datetime
 
 from qcg.pilotjob.executionschema import ExecutionSchema
 from qcg.pilotjob.config import Config
@@ -105,8 +106,8 @@ class Executor:
 
             await execution_job.run()
         except Exception as exc:
-            if Config.PROGRESS.get(self._config):
-                print("failed to start job {}".format(job_iteration.name))
+            if not self._manager.stop_processing and Config.PROGRESS.get(self._config):
+                print(f"{datetime.now()} failed to start job {job_iteration.name}")
 
             logging.exception("Failed to launch job %s", job_iteration.name)
             self._manager.job_finished(job_iteration, allocation, -1, str(exc))
@@ -122,8 +123,8 @@ class Executor:
         Args:
             execution_job (ExecutorJob): execution job iteration data
         """
-        if Config.PROGRESS.get(self._config):
-            print("executing job {} ...".format(execution_job.job_iteration.name))
+        if not self._manager.stop_processing and Config.PROGRESS.get(self._config):
+            print(f"{datetime.now()} executing job {execution_job.job_iteration.name} ...")
 
         if self._manager is not None:
             self._manager.job_executing(execution_job.job_iteration)
@@ -135,8 +136,8 @@ class Executor:
         Args:
             execution_job (ExecutorJob): execution job iteration data
         """
-        if Config.PROGRESS.get(self._config):
-            print("job {} finished".format(execution_job.job_iteration.name))
+        if not self._manager.stop_processing and Config.PROGRESS.get(self._config):
+            print(f"{datetime.now()} job {execution_job.job_iteration.name} finished")
 
         del self._not_finished[execution_job.jid]
 
