@@ -48,3 +48,7 @@ class InvalidRequest(AppSchedulerError):
 
 class GovernorConnectionError(AppSchedulerError):
     pass
+
+
+class ResumeError(AppSchedulerError):
+    pass

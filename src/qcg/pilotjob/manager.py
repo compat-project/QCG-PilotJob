@@ -24,6 +24,7 @@ from qcg.pilotjob.response import Response, ResponseCode
 from qcg.pilotjob.errors import InvalidRequest
 from qcg.pilotjob.iterscheduler import IterScheduler
 from qcg.pilotjob.joblist import Job
+from qcg.pilotjob.resume import StateTracker
 
 
 class SchedulingJob:
@@ -81,7 +82,7 @@ class SchedulingJob:
         self._total_iterations = self.job.iteration.iterations() if self._has_iterations else 1
 
         # number of currently solved iterations
-        self._current_solved_iterations = 0
+        self._current_solved_iterations = self._total_iterations - self.job.get_not_finished_iterations()
 
         # general dependencies
         if job.has_dependencies:
@@ -412,6 +413,7 @@ class DirectManager:
         manager_id (str): manager instance identifier
         manager_tags (str): manager instance tags
         _parent_manager (str): address of governor manager interface
+        stop_processing (bool): if set to True, no job status change will be registered
     """
 
     def __init__(self, config=None, parent_manager=None):
@@ -443,6 +445,8 @@ class DirectManager:
         self.manager_tags = Config.MANAGER_TAGS.get(conf)
 
         self._parent_manager = parent_manager
+
+        self.stop_processing = False
 
     async def setup_interfaces(self):
         """Initialize manager after all incoming interfaces has been started. """
@@ -492,6 +496,9 @@ class DirectManager:
         try to create allocation. The allocated job's are sent to executor.
         """
         new_schedule_queue = []
+
+        if self.stop_processing:
+            return
 
         logging.debug("scheduling loop with %d jobs in queue", len(self._schedule_queue))
 
@@ -569,6 +576,9 @@ class DirectManager:
             state (JobState): target job state
             error_msg (string): optional error messages
         """
+        if self.stop_processing:
+            return
+
         parent_job_changed_status = job.set_state(state, iteration, error_msg)
 
         self._fire_job_state_notifies(job.name, iteration, state)
@@ -582,6 +592,9 @@ class DirectManager:
         Args:
             job_iteration (SchedulingIteration): job iteration that started executing
         """
+        if self.stop_processing:
+            return
+
         self.change_job_state(job_iteration.job, iteration=job_iteration.iteration, state=JobState.EXECUTING)
 
     def job_finished(self, job_iteration, allocation, exit_code, error_msg):
@@ -594,6 +607,10 @@ class DirectManager:
             exit_code (int): job exit code
             error_msg (str): an optional error message
         """
+        if self.stop_processing:
+            self._scheduler.release_allocation(allocation)
+            return
+
         state = JobState.SUCCEED
 
         if exit_code != 0:
@@ -669,11 +686,11 @@ class DirectManager:
 
         return None
 
-    def enqueue(self, jobs):
-        """Enqueue job to execution.
+    def register_jobs(self, jobs):
+        """Register new jobs in jobs registry.
 
         Args:
-            jobs (list(Job)): job descriptions to add to the system for scheduling
+            jobs (list(Job)): job descriptions to add to the registry
 
         Raises:
             JobAllreadyExist: when job with the same name was enqued earlier.
@@ -681,6 +698,15 @@ class DirectManager:
         if jobs is not None:
             for job in jobs:
                 self.job_list.add(job)
+
+    def enqueue(self, jobs):
+        """Enqueue job to execution.
+
+        Args:
+            jobs (list(Job)): job descriptions to add to the scheduler
+        """
+        if jobs is not None:
+            for job in jobs:
                 DirectManager._append_to_schedule_queue(self._schedule_queue, SchedulingJob(self, job))
 
             self._schedule_loop()
@@ -878,6 +904,9 @@ class DirectManagerHandler:
         Returns:
             Response: the response data
         """
+        if self._manager.stop_processing:
+            return Response.error('processing stopped')
+
         if request.command == ControlReq.REQ_CONTROL_CMD_FINISHAFTERALLTASKSDONE:
             if self._finish_task is not None:
                 return Response.error('Finish request already requested')
@@ -899,8 +928,15 @@ class DirectManagerHandler:
             Response: the response data
         """
         # enqueue job in the manager
+        if self._manager.stop_processing:
+            return Response.error('processing stopped')
+
         try:
             jobs = self._prepare_jobs(request.jobs)
+
+            StateTracker().new_submited_jobs(jobs)
+
+            self._manager.register_jobs(jobs)
             self._manager.enqueue(jobs)
 
             data = {
@@ -1001,6 +1037,9 @@ class DirectManagerHandler:
         Returns:
             Response: the response data
         """
+        if self._manager.stop_processing:
+            return Response.error('processing stopped')
+
         result = {}
 
         for job_name in request.job_names:
@@ -1029,6 +1068,9 @@ class DirectManagerHandler:
         Returns:
             Response: the response data
         """
+        if self._manager.stop_processing:
+            return Response.error('processing stopped')
+
         result = {}
 
         for job_name in request.job_names:
@@ -1118,6 +1160,9 @@ class DirectManagerHandler:
         Returns:
             Response: the response data
         """
+        if self._manager.stop_processing:
+            return Response.error('processing stopped')
+
         removed = 0
         errors = {}
 
@@ -1155,6 +1200,9 @@ class DirectManagerHandler:
         Returns:
             Response: the response data
         """
+        if self._manager.stop_processing:
+            return Response.error('processing stopped')
+
         job_names = self._manager.job_list.jobs()
 
         logging.info("got %d jobs from list", len(job_names))
@@ -1192,6 +1240,9 @@ class DirectManagerHandler:
         Returns:
             Response: the response data
         """
+        if self._manager.stop_processing:
+            return Response.error('processing stopped')
+
         resources = self._manager.resources
         return Response.ok(data={
             'total_nodes': resources.total_nodes,
@@ -1280,6 +1331,9 @@ class DirectManagerHandler:
         Returns:
             Response: the response data
         """
+        if self._manager.stop_processing:
+            return Response.error('processing stopped')
+
         return await self.generate_status_response()
 
     async def handle_notify_req(self, iface, request): #pylint: disable=W0613
