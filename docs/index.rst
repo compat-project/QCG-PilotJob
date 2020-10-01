@@ -35,6 +35,7 @@ A python service for easy execution of many tasks inside a single allocation.
    execution_models
    fileinterface
    resourceschedulers
+   resume
    performance_tuning
 
 .. toctree::
