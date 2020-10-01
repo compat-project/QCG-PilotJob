@@ -85,7 +85,8 @@ class Receiver:
             handler: manager that handles requests
             ifaces (Interface[]): list of interfaces
         """
-        assert ifaces is not None and isinstance(ifaces, list) and len(ifaces) > 0
+#        assert ifaces is not None and isinstance(ifaces, list) and len(ifaces) > 0
+        assert ifaces is not None
 
         self._handler = handler
 
@@ -113,6 +114,12 @@ class Receiver:
 
         self.finished = False
         self._handler.set_receiver(self)
+
+        # in case where there are no interfaces, set ``finished ``flag to True
+        # to not block the finishing of QCG-PilotJob
+        if len(self._ifaces) == 0:
+            self.finished = True
+
 
     def _find_zmq_address(self):
         """Look for ZMQ interface and get input address of this interface.
