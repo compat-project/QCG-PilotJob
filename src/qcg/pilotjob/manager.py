@@ -82,7 +82,8 @@ class SchedulingJob:
         self._total_iterations = self.job.iteration.iterations() if self._has_iterations else 1
 
         # number of currently solved iterations
-        self._current_solved_iterations = self._total_iterations - self.job.get_not_finished_iterations()
+        self._current_solved_iterations = self._total_iterations - self.job.get_not_finished_iterations() \
+            if self._has_iterations else 0
 
         # general dependencies
         if job.has_dependencies:
@@ -1044,14 +1045,20 @@ class DirectManagerHandler:
 
         for job_name in request.job_names:
             try:
-                job = self._manager.job_list.get(job_name)
+                real_job_name, job_iteration = JobList.parse_jobname(job_name)
+
+                job = self._manager.job_list.get(real_job_name)
 
                 if job is None:
-                    return Response.error('Job \'{}\' doesn\'t exist'.format(request.job_name))
+                    return Response.error('Job \'{}\' doesn\'t exist'.format(job_name))
+
+                if job_iteration is not None:
+                    if not job.iteration.in_range(job_iteration):
+                        return Response.error('Unknown iteration {} for job {}'.format(job_iteration, real_job_name))
 
                 result[job_name] = {'status': int(ResponseCode.OK), 'data': {
                     'jobName': job_name,
-                    'status': str(job.str_state())
+                    'status': str(job.str_state(job_iteration))
                 }}
             except Exception as exc:
                 result[job_name] = {'status': int(ResponseCode.ERROR), 'message': exc.args[0]}
