@@ -1,6 +1,6 @@
 from os.path import join, abspath, exists
 from shutil import rmtree
-import logging
+import time
 
 from qcg.pilotjob.api.manager import LocalManager
 from qcg.pilotjob.api.job import Jobs
@@ -24,6 +24,7 @@ def test_resume_tracker_files(tmpdir):
         jobs = Jobs().add_std(job_req)
         submit_2_manager_and_wait_4_info(m, jobs, 'SUCCEED')
 
+        time.sleep(1)
         aux_dir = find_single_aux_dir(str(tmpdir))
 
         assert all(exists(join(aux_dir, fname)) for fname in ['track.reqs', 'track.states']), \
@@ -70,14 +71,15 @@ def test_resume_simple(tmpdir):
         for iteration in range(its):
             job_it = jinfo.childs[iteration]
 
-            exp_status = 'SUCCEED'
+            exp_status = ['SUCCEED']
             if iteration > 3 and iteration < 8:
-                exp_status = 'EXECUTING'
+                exp_status = ['EXECUTING', 'SCHEDULED']
             elif iteration > 7:
-                exp_status = 'QUEUED'
+                exp_status = ['QUEUED']
             assert all((job_it.iteration == iteration,
                         job_it.name == '{}:{}'.format('sleep', iteration),
-                        job_it.status == exp_status))
+                        job_it.status in exp_status)),\
+                f"{job_it.iteration} != {iteration}, {job_it.name} != {'{}:{}'.format('sleep', iteration)}, {job_it.status} != {exp_status}"
 
         # kill process
         m.kill_manager_process()
