@@ -288,7 +288,7 @@ class QCGPMService:
                 governor manager with this address
         """
         logging.info('starting direct manager (with parent manager address %s)...', parent_manager)
-        self._manager = DirectManager(self._conf, parent_manager)
+        self._manager = DirectManager(self._tracer, self._conf, parent_manager)
         self._manager.register_notifier(self._job_status_change_notify, self._manager)
 
         self._receiver = Receiver(self._manager.get_handler(), self._ifaces)
@@ -326,7 +326,8 @@ class QCGPMService:
 
         # just setup the path to the aux directory, the StateTracker is singleton but first initialization with
         # proper path is crucial.
-        StateTracker(self._aux_dir)
+        logging.debug('initializing tracer ...')
+        self._tracer = StateTracker(self._aux_dir)
 
     def _setup_aux_dir(self):
         """This method should be called before all other '_setup' methods, as it sets the destination for the
@@ -336,7 +337,11 @@ class QCGPMService:
 
         self._aux_dir = Config.RESUME.get(self._conf)
         if self._aux_dir:
-            self._aux_dir = is_aux_dir(self._aux_dir) or find_latest_aux_dir(self._aux_dir)
+            try:
+                self._aux_dir = is_aux_dir(self._aux_dir) or find_latest_aux_dir(self._aux_dir)
+            except Exception:
+                raise InvalidArgument(
+                    f'Resume directory {self._aux_dir} not exists or is not valid QCG-PilotJob auxiliary directory')
         else:
             self._aux_dir = join(wdir, '.qcgpjm-service-{}'.format(Config.MANAGER_ID.get(self._conf)))
 
@@ -362,6 +367,7 @@ class QCGPMService:
                      qcg.pilotjob.__version__, str(datetime.now()), socket.gethostname(),
                      ','.join(Config.MANAGER_TAGS.get(self._conf)))
         logging.info('log level set to: %s', Config.LOG_LEVEL.get(self._conf).upper())
+        logging.info(f'service arguments {str(self._args)}')
 
         env_file_path = join(self._aux_dir, 'env.log')
         with open(env_file_path, "wt") as env_file:
@@ -443,7 +449,7 @@ class QCGPMService:
             if state.is_finished():
                 job = manager.job_list.get(job_id)
                 self._job_reporter.report_job(job, iteration)
-                StateTracker().job_finished(job, iteration)
+                self._tracer.job_finished(job, iteration)
 
     def get_interfaces(self, iface_class=None):
         """Return list of available interfaces.
@@ -602,8 +608,15 @@ class QCGPMServiceProcess(Process):
             self.service.start()
         except Exception as exc:
             logging.error('Error: %s', str(exc))
+
+            if self.queue:
+                try:
+                    self.queue.put({'error': str(exc)})
+                except Exception:
+                    pass
+
             traceback.print_exc()
-            sys.exit(1)
+#            sys.exit(1)
 
 
 if __name__ == "__main__":

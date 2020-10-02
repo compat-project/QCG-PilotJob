@@ -9,13 +9,13 @@ import os
 import glob
 
 
-class StateTracker(metaclass=Singletone):
+class StateTracker():
     """
     This class traces incoming requests and job status changes to record current state which can be used
     to resume prematurely interrupted execution of QCG-Pilot job service.
     """
 
-    def __init__(self, path=None):
+    def __init__(self, path):
         """Initialize state tracker.
 
         Attributes:
@@ -26,6 +26,9 @@ class StateTracker(metaclass=Singletone):
             * path - path to the directory where tracker files will be saved, if None, the current working directory
               will be used
         """
+        if path is None or not exists(path):
+            raise ResumeError(f'Tracker directory {path} not valid - not defined or not exist')
+
         self.reqs_file = join(path, f'track.reqs')
         self.finished_file = join(path, f'track.states')
 

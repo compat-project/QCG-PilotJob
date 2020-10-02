@@ -417,14 +417,16 @@ class DirectManager:
         stop_processing (bool): if set to True, no job status change will be registered
     """
 
-    def __init__(self, config=None, parent_manager=None):
+    def __init__(self, tracer, config=None, parent_manager=None):
         """Initialize instance.
 
         Args:
+            tracer (StateTracker): tracker object used to track new jobs and job status changes (resume mechanism)
             config (dict): QCG-PilotJob configuration
             parent_manager (str): address of the governor manager
         """
         conf = config or None
+        self.tracer = tracer
         self.resources = get_resources(conf)
 
         if Config.SYSTEM_CORE.get(conf):
@@ -935,7 +937,7 @@ class DirectManagerHandler:
         try:
             jobs = self._prepare_jobs(request.jobs)
 
-            StateTracker().new_submited_jobs(jobs)
+            self._manager.tracer.new_submited_jobs(jobs)
 
             self._manager.register_jobs(jobs)
             self._manager.enqueue(jobs)
