@@ -1,4 +1,5 @@
 from os.path import join, abspath, exists
+from os import listdir
 from shutil import rmtree
 import time
 
@@ -28,7 +29,7 @@ def test_resume_tracker_files(tmpdir):
         aux_dir = find_single_aux_dir(str(tmpdir))
 
         assert all(exists(join(aux_dir, fname)) for fname in ['track.reqs', 'track.states']), \
-            f"missing tracker files in {aux_dir}"
+            f"missing tracker files in {aux_dir}: {str(listdir(aux_dir))}"
 
     finally:
         if m:
@@ -104,7 +105,127 @@ def test_resume_simple(tmpdir):
 
             assert all((job_it.iteration == iteration,
                         job_it.name == '{}:{}'.format('sleep', iteration),
-                        job_it.status == 'SUCCEED'))
+                        job_it.status == 'SUCCEED')), \
+                f"{job_it.iteration} != {iteration}, {job_it.name} != {'{}:{}'.format('sleep', iteration)}, {job_it.status} != SUCCEED"
+    finally:
+        if m:
+            m.finish()
+            m.cleanup()
+
+    rmtree(tmpdir)
+
+
+def test_resume_wflow(tmpdir):
+    try:
+        ncores = 4
+        m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json', '--nodes', str(ncores)],
+                         {'wdir': str(tmpdir)})
+
+        its = 10
+        job_req_first = {
+            'name': 'first',
+            'execution': {
+                'exec': '/bin/sleep',
+                'args': [ '4s' ],
+                'stdout': 'sleep.${it}.out',
+            },
+            'iteration': { 'stop': its },
+            'resources': { 'numCores': { 'exact': 1 } }
+        }
+        job_req_second = {
+            'name': 'second',
+            'execution': {
+                'exec': '/bin/date',
+                'stdout': 'date.${it}.out',
+            },
+            'iteration': { 'stop': its },
+            'dependencies': { 'after': [ 'first' ] },
+            'resources': { 'numCores': { 'exact': 1 } }
+        }
+        jobs = Jobs()
+        jobs.add_std(job_req_first)
+        jobs.add_std(job_req_second)
+        job_ids = m.submit(jobs)
+
+        # because job iterations executes in order, after finish of 4th iteration, the three previous should also finish
+        m.wait4('first:3')
+        jinfos = m.info_parsed(job_ids, withChilds=True)
+        assert jinfos
+        jinfo = jinfos['first']
+
+        # only first 4 iterations should finish
+        assert all((jinfo.iterations, jinfo.iterations.get('start', -1) == 0,
+                    jinfo.iterations.get('stop', 0) == its, jinfo.iterations.get('total', 0) == its,
+                    jinfo.iterations.get('finished', 0) == ncores, jinfo.iterations.get('failed', -1) == 0)), str(jinfo)
+        assert len(jinfo.childs) == its
+        for iteration in range(its):
+            job_it = jinfo.childs[iteration]
+
+            exp_status = ['SUCCEED']
+            if iteration > 3 and iteration < 8:
+                exp_status = ['EXECUTING', 'SCHEDULED']
+            elif iteration > 7:
+                exp_status = ['QUEUED']
+            assert all((job_it.iteration == iteration,
+                        job_it.name == '{}:{}'.format('first', iteration),
+                        job_it.status in exp_status)), \
+                f"{job_it.iteration} != {iteration}, {job_it.name} != {'{}:{}'.format('first', iteration)}, {job_it.status} != {exp_status}"
+
+        # none of 'second' iterations should execute
+        jinfo = jinfos['second']
+        assert all((jinfo.iterations, jinfo.iterations.get('start', -1) == 0,
+                    jinfo.iterations.get('stop', 0) == its, jinfo.iterations.get('total', 0) == its,
+                    jinfo.iterations.get('finished', 0) == 0, jinfo.iterations.get('failed', -1) == 0)), str(jinfo)
+        assert len(jinfo.childs) == its
+        for iteration in range(its):
+            job_it = jinfo.childs[iteration]
+
+            exp_status = ['QUEUED']
+            assert all((job_it.iteration == iteration,
+                        job_it.name == '{}:{}'.format('second', iteration),
+                        job_it.status in exp_status)), \
+                f"{job_it.iteration} != {iteration}, {job_it.name} != {'{}:{}'.format('second', iteration)}, {job_it.status} != {exp_status}"
+
+        # kill process
+        m.kill_manager_process()
+        m.cleanup()
+
+        ncores = 4
+        m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json', '--nodes', str(ncores),
+                          '--resume', tmpdir], {'wdir': str(tmpdir)})
+
+        m.wait4all()
+        jinfos = m.info_parsed(job_ids, withChilds=True)
+        assert jinfos
+
+        # all iterations of 'first' job should finish
+        jinfo = jinfos['first']
+        assert all((jinfo.iterations, jinfo.iterations.get('start', -1) == 0,
+                    jinfo.iterations.get('stop', 0) == its, jinfo.iterations.get('total', 0) == its,
+                    jinfo.iterations.get('finished', 0) == its, jinfo.iterations.get('failed', -1) == 0)), str(jinfo)
+        assert len(jinfo.childs) == its
+        for iteration in range(its):
+            job_it = jinfo.childs[iteration]
+
+            assert all((job_it.iteration == iteration,
+                        job_it.name == '{}:{}'.format('first', iteration),
+                        job_it.status == 'SUCCEED')), \
+                f"{job_it.iteration} != {iteration}, {job_it.name} != {'{}:{}'.format('first', iteration)}, {job_it.status} != SUCCEED"
+
+        # all iterations of 'second' job should finish
+        jinfo = jinfos['second']
+        assert all((jinfo.iterations, jinfo.iterations.get('start', -1) == 0,
+                    jinfo.iterations.get('stop', 0) == its, jinfo.iterations.get('total', 0) == its,
+                    jinfo.iterations.get('finished', 0) == its, jinfo.iterations.get('failed', -1) == 0)), str(jinfo)
+        assert len(jinfo.childs) == its
+        for iteration in range(its):
+            job_it = jinfo.childs[iteration]
+
+            assert all((job_it.iteration == iteration,
+                        job_it.name == '{}:{}'.format('second', iteration),
+                        job_it.status == 'SUCCEED')), \
+                f"{job_it.iteration} != {iteration}, {job_it.name} != {'{}:{}'.format('sleep', iteration)}, {job_it.status} != SUCCEED"
+
     finally:
         if m:
             m.finish()
