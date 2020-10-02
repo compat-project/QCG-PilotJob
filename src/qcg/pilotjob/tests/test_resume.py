@@ -1,14 +1,28 @@
 from os.path import join, abspath, exists
-from os import listdir
+from os import listdir, mkdir
 from shutil import rmtree
 import time
+import pytest
 
+from qcg.pilotjob.api.errors import ServiceError
 from qcg.pilotjob.api.manager import LocalManager
 from qcg.pilotjob.api.job import Jobs
 from qcg.pilotjob.utils.auxdir import find_single_aux_dir
 
 from qcg.pilotjob.tests.utils import submit_2_manager_and_wait_4_info
 
+
+def test_resume_failed(tmpdir):
+    non_existing_path = 'some-non-existing-directory'
+    with pytest.raises(ServiceError, match=r".*Resume directory.*not exists or is not valid QCG-PilotJob auxiliary directory.*"):
+        m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json', '--nodes', '4', '--resume',
+                          non_existing_path], {'wdir': str(tmpdir)})
+
+    non_existing_path = join(tmpdir, 'non-pilotjob-dir')
+    mkdir(non_existing_path)
+    with pytest.raises(ServiceError, match=r".*Resume directory.*not exists or is not valid QCG-PilotJob auxiliary directory.*"):
+        m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json', '--nodes', '4', '--resume',
+                          non_existing_path], {'wdir': str(tmpdir)})
 
 def test_resume_tracker_files(tmpdir):
     try:
@@ -114,7 +128,7 @@ def test_resume_simple(tmpdir):
             m.finish()
             m.cleanup()
 
-    rmtree(tmpdir)
+#    rmtree(tmpdir)
 
 
 def test_resume_wflow(tmpdir):
