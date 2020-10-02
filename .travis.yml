@@ -7,7 +7,7 @@ matrix:
       install:
         - pip install -r reqs/requirements.txt
       script:
-        - python -m pytest --no-print-logs src/
+        - python -m pytest -s src/
       deploy:
         - provider: pypi
           username: $TEST_PYPI_USER
