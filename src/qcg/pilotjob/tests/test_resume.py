@@ -28,6 +28,8 @@ def test_resume_tracker_files(tmpdir):
         time.sleep(1)
         aux_dir = find_single_aux_dir(str(tmpdir))
 
+        print(f'aux_dir content: {str(listdir(aux_dir))}')
+
         assert all(exists(join(aux_dir, fname)) for fname in ['track.reqs', 'track.states']), \
             f"missing tracker files in {aux_dir}: {str(listdir(aux_dir))}"
 
