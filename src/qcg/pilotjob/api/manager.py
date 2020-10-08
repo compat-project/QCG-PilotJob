@@ -657,7 +657,7 @@ class LocalManager(Manager):
               'log_level' - the log level ('DEBUG'); by default the log level is set to INFO
         """
         if not mp.get_context():
-            mp.set_start_method('fork')
+            mp.set_start_method('spawn')
 
         try:
             from qcg.pilotjob.service import QCGPMServiceProcess
