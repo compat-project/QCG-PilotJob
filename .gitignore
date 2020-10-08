@@ -1,3 +1,17 @@
 .idea
 __pycache__/
 *.py[cod]
+docs/_build/
+docs/api/
+docs/source/
+src/coverage.out/
+src/coveragerc.ini
+src/cprofile.sh
+src/htmlcov.report/
+src/print_stats.py
+src/profile_example.py
+src/slurm-tests-out.txt
+venv*
+*.swp
+pylama.ini
+make.bat
