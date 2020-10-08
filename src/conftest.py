@@ -4,7 +4,7 @@ from datetime import timedelta
 import sys
 import pytest
 
-from qcg.appscheduler.service import QCGPMService
+from qcg.pilotjob.service import QCGPMService
 
 
 # FIXTURES

@@ -1,23 +1,27 @@
-from distutils.core import setup
+from setuptools import setup
+
+with open("README.md", "r") as fh:
+	long_description = fh.read()
 
 setup(
-	name="QCGPilotManager",
-
-	version="0.7.0",
+	name="qcg-pilotjob",
+	version="0.9.0",
 
 	author="Piotr Kopta",
 	author_email="pkopta@man.poznan.pl",
 
-	packages=["qcg.appscheduler", "qcg.appscheduler.api", "qcg.appscheduler.launcher"],
+	packages=["qcg.pilotjob", "qcg.pilotjob.api", "qcg.pilotjob.launcher"],
 	package_dir={
-		"qcg.appscheduler": "src/qcg/appscheduler",
-		"qcg.appscheduler.api": "src/qcg/appscheduler/api",
-		"qcg.appscheduler.launcher": "src/qcg/appscheduler/launcher",
+		"qcg.pilotjob": "src/qcg/pilotjob",
+		"qcg.pilotjob.api": "src/qcg/pilotjob/api",
+		"qcg.pilotjob.launcher": "src/qcg/pilotjob/launcher",
 	},
 
 	url="http://github.com/vecma-project/QCG-PilotJob",
 
 	description="Manage many jobs inside one allocation",
+	long_description=long_description,
+	long_description_content_type="text/markdown",
 
 	install_requires=[
 		"zmq",
@@ -25,7 +29,7 @@ setup(
 		"prompt_toolkit"
 		],
 
-    entry_points = {
-        'console_scripts': ['qcg-pm-service=qcg.appscheduler.command_line:service','qcg-pm=qcg.appscheduler.client_cmd:qcgpjm'],
-    },
+	entry_points = {
+		'console_scripts': ['qcg-pm-service=qcg.pilotjob.command_line:service','qcg-pm=qcg.pilotjob.client_cmd:qcgpjm'],
+	},
 )

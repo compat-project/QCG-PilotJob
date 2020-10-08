@@ -22,8 +22,10 @@ ENV LANG="en_US.utf-8"
 
 WORKDIR /srv/
 
+VOLUME ["/srv/src"]
+
 COPY reqs /srv/reqs
 RUN . /srv/venv/bin/activate && pip install -U --no-cache-dir -r /srv/reqs/requirements.txt
 
-RUN mkdir -p /srv/src/
-COPY src/ /srv/src/
+COPY pytest-cov.sh /srv/
+RUN chmod +x /srv/pytest-cov.sh
