@@ -656,8 +656,11 @@ class LocalManager(Manager):
               'log_file' - the location of the log file
               'log_level' - the log level ('DEBUG'); by default the log level is set to INFO
         """
-#        if not mp.get_context():
-        mp.set_start_method('spawn', force=True)
+        if not mp.get_context():
+            logging.debug('initializing MP start method with "fork"')
+            mp.set_start_method('fork')
+        else:
+            logging.debug(f'MP start method already initialized with {mp.get_context().get_start_method()} method')
 
         try:
             from qcg.pilotjob.service import QCGPMServiceProcess
