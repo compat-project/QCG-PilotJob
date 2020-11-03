@@ -1,15 +1,15 @@
 from distutils.core import setup
 
 setup(
-	name='QCGPilotManagerAPI',
+	name='qcg-pilotjob-api',
 
-	version='0.1',
+	version='0.9.0',
 
 	author='Piotr Kopta',
 	author_email='pkopta@man.poznan.pl',
 
-	packages=['qcg.appscheduler.api'],
-    package_dir={'qcg.appscheduler.api': 'qcg/appscheduler/api'},
+	packages=['qcg.pilotjob.api'],
+        package_dir={'qcg.pilotjob.api': 'src/qcg/pilotjob/api'},
 
 	url='http://dokumentacja',
 

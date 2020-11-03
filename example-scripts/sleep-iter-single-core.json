@@ -2,17 +2,17 @@
 	"request": "submit",
 	"jobs": [ {
 		"name": "sleep-iter_${it}",
-		"iteration": { "start": 1, "stop": 8 },
+		"iterate": [ 1, 1001 ],
 		"execution": {
 		  "exec": "/bin/sleep",
-		  "args": [ "1m" ],
+		  "args": [ "3s" ],
 		  "wd": "sleep-iter.${it}",
 		  "stdout": "sleep-iter.stdout",
 		  "stderr": "sleep-iter.stderr"
 		},
 		"resources": {
 		  "numCores": {
-				"exact": 3
+				"exact": 1
 		  }
 		}
 	} ]
