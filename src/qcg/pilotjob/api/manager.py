@@ -101,7 +101,6 @@ class Manager:
         """
         wdir = cfg.get('wdir', '.')
         _log_file = cfg.get('log_file', join(wdir, '.qcgpjm-client', 'api.log'))
-        print('log file set to {}'.format(_log_file))
 
         if not exists(dirname(abspath(_log_file))):
             os.makedirs(dirname(abspath(_log_file)))

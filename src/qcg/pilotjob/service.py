@@ -538,18 +538,17 @@ class QCGPMServiceProcess(Process):
         this service is sent to calling thread.
         """
         try:
-            print('starting qcgpm service ...')
             self.service = QCGPMService(self.args)
 
             if self.queue:
-                print('communication queue defined ...')
+                _logger.info('communication queue defined ...')
                 zmq_ifaces = self.service.get_interfaces(ZMQInterface)
-                print('sending configuration through communication queue ...')
+                _logger.info('sending configuration through communication queue ...')
                 self.queue.put({'zmq_addresses': [str(iface.real_address) for iface in zmq_ifaces]})
             else:
-                print('communication queue not defined')
+                _logger.info('communication queue not defined')
 
-            print('starting qcgpm service inside process ....')
+            _logger.info('starting qcgpm service inside process ....')
             self.service.start()
         except Exception as exc:
             _logger.error('Error: %s', str(exc))
