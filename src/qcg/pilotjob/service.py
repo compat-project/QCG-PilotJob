@@ -11,6 +11,7 @@ from datetime import datetime
 from multiprocessing import Process
 from os.path import exists, join, isabs
 
+from qcg.pilotjob import logger as top_logger
 import qcg.pilotjob.profile
 from qcg.pilotjob.config import Config
 from qcg.pilotjob.errors import InvalidArgument
@@ -251,7 +252,7 @@ class QCGPMService:
             self._setup_address_file()
         except Exception:
             if self._log_handler:
-                logging.getLogger().removeHandler(self._log_handler)
+                logging.getLogger('qcg.pilotjob').removeHandler(self._log_handler)
                 self._log_handler = None
 
             raise
@@ -324,11 +325,10 @@ class QCGPMService:
         if exists(log_file):
             os.remove(log_file)
 
-        root_logger = logging.getLogger()
         self._log_handler = logging.FileHandler(filename=log_file, mode='a', delay=False)
         self._log_handler.setFormatter(logging.Formatter('%(asctime)-15s: %(message)s'))
-        root_logger.addHandler(self._log_handler)
-        root_logger.setLevel(logging._nameToLevel.get(Config.LOG_LEVEL.get(self._conf).upper()))
+        top_logger.addHandler(self._log_handler)
+        top_logger.setLevel(logging._nameToLevel.get(Config.LOG_LEVEL.get(self._conf).upper()))
 
         _logger.info('service %s version %s started %s @ %s (with tags %s)', Config.MANAGER_ID.get(self._conf),
                      qcg.pilotjob.__version__, str(datetime.now()), socket.gethostname(),
@@ -499,7 +499,7 @@ class QCGPMService:
 
 #           remove custom log handler
             if self._log_handler:
-                logging.getLogger().removeHandler(self._log_handler)
+                top_logger.removeHandler(self._log_handler)
 
     @staticmethod
     def get_rusage():

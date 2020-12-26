@@ -9,6 +9,7 @@ from os.path import exists, join, dirname, abspath
 import multiprocessing as mp
 
 import zmq
+from qcg.pilotjob import logger as top_logger
 from qcg.pilotjob.api import errors
 from qcg.pilotjob.api.jobinfo import JobInfo
 
@@ -52,7 +53,6 @@ class Manager:
         self._poll_delay = Manager.DEFAULT_POLL_DELAY
 
         self._log_handler = None
-        self._root_logger = None
 
         client_cfg = cfg or {}
         self._setup_logging(client_cfg)
@@ -108,17 +108,16 @@ class Manager:
         elif exists(_log_file):
             os.remove(_log_file)
 
-        self._root_logger = logging.getLogger()
         self._log_handler = logging.FileHandler(filename=_log_file, mode='a', delay=False)
         self._log_handler.setFormatter(logging.Formatter('%(asctime)-15s: %(message)s'))
-        self._root_logger.addHandler(self._log_handler)
+        top_logger.addHandler(self._log_handler)
 
         level = logging.INFO
         if 'log_level' in cfg:
             if cfg['log_level'].lower() == 'debug':
                 level = logging.DEBUG
 
-        self._root_logger.setLevel(level)
+        top_logger.setLevel(level)
 
     def _disconnect(self):
         """Close connection to the QCG-PJM
@@ -511,11 +510,11 @@ class Manager:
     def cleanup(self):
         """Clean up resources.
 
-        The custom logging handlers are removed from root logger.
+        The custom logging handlers are removed from top logger.
         """
         if self._log_handler:
             self._log_handler.close()
-            self._root_logger.removeHandler(self._log_handler)
+            top_logger.removeHandler(self._log_handler)
 
     def wait4(self, names):
         """Wait for finish of specific jobs.

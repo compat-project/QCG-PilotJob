@@ -1,6 +1,7 @@
 import os
 import logging
 
+from qcg.pilotjob import logger as top_logger
 from qcg.pilotjob.errors import InternalError
 from qcg.pilotjob.resources import ResourcesType
 
@@ -246,7 +247,7 @@ class SlurmExecution(ExecutionSchema):
         else:
             mpi_args = ['-n', f'{str(ex_job.ncores)}', f'{job_exec}']
 
-        if logging.root.level == logging.DEBUG:
+        if top_logger.level == logging.DEBUG:
             ex_job.env.update({'I_MPI_HYDRA_BOOTSTRAP_EXEC_EXTRA_ARGS':
                                    '-vvvvvv --overcommit --oversubscribe --cpu-bind=none --mem-per-cpu=0'})
             ex_job.env.update({'I_MPI_HYDRA_DEBUG': '1'})

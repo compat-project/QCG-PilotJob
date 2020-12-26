@@ -10,6 +10,8 @@ from datetime import datetime
 import zmq
 from zmq.asyncio import Context
 
+from qcg.pilotjob import logger as top_logger
+
 
 _logger = logging.getLogger(__name__)
 
@@ -353,7 +355,7 @@ class Launcher:
                       '--mem-per-cpu=0', '--oversubscribe', '--overcommit', '-N', '1', '-n', '1', '-D', self.work_dir,
                       '-u']
 
-        if logging.root.level == logging.DEBUG:
+        if top_logger.level == logging.DEBUG:
             slurm_args.extend(['--slurmd-debug=verbose', '-vvvvv'])
 
         slurm_args.extend(slurm_data.get('args', []))
@@ -361,7 +363,7 @@ class Launcher:
         stdout_p = asyncio.subprocess.DEVNULL
         stderr_p = asyncio.subprocess.DEVNULL
 
-        if logging.root.level == logging.DEBUG:
+        if top_logger.level == logging.DEBUG:
             stdout_p = open(os.path.join(self.aux_dir, 'nl-{}-start-agent-stdout.log'.format(slurm_data['node'])), 'w')
             stderr_p = open(os.path.join(self.aux_dir, 'nl-{}-start-agent-stderr.log'.format(slurm_data['node'])), 'w')
 

@@ -12,6 +12,7 @@ from datetime import datetime
 
 import zmq
 
+from qcg.pilotjob import logger as top_logger
 from qcg.pilotjob.config import Config
 from qcg.pilotjob.errors import InvalidRequest, JobAlreadyExist, InternalError
 from qcg.pilotjob.joblist import JobState
@@ -176,13 +177,13 @@ class PartitionManager:
                         '--slurm-limit-nodes-range-begin', str(self.start_node),
                         '--slurm-limit-nodes-range-end', str(self.end_node)]
 
-        if logging.root.level == logging.DEBUG:
+        if top_logger.level == logging.DEBUG:
             manager_args.extend(['--log', 'debug'])
 
         self.stdout_p = asyncio.subprocess.DEVNULL
         self.stderr_p = asyncio.subprocess.DEVNULL
 
-        if logging.root.level == logging.DEBUG:
+        if top_logger.level == logging.DEBUG:
             self.stdout_p = open(os.path.join(self.aux_dir, 'part-manager-{}-stdout.log'.format(self.mid)), 'w')
             self.stderr_p = open(os.path.join(self.aux_dir, 'part-manager-{}-stderr.log'.format(self.mid)), 'w')
 
