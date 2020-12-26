@@ -13,6 +13,9 @@ from qcg.pilotjob.api import errors
 from qcg.pilotjob.api.jobinfo import JobInfo
 
 
+_logger = logging.getLogger(__name__)
+
+
 class Manager:
     """The Manager class is used to communicate with single QCG-PilotJob manager instance.
 
@@ -57,7 +60,7 @@ class Manager:
         if address is None:
             if Manager.DEFAULT_ADDRESS_ENV in os.environ:
                 address = os.environ[Manager.DEFAULT_ADDRESS_ENV]
-                logging.debug('found zmq address of pm: %s', address)
+                _logger.debug('found zmq address of pm: %s', address)
             else:
                 address = Manager.DEFAULT_ADDRESS
 
@@ -142,12 +145,12 @@ class Manager:
         """
         self._disconnect()
 
-        logging.info("connecting to the PJM @ %s", self._address)
+        _logger.info("connecting to the PJM @ %s", self._address)
         try:
             self._zmq_socket = self._zmq_ctx.socket(zmq.REQ)  # pylint: disable=maybe-no-member
             self._zmq_socket.connect(self._address)
             self._connected = True
-            logging.info("connection established")
+            _logger.info("connection established")
         except Exception as exc:
             raise errors.ConnectionError('Failed to connect to {} - {}'.format(self._address, exc.args[0]))
 
@@ -252,13 +255,13 @@ class Manager:
         self._assure_connected()
 
         msg = str.encode(json.dumps(data))
-        logging.debug("sending (in process %d): %s", os.getpid(), msg)
+        _logger.debug("sending (in process %d): %s", os.getpid(), msg)
         self._zmq_socket.send(msg)
-        logging.debug("data send, waiting for response")
+        _logger.debug("data send, waiting for response")
 
         reply = bytes.decode(self._zmq_socket.recv())
 
-        logging.debug("got reply: %s", str(reply))
+        _logger.debug("got reply: %s", str(reply))
         return valid_method(json.loads(reply))
 
     def resources(self):
@@ -537,7 +540,7 @@ class Manager:
         else:
             job_names = list(names)
 
-        logging.info("waiting for finish of %d jobs", len(job_names))
+        _logger.info("waiting for finish of %d jobs", len(job_names))
 
         result = {}
         not_finished = job_names
@@ -556,13 +559,13 @@ class Manager:
                         result[job_name] = job_data['data']['status']
 
                 if len(not_finished) > 0:
-                    logging.info("still %d jobs not finished", len(not_finished))
+                    _logger.info("still %d jobs not finished", len(not_finished))
                     time.sleep(self._poll_delay)
 
             except Exception as exc:
                 raise errors.ConnectionError(exc.args[0])
 
-        logging.info("all jobs finished")
+        _logger.info("all jobs finished")
         return result
 
     def wait4all(self):
@@ -657,10 +660,10 @@ class LocalManager(Manager):
               'log_level' - the log level ('DEBUG'); by default the log level is set to INFO
         """
         if not mp.get_context():
-            logging.debug('initializing MP start method with "fork"')
+            _logger.debug('initializing MP start method with "fork"')
             mp.set_start_method('fork')
         else:
-            logging.debug(f'MP start method already initialized with {mp.get_context().get_start_method()} method')
+            _logger.debug(f'MP start method already initialized with {mp.get_context().get_start_method()} method')
 
         try:
             from qcg.pilotjob.service import QCGPMServiceProcess
@@ -676,10 +679,10 @@ class LocalManager(Manager):
 
         self.qcgpm_queue = mp.Queue()
         self.qcgpm_process = QCGPMServiceProcess(server_args, self.qcgpm_queue)
-        logging.debug('manager process created')
+        _logger.debug('manager process created')
 
         self.qcgpm_process.start()
-        logging.debug('manager process started')
+        _logger.debug('manager process started')
 
         try:
             self.qcgpm_conf = self.qcgpm_queue.get(block=True, timeout=600)
@@ -688,12 +691,12 @@ class LocalManager(Manager):
         except Exception as exc:
             raise errors.ServiceError('Service not started: {}'.format(str(exc)))
 
-        logging.debug('got manager configuration: %s', str(self.qcgpm_conf))
+        _logger.debug('got manager configuration: %s', str(self.qcgpm_conf))
         if not self.qcgpm_conf.get('zmq_addresses', None):
             raise errors.ConnectionError('Missing QCGPM network interface address')
 
         zmq_iface_address = self.qcgpm_conf['zmq_addresses'][0]
-        logging.info('manager zmq iface address: %s', zmq_iface_address)
+        _logger.info('manager zmq iface address: %s', zmq_iface_address)
 
         super(LocalManager, self).__init__(zmq_iface_address, cfg)
 

@@ -8,6 +8,9 @@ from zmq.asyncio import Context
 from qcg.pilotjob.config import Config
 
 
+_logger = logging.getLogger(__name__)
+
+
 class ZMQInterface:
     """ZMQ interface for QCG-PilotJob.
 
@@ -67,14 +70,14 @@ class ZMQInterface:
             self.external_address = self.real_address.replace('//0.0.0.0:', '//{}:'.format(
                 socket.gethostbyname(socket.gethostname())))
 
-        logging.info('ZMQ interface configured (address %s) @ %s, external address @ %s', self.address,
+        _logger.info('ZMQ interface configured (address %s) @ %s, external address @ %s', self.address,
                      self.real_address, self.external_address)
 
     def close(self):
         """Close ZMQ socket."""
         if self.socket:
             try:
-                logging.info('closing ZMQ socket')
+                _logger.info('closing ZMQ socket')
                 self.socket.close()
             except Exception:
                 pass
@@ -85,11 +88,11 @@ class ZMQInterface:
         Returns:
             dict: incoming request
         """
-        logging.info("ZMQ interface listening for requests with pid %d...", os.getpid())
+        _logger.info("ZMQ interface listening for requests with pid %d...", os.getpid())
 
         req = await self.socket.recv()
 
-        logging.info("ZMQ interface received request ...")
+        _logger.info("ZMQ interface received request ...")
 
         return json.loads(bytes.decode(req))
 

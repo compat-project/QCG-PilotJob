@@ -15,6 +15,9 @@ DEFAULT_PORT = '21000'
 AUX_DIR_PTRN = re.compile(r'\.qcgpjm-service-.*')
 
 
+_logger = logging.getLogger(__name__)
+
+
 class TimeoutError(Exception):
     pass
 
@@ -58,7 +61,7 @@ def get_address_from_arg(address):
 
 
 def zmq_connect(pjm_ctx):
-    logging.debug('qcg pjm network interface address: {}'.format(str(pjm_ctx['address'])))
+    _logger.debug('qcg pjm network interface address: {}'.format(str(pjm_ctx['address'])))
 
     zmq_ctx = {}
     zmq_ctx['ctx'] = zmq.Context.instance()
@@ -66,7 +69,7 @@ def zmq_connect(pjm_ctx):
     zmq_ctx['sock'].setsockopt(zmq.LINGER, 0)
     zmq_ctx['sock'].connect(pjm_ctx['address'])
 
-    logging.debug('zmq connection created for service @ {}'.format(str(pjm_ctx['address'])))
+    _logger.debug('zmq connection created for service @ {}'.format(str(pjm_ctx['address'])))
     return zmq_ctx
 
 
@@ -75,7 +78,7 @@ def zmq_request(zmq_ctx, request, timeout_secs):
         "request": request
     })))
 
-    logging.debug('\'{}\' request send - waiting for reponse'.format(request))
+    _logger.debug('\'{}\' request send - waiting for reponse'.format(request))
 
     poller = zmq.Poller()
     poller.register(zmq_ctx['sock'], zmq.POLLIN)
@@ -117,13 +120,13 @@ def qcgpjm(ctx, path, address, debug):
             raise Exception('unable to find QCG PJM network interface address (use \'-p\' or \'-a\' argument)')
 
         pjm_ctx = { 'path': pjm_path, 'address': pjm_address }
-        logging.debug('qcg pjm network interface address: {}'.format(str(pjm_ctx['address'])))
+        _logger.debug('qcg pjm network interface address: {}'.format(str(pjm_ctx['address'])))
 
         ctx.ensure_object(dict)
         ctx.obj['pjm'] = pjm_ctx
     except Exception as e:
         click.echo('error: {}'.format(str(e)), err=True)
-        logging.error(traceback.format_exc())
+        _logger.error(traceback.format_exc())
         sys.exit(1)
 
 
@@ -141,11 +144,11 @@ def status(ctx):
         except TimeoutError:
             # try to read final status - if exists
             if pjm_ctx.get('path') and exists(join(pjm_ctx['path'], 'final_status')):
-                logging.debug('reading final status from file {}'.format(join(pjm_ctx['path'], 'final_status')))
+                _logger.debug('reading final status from file {}'.format(join(pjm_ctx['path'], 'final_status')))
                 with open(join(pjm_ctx['path'], 'final_status')) as f:
                     response = json.loads(f.read())
             else:
-                logging.info('failed to find the final status file in path {}'.format(pjm_ctx.get('path')))
+                _logger.info('failed to find the final status file in path {}'.format(pjm_ctx.get('path')))
                 raise
 
         status = validate_response(response)
@@ -156,7 +159,7 @@ def status(ctx):
                 print('{}={}'.format(key, value))
     except Exception as e:
         click.echo('error: {}'.format(str(e)), err=True)
-        logging.error(traceback.format_exc())
+        _logger.error(traceback.format_exc())
 
 
 

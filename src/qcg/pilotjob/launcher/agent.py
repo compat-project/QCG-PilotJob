@@ -11,6 +11,9 @@ import zmq
 from zmq.asyncio import Context
 
 
+_logger = logging.getLogger(__name__)
+
+
 class Agent:
     """The node agent class.
     This class is responsible for launching jobs on local resources.
@@ -45,7 +48,7 @@ class Agent:
         # set default options
         self.options.setdefault('binding', False)
 
-        logging.info('agent options: %s', str(self.options))
+        _logger.info('agent options: %s', str(self.options))
 
         self.context = None
         self.in_socket = None
@@ -80,7 +83,7 @@ class Agent:
         self.remote_address = remote_address
         self.context = Context.instance()
 
-        logging.debug('agent with id (%s) run to report to (%s)', self.agent_id, self.remote_address)
+        _logger.debug('agent with id (%s) run to report to (%s)', self.agent_id, self.remote_address)
 
         self.in_socket = self.context.socket(zmq.REP) #pylint: disable=maybe-no-member
 
@@ -91,13 +94,13 @@ class Agent:
         self.local_export_address = '{}://{}:{}'.format(proto, socket.gethostbyname(socket.gethostname()),
                                                         self.local_port)
 
-        logging.debug('agent with id (%s) listen at address (%s), export address (%s)',
+        _logger.debug('agent with id (%s) listen at address (%s), export address (%s)',
                       self.agent_id, self.local_address, self.local_export_address)
 
         try:
             await self._send_ready()
         except Exception:
-            logging.error('failed to signaling ready to manager: %s', sys.exc_info())
+            _logger.error('failed to signaling ready to manager: %s', sys.exc_info())
             self._cleanup()
             self._clear()
             raise
@@ -115,12 +118,12 @@ class Agent:
             elif cmd == 'run':
                 self._cmd_run(message)
             else:
-                logging.error('unknown command received from launcher: %s', message)
+                _logger.error('unknown command received from launcher: %s', message)
 
         try:
             await self._send_finishing()
         except Exception as exc:
-            logging.error('failed to signal shuting down: %s', str(exc))
+            _logger.error('failed to signal shuting down: %s', str(exc))
 
         self._cleanup()
         self._clear()
@@ -136,7 +139,7 @@ class Agent:
         Args:
             message - message from the launcher
         """
-        logging.debug('handling finish cmd with message (%s)', str(message))
+        _logger.debug('handling finish cmd with message (%s)', str(message))
         self._finish = True
 
     def _cmd_run(self, message):
@@ -147,7 +150,7 @@ class Agent:
                 appid - application identifier
                 args - the application arguments
         """
-        logging.debug('running app %s with args %s ...', message.get('appid', 'UNKNOWN'), str(message.get('args', [])))
+        _logger.debug('running app %s with args %s ...', message.get('appid', 'UNKNOWN'), str(message.get('args', [])))
 
         asyncio.ensure_future(self._launch_app(
             message.get('appid', 'UNKNOWN'),
@@ -192,9 +195,9 @@ class Agent:
                 app_exec = args[0]
                 app_args = args[1:] if len(args) > 1 else []
 
-            logging.info("creating process for job %s with executable (%s) and args (%s)",
+            _logger.info("creating process for job %s with executable (%s) and args (%s)",
                          appid, app_exec, str(app_args))
-            logging.debug("process env: %s", str(env))
+            _logger.debug("process env: %s", str(env))
 
             if stdin and wdir and not os.path.isabs(stdin):
                 stdin = os.path.join(wdir, stdin)
@@ -220,7 +223,7 @@ class Agent:
             process = await asyncio.create_subprocess_exec(
                 app_exec, *app_args, stdin=stdin_p, stdout=stdout_p, stderr=stderr_p, cwd=wdir, env=env)
 
-            logging.debug("process for job %s launched", appid)
+            _logger.debug("process for job %s launched", appid)
 
             await process.wait()
 
@@ -228,7 +231,7 @@ class Agent:
 
             exit_code = process.returncode
 
-            logging.info("process for job %s finished with exit code %d", appid, exit_code)
+            _logger.info("process for job %s finished with exit code %d", appid, exit_code)
 
             status_data = {
                 'appid': appid,
@@ -238,7 +241,7 @@ class Agent:
                 'ec': exit_code,
                 'runtime': runtime}
         except Exception as exc:
-            logging.error('launching process for job %s finished with error - %s', appid, str(exc))
+            _logger.error('launching process for job %s finished with error - %s', appid, str(exc))
             status_data = {
                 'appid': appid,
                 'agent_id': self.agent_id,
@@ -261,7 +264,7 @@ class Agent:
 
             await out_socket.send_json(status_data)
             msg = await out_socket.recv_json()
-            logging.debug("got confirmation for process finish %s", str(msg))
+            _logger.debug("got confirmation for process finish %s", str(msg))
         finally:
             if out_socket:
                 try:
@@ -287,10 +290,10 @@ class Agent:
 
             msg = await out_socket.recv_json()
 
-            logging.debug('received ready message confirmation: %s', str(msg))
+            _logger.debug('received ready message confirmation: %s', str(msg))
 
             if not msg.get('status', 'UNKNOWN') == 'CONFIRMED':
-                logging.error('agent %s not registered successfully in launcher: %s', self.agent_id, str(msg))
+                _logger.error('agent %s not registered successfully in launcher: %s', self.agent_id, str(msg))
                 raise Exception('not successfull registration in launcher: {}'.format(str(msg)))
         finally:
             if out_socket:
@@ -307,7 +310,7 @@ class Agent:
         out_socket = self.context.socket(zmq.REQ) #pylint: disable=maybe-no-member
         out_socket.setsockopt(zmq.LINGER, 0) #pylint: disable=maybe-no-member
 
-        logging.debug("sending finishing message")
+        _logger.debug("sending finishing message")
         try:
             out_socket.connect(self.remote_address)
 
@@ -316,10 +319,10 @@ class Agent:
                 'date': datetime.now().isoformat(),
                 'agent_id': self.agent_id,
                 'local_address': self.local_address})
-            logging.debug("finishing message sent, waiting for confirmation")
+            _logger.debug("finishing message sent, waiting for confirmation")
             msg = await out_socket.recv_json()
 
-            logging.debug('received finishing message confirmation: %s', str(msg))
+            _logger.debug('received finishing message confirmation: %s', str(msg))
         finally:
             if out_socket:
                 try:
@@ -358,5 +361,5 @@ if __name__ == '__main__':
     asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(agent.agent(raddress)))
     asyncio.get_event_loop().close()
 
-    logging.info('node agent %s exiting', agent_id)
+    _logger.info('node agent %s exiting', agent_id)
     sys.exit(0)

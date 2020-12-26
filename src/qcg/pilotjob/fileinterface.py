@@ -7,6 +7,9 @@ from qcg.pilotjob.errors import JobFileNotExist, IllegalJobDescription
 from qcg.pilotjob.config import Config
 
 
+_logger = logging.getLogger(__name__)
+
+
 class FileInterface:
     """Interface for reading requests from file.
 
@@ -51,7 +54,7 @@ class FileInterface:
             with open(self.path) as json_file:
                 self.data = json.load(json_file)
         except Exception as exc:
-            logging.error("Fail to parse job description: %s", str(exc.args[0]))
+            _logger.error("Fail to parse job description: %s", str(exc.args[0]))
             raise IllegalJobDescription("Wrong job description: {}".format(str(exc.args[0])))
 
         if not isinstance(self.data, list):
@@ -87,4 +90,4 @@ class FileInterface:
 
         Because file interface is used in batch mode, the response is ignored.
         """
-        logging.info("FileInterface reply message: %s", reply_msg)
+        _logger.info("FileInterface reply message: %s", reply_msg)

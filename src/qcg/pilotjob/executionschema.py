@@ -5,6 +5,9 @@ from qcg.pilotjob.errors import InternalError
 from qcg.pilotjob.resources import ResourcesType
 
 
+_logger = logging.getLogger(__name__)
+
+
 class ExecutionSchema:
     """Method of executing job.
     Currently two methods are supported:
@@ -303,7 +306,7 @@ class SlurmExecution(ExecutionSchema):
         """
         job_model = ex_job.job_execution.model or 'default'
 
-        logging.info(f'looking for job model {job_model}')
+        _logger.info(f'looking for job model {job_model}')
         preprocess_method = SlurmExecution.JOB_MODELS.get(job_model)
         if not preprocess_method:
             raise InternalError(f"unknown job execution model '{job_model}'")

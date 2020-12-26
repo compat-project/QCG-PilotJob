@@ -6,6 +6,9 @@ import uuid
 from qcg.pilotjob.errors import InvalidRequest
 
 
+_logger = logging.getLogger(__name__)
+
+
 class Request:
     """Base class for all requests.
 
@@ -176,7 +179,7 @@ class SubmitReq(Request):
 
         SubmitReq.REQ_CNT += 1
 
-        logging.debug('request data contains %s jobs', len(data['jobs']))
+        _logger.debug('request data contains %s jobs', len(data['jobs']))
         new_jobs = []
 
         for job_desc in data['jobs']:

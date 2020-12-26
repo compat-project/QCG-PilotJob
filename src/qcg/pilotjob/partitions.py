@@ -21,6 +21,9 @@ from qcg.pilotjob.response import Response, ResponseCode
 from qcg.pilotjob.slurmres import in_slurm_allocation, parse_slurm_resources
 
 
+_logger = logging.getLogger(__name__)
+
+
 class GlobalJob:
     """Job information stored at GovernorManager
 
@@ -162,7 +165,7 @@ class PartitionManager:
     async def launch(self):
         """Launch instance of partition manager."""
 
-        logging.info('launching partition manager %s on node %s to control node numbers %d-%d',
+        _logger.info('launching partition manager %s on node %s to control node numbers %d-%d',
                      self.mid, self.node_name, self.start_node, self.end_node)
 
         slurm_args = ['-J', str(self.mid), '-w', self.node_name, '--oversubscribe', '--overcommit',
@@ -183,7 +186,7 @@ class PartitionManager:
             self.stdout_p = open(os.path.join(self.aux_dir, 'part-manager-{}-stdout.log'.format(self.mid)), 'w')
             self.stderr_p = open(os.path.join(self.aux_dir, 'part-manager-{}-stderr.log'.format(self.mid)), 'w')
 
-        logging.debug('running partition manager process with args: %s',
+        _logger.debug('running partition manager process with args: %s',
                       ' '.join([shutil.which('srun')] + slurm_args + self._partition_manager_cmd + manager_args))
 
         self.process = await asyncio.create_subprocess_exec(
@@ -196,7 +199,7 @@ class PartitionManager:
         Wait for 5 second for partition manager finish, and if not finished send SIGKILL
         """
         if self.process:
-            logging.info('terminating partition manager %s @ %s', self.mid, self.start_node)
+            _logger.info('terminating partition manager %s @ %s', self.mid, self.start_node)
             self.process.join(5)
             self.process.terminate()
 
@@ -252,7 +255,7 @@ class ManagerInstance:
             try:
                 self._socket.close()
             except Exception:
-                logging.warning('failed to close manager %s socket: %s', self.address, sys.exc_info())
+                _logger.warning('failed to close manager %s socket: %s', self.address, sys.exc_info())
             self._socket = None
 
     async def submit_jobs(self, req):
@@ -392,7 +395,7 @@ class GovernorManager:
             try:
                 await self._register_in_parent()
             except Exception:
-                logging.error('Failed to register manager in parent governor manager: %s', sys.exc_info()[0])
+                _logger.error('Failed to register manager in parent governor manager: %s', sys.exc_info()[0])
                 raise
 
         if self._create_partitions:
@@ -400,7 +403,7 @@ class GovernorManager:
 
     async def _register_in_parent(self):
         """Register governor manager in parent instances - currenlty not supported"""
-        logging.error('Governing managers can not currenlty register in parent managers')
+        _logger.error('Governing managers can not currenlty register in parent managers')
         raise InternalError('Governing managers can not currenlty register in parent managers')
 
     async def _launch_partition_managers(self, nodes_in_partition):
@@ -420,21 +423,21 @@ class GovernorManager:
             InternalError: when
                 * missing ZMQ interface in governor manager
         """
-        logging.info('setup allocation split into partitions by %s nodes', nodes_in_partition)
+        _logger.info('setup allocation split into partitions by %s nodes', nodes_in_partition)
 
         if nodes_in_partition < 1:
-            logging.error('Failed to partition resources - partition size must be greater or equal 1')
+            _logger.error('Failed to partition resources - partition size must be greater or equal 1')
             raise InvalidRequest('Failed to partition resources - partition size must be greater or equal 1')
 
         # get slurm resources - currently only slurm is supported
         if not in_slurm_allocation():
-            logging.error('Failed to partition resources - partitioning resources is currently available only within '
+            _logger.error('Failed to partition resources - partitioning resources is currently available only within '
                           'slurm allocation')
             raise InvalidRequest('Failed to partition resources - partitioning resources is currently available only '
                                  'within slurm allocation')
 
         if not self.zmq_address:
-            logging.error('Failed to partition resources - missing zmq interface address')
+            _logger.error('Failed to partition resources - missing zmq interface address')
             raise InternalError('Failed to partition resources - missing zmq interface address')
 
         slurm_resources = parse_slurm_resources(self._config)
@@ -443,32 +446,32 @@ class GovernorManager:
             raise InvalidRequest('Failed to partition resources - allocation contains no nodes')
 
         npartitions = math.ceil(slurm_resources.total_nodes / nodes_in_partition)
-        logging.info('%s partitions will be created (in allocation containing %s total nodes)', npartitions,
+        _logger.info('%s partitions will be created (in allocation containing %s total nodes)', npartitions,
                      slurm_resources.total_nodes)
 
         # launch partition manager in the same directory as governor
         partition_manager_wdir = Config.EXECUTOR_WD.get(self._config)
         partition_manager_auxdir = Config.AUX_DIR.get(self._config)
 
-        logging.debug('partition managers working directory %s', partition_manager_wdir)
+        _logger.debug('partition managers working directory %s', partition_manager_wdir)
 
         for part_idx in range(npartitions):
-            logging.debug('creating partition manager %s configuration', part_idx)
+            _logger.debug('creating partition manager %s configuration', part_idx)
 
             part_node = slurm_resources.nodes[part_idx * nodes_in_partition]
 
-            logging.debug('partition manager node %s', part_node.name)
+            _logger.debug('partition manager node %s', part_node.name)
 
             self._partition_managers.append(
                 PartitionManager('partition-{}'.format(part_idx), part_node.name, part_idx * nodes_in_partition,
                                  min(part_idx * nodes_in_partition + nodes_in_partition, slurm_resources.total_nodes),
                                  partition_manager_wdir, self.zmq_address, partition_manager_auxdir))
 
-            logging.debug('partition manager %s configuration created', part_idx)
+            _logger.debug('partition manager %s configuration created', part_idx)
 
         self._min_scheduling_managers = len(self._partition_managers)
 
-        logging.info('created partition managers configuration and set minimum scheduling managers to %s',
+        _logger.info('created partition managers configuration and set minimum scheduling managers to %s',
                      self._min_scheduling_managers)
 
         asyncio.ensure_future(self.manage_start_partition_managers())
@@ -484,18 +487,18 @@ class GovernorManager:
         try:
             # start all partition managers
             try:
-                logging.info('starting all partition managers ...')
+                _logger.info('starting all partition managers ...')
                 await asyncio.gather(*[manager.launch() for manager in self._partition_managers])
             except Exception:
-                logging.error('one of partition manager failed to start - killing the rest')
+                _logger.error('one of partition manager failed to start - killing the rest')
                 # if one of partition manager didn't start - stop all instances and set governor manager finish flag
                 self._terminate_partition_managers_and_finish()
                 raise InternalError('Partition managers not started')
 
-            logging.info('all (%s) partition managers started successfully', len(self._partition_managers))
+            _logger.info('all (%s) partition managers started successfully', len(self._partition_managers))
 
             # check if they registered in assumed time
-            logging.debug('waiting %s secs for partition manager registration', self._wait_for_register_timeout)
+            _logger.debug('waiting %s secs for partition manager registration', self._wait_for_register_timeout)
 
             start_of_waiting_for_registration = datetime.now()
             while len(self.managers) < len(self._partition_managers):
@@ -504,17 +507,17 @@ class GovernorManager:
                 if (datetime.now() - start_of_waiting_for_registration).total_seconds() >\
                         self._wait_for_register_timeout:
                     # timeout exceeded
-                    logging.error('not all partition managers registered - only %d on %d total', len(self.managers),
+                    _logger.error('not all partition managers registered - only %d on %d total', len(self.managers),
                                   len(self._partition_managers))
                     self._terminate_partition_managers_and_finish()
                     raise InternalError('Partition managers not registered')
 
-            logging.info('available resources: %d (%d used) cores on %d nodes', self.total_resources.total_cores,
+            _logger.info('available resources: %d (%d used) cores on %d nodes', self.total_resources.total_cores,
                          self.total_resources.used_cores, self.total_resources.total_nodes)
 
-            logging.info('all partition managers registered')
+            _logger.info('all partition managers registered')
         except Exception:
-            logging.error('setup of partition managers failed: %s', str(sys.exc_info()))
+            _logger.error('setup of partition managers failed: %s', str(sys.exc_info()))
 
     def _terminate_partition_managers(self):
         """Terminate all partition managers"""
@@ -522,8 +525,8 @@ class GovernorManager:
             try:
                 manager.terminate()
             except Exception:
-                logging.warning('failed to terminate manager: %s', sys.exc_info())
-                logging.error(traceback.format_exc())
+                _logger.warning('failed to terminate manager: %s', sys.exc_info())
+                _logger.error(traceback.format_exc())
 
     def _terminate_partition_managers_and_finish(self):
         """Terminate all partition managers and close receiver."""
@@ -532,7 +535,7 @@ class GovernorManager:
         if self._receiver:
             self._receiver.set_finish(True)
         else:
-            logging.error('Failed to set finish flag due to lack of receiver access')
+            _logger.error('Failed to set finish flag due to lack of receiver access')
 
     def get_handler(self):
         """Return instance of handler related to the governor manager.
@@ -565,12 +568,12 @@ class GovernorManager:
             try:
                 self._schedule_buffered_jobs_task.cancel()
             except Exception:
-                logging.warning('failed to cancel buffered jobs scheduler task: %s', sys.exc_info()[0])
+                _logger.warning('failed to cancel buffered jobs scheduler task: %s', sys.exc_info()[0])
 
             try:
                 await self._schedule_buffered_jobs_task
             except asyncio.CancelledError:
-                logging.debug('listener canceled')
+                _logger.debug('listener canceled')
 
     def register_notifier(self, job_state_cb, *args):
         """Register callback function for job state changes.
@@ -592,7 +595,7 @@ class GovernorManager:
                 await asyncio.sleep(0.1)
 
                 while self._min_scheduling_managers <= len(self.managers) and len(self._submit_reqs_buffer) > 0:
-                    logging.info('the minimum number of managers has been achieved - scheduling buffered jobs')
+                    _logger.info('the minimum number of managers has been achieved - scheduling buffered jobs')
                     try:
                         # do not remove request from buffer before jobs will be added to the jobs database
                         # this would provide to the finish of manager (no jobs in db, no jobs in buffer)
@@ -601,25 +604,25 @@ class GovernorManager:
                         # now we can safely remove request from buffer as the jobs are added to the db
                         self._submit_reqs_buffer.pop(0)
                     except Exception:
-                        logging.error('error during scheduling buffered submit requests: %s', sys.exc_info())
-                        logging.error(traceback.format_exc())
+                        _logger.error('error during scheduling buffered submit requests: %s', sys.exc_info())
+                        _logger.error(traceback.format_exc())
             except asyncio.CancelledError:
-                logging.info('finishing submitting buffered jobs task')
+                _logger.info('finishing submitting buffered jobs task')
                 return
 
     async def _wait_for_all_jobs(self):
         """Wait until all submitted jobs finish and signal receiver to finish."""
-        logging.info('waiting for all jobs to finish')
+        _logger.info('waiting for all jobs to finish')
 
         while not self.is_all_jobs_finished():
             await asyncio.sleep(0.2)
 
-        logging.info('All (%s) jobs finished, no buffered jobs (%s)', len(self.jobs), len(self._submit_reqs_buffer))
+        _logger.info('All (%s) jobs finished, no buffered jobs (%s)', len(self.jobs), len(self._submit_reqs_buffer))
 
         if self._receiver:
             self._receiver.set_finish(True)
         else:
-            logging.error('Failed to set finish flag due to lack of receiver access')
+            _logger.error('Failed to set finish flag due to lack of receiver access')
 
     def is_all_jobs_finished(self):
         """Check if all submitted jobs finished.
@@ -631,8 +634,8 @@ class GovernorManager:
             return next((job for job in self.jobs.values() if not job.status.is_finished()), None) is None \
                 and len(self._submit_reqs_buffer) == 0
         except Exception:
-            logging.error('error counting jobs: %s', sys.exc_info())
-            logging.error(traceback.format_exc())
+            _logger.error('error counting jobs: %s', sys.exc_info())
+            _logger.error(traceback.format_exc())
             return False
 
     async def handle_register_req(self, iface, request): #pylint: disable=unused-argument
@@ -660,7 +663,7 @@ class GovernorManager:
         except Exception:
             return Response.error('Failed to register manager: {}'.format(sys.exc_info()[0]))
 
-        logging.info('%sth manager instance %s @ %s with resources (%s) registered successfully',
+        _logger.info('%sth manager instance %s @ %s with resources (%s) registered successfully',
                      len(self.managers), request.params['id'], request.params['address'], request.params['resources'])
 
         return Response.ok(data={'id': request.params['id']})
@@ -707,15 +710,15 @@ class GovernorManager:
             # validate jobs
             self._validate_submit_req(request.jobs)
         except Exception as exc:
-            logging.error('Submit error: %s', sys.exc_info())
-            logging.error(traceback.format_exc())
+            _logger.error('Submit error: %s', sys.exc_info())
+            _logger.error(traceback.format_exc())
             return Response.error(str(exc))
 
         try:
             if self._min_scheduling_managers > len(self.managers):
                 # we don't have all (partition) managers registered - buffer jobs
                 self._submit_reqs_buffer.append(request.jobs)
-                logging.debug('buffering submit request, current buffer size: %d', len(self._submit_reqs_buffer))
+                _logger.debug('buffering submit request, current buffer size: %d', len(self._submit_reqs_buffer))
 
                 return Response.ok('{} jobs buffered'.format(len(request.jobs)), data={'buffered': len(request.jobs)})
 
@@ -730,8 +733,8 @@ class GovernorManager:
 
             return Response.ok('{} jobs submitted'.format(len(job_names)), data=data)
         except Exception as exc:
-            logging.error('Submit error: %s', sys.exc_info())
-            logging.error(traceback.format_exc())
+            _logger.error('Submit error: %s', sys.exc_info())
+            _logger.error(traceback.format_exc())
             return Response.error(str(exc))
 
     def _validate_submit_req(self, jobs):
@@ -814,7 +817,7 @@ class GovernorManager:
                 # single job, send to the manager with lest number of submitted jobs
                 manager = min(self.managers.values(), key=lambda m: m.submitted_jobs)
 
-                logging.debug('sending job %s to manager %s (%s)', job_desc['name'], manager.mid, manager.address)
+                _logger.debug('sending job %s to manager %s (%s)', job_desc['name'], manager.mid, manager.address)
                 iter_id = "0"
                 job_desc.setdefault('attributes', {}).update({
                     'parent_job_id': job_name,
@@ -822,7 +825,7 @@ class GovernorManager:
                 })
                 submit_result = await manager.submit_jobs([job_desc])
 
-                logging.debug('submit result: %s', str(submit_result))
+                _logger.debug('submit result: %s', str(submit_result))
                 self._append_new_job(job_name, [{'id': iter_id,
                                                  'start': None,
                                                  'stop': None,
@@ -871,8 +874,8 @@ class GovernorManager:
                     'status': str(job.status.name)
                 }}
             except Exception as exc:
-                logging.warning('error to get job status: %s', str(exc))
-                logging.warning(traceback.format_exc())
+                _logger.warning('error to get job status: %s', str(exc))
+                _logger.warning(traceback.format_exc())
                 result[job_name] = {'status': int(ResponseCode.ERROR), 'message': exc.args[0]}
 
         return Response.ok(data={'jobs': result})
@@ -1005,16 +1008,16 @@ class GovernorManager:
 
         job = self.jobs.get(global_job_id, None)
         if not job:
-            logging.warning('job notified %s not exist', global_job_id)
+            _logger.warning('job notified %s not exist', global_job_id)
             return Response.error('Job {} unknown'.format(global_job_id))
 
         new_state = request.params.get('state', 'UNKNOWN')
         if new_state not in JobState.__members__:
-            logging.warning('notification for job %s contains unknown state %s', global_job_id, new_state)
+            _logger.warning('notification for job %s contains unknown state %s', global_job_id, new_state)
             return Response.error('Job\'s {} state {} unknown'.format(global_job_id, new_state))
 
         if job.update_part_status(global_job_part_id, JobState[new_state]):
-            logging.debug('job state %s successfully update to %s', global_job_id, str(new_state))
+            _logger.debug('job state %s successfully update to %s', global_job_id, str(new_state))
             return Response.ok('job {} updated'.format(global_job_id))
 
         return Response.error('Failed to update job\'s {} part {} status to {}'.format(
@@ -1026,14 +1029,14 @@ class GovernorManager:
         Args:
             delay (int): number of seconds to wait
         """
-        logging.info("finishing in %s seconds", delay)
+        _logger.info("finishing in %s seconds", delay)
 
         await asyncio.sleep(delay)
 
         if self._receiver:
             self._receiver.set_finish(True)
         else:
-            logging.error('Failed to set finish flag due to lack of receiver access')
+            _logger.error('Failed to set finish flag due to lack of receiver access')
 
     async def generate_status_response(self):
         """Generate current statistics about governor manager."""

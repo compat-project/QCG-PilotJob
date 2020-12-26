@@ -5,6 +5,9 @@ from qcg.pilotjob.errors import InternalError, InvalidResourceSpec, NotSufficien
 from qcg.pilotjob.joblist import JobResources
 
 
+_logger = logging.getLogger(__name__)
+
+
 class SchedulerAlgorithm:
     """Scheduling algorithm.
 
@@ -127,13 +130,13 @@ class SchedulerAlgorithm:
         """
         allocation = Allocation()
 
-#        logging.info("allocating ({},{}) nodes with ({},{}) cores".format(min_nodes, max_nodes, min_cores, max_cores))
+#        _logger.info("allocating ({},{}) nodes with ({},{}) cores".format(min_nodes, max_nodes, min_cores, max_cores))
 
         for node in self.resources.nodes:
             if node.free >= min_cores:
                 node_alloc = node.allocate_max(max_cores, crs)
 
-#                logging.info("allocated {} cores on a single node".format(node_alloc.ncores if node_alloc else 0))
+#                _logger.info("allocated {} cores on a single node".format(node_alloc.ncores if node_alloc else 0))
 
                 if node_alloc:
                     if node_alloc.ncores >= min_cores:
@@ -145,11 +148,11 @@ class SchedulerAlgorithm:
                         node_alloc.release()
 
         if len(allocation.nodes) >= min_nodes:
-            logging.info("allocation contains %d nodes which meets requirements (%d min)", len(allocation.nodes),
+            _logger.info("allocation contains %d nodes which meets requirements (%d min)", len(allocation.nodes),
                          min_nodes)
             return allocation
 
-        logging.info("allocation contains %d nodes which doesn't meets requirements (%d min)", len(allocation.nodes),
+        _logger.info("allocation contains %d nodes which doesn't meets requirements (%d min)", len(allocation.nodes),
                      min_nodes)
         allocation.release()
         return None

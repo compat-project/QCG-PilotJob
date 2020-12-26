@@ -26,6 +26,9 @@ from qcg.pilotjob.iterscheduler import IterScheduler
 from qcg.pilotjob.joblist import Job
 
 
+_logger = logging.getLogger(__name__)
+
+
 class SchedulingJob:
     """Data necessary for scheduling job.
 
@@ -101,18 +104,18 @@ class SchedulingJob:
             self._res_cores_gen = IterScheduler.get_scheduler(jobres.cores.scheduler['name'])(
                 jobres.cores.to_dict(), self._total_iterations, self.manager.resources.total_cores,
                 **jobres.cores.scheduler.get('params', {})).generate()
-            logging.debug('generated cores scheduler %s for job %s', jobres.cores.scheduler['name'], self.job.name)
+            _logger.debug('generated cores scheduler %s for job %s', jobres.cores.scheduler['name'], self.job.name)
 
         self._res_nodes_gen = None
         if self._has_iterations and jobres.has_nodes and jobres.nodes.scheduler is not None:
             self._res_nodes_gen = IterScheduler.get_scheduler(jobres.nodes.scheduler["name"])(
                 jobres.nodes.to_dict(), self._total_iterations, self.manager.resources.total_nodes,
                 **jobres.nodes.scheduler.get("params", {})).generate()
-            logging.debug('generated nodes scheduler %s for job %s', jobres.nodes.scheduler['name'], self.job.name)
+            _logger.debug('generated nodes scheduler %s for job %s', jobres.nodes.scheduler['name'], self.job.name)
 
         # compute minResCores
         self._min_res_cores = jobres.get_min_num_cores()
-        logging.debug('minimum # of cores for job %s is %d', self.job.name, self._min_res_cores)
+        _logger.debug('minimum # of cores for job %s is %d', self.job.name, self._min_res_cores)
 
         # generate only part of whole set of iterations
         self.setup_iterations()
@@ -133,7 +136,7 @@ class SchedulingJob:
 
             dep_job = self.manager.job_list.get(job_name)
             if dep_job is None:
-                logging.warning("Dependency job \'%s\' not registered", job_id)
+                _logger.warning("Dependency job \'%s\' not registered", job_id)
                 self._is_feasible = False
                 break
 
@@ -156,19 +159,19 @@ class SchedulingJob:
                 if not iteration_job.is_feasible:
                     self.manager.change_job_state(self.job, iteration=iteration_job.iteration,
                                                   state=JobState.OMITTED)
-                    logging.debug('iteration %s not feasible - removing', iteration_job.name)
+                    _logger.debug('iteration %s not feasible - removing', iteration_job.name)
                     to_remove.append(iteration_job)
 
             if to_remove:
                 map(lambda job: self._iteration_sub_jobs.remove(job), to_remove)
 
-        logging.debug("#%d dependency (%s feasible) jobs after update of job %s",
+        _logger.debug("#%d dependency (%s feasible) jobs after update of job %s",
                       len(self._after_jobs), str(self._is_feasible), self.job.name)
 
     def setup_iterations(self):
         """Resolve next part of iterations."""
         niters = min(self._total_iterations - self._current_solved_iterations, SchedulingJob.ITERATIONS_SPLIT)
-        logging.debug('solving %d iterations in job %s', niters, self.job.name)
+        _logger.debug('solving %d iterations in job %s', niters, self.job.name)
         for iteration in range(self._current_solved_iterations, self._current_solved_iterations + niters):
             # prepare resources, dependencies
             subjob_iteration = iteration + self.job.iteration.start if self._has_iterations else None
@@ -194,7 +197,7 @@ class SchedulingJob:
             self._iteration_sub_jobs.append(SchedulingIteration(self, subjob_iteration, subjob_resources, subjob_after))
 
         self._current_solved_iterations += niters
-        logging.debug('%d currently iterations solved in job %s', self._current_solved_iterations, self.job.name)
+        _logger.debug('%d currently iterations solved in job %s', self._current_solved_iterations, self.job.name)
 
     @property
     def is_feasible(self):
@@ -227,7 +230,7 @@ class SchedulingJob:
             if prev_iteration:
                 start_pos = self._iteration_sub_jobs.index(prev_iteration) + 1
 
-            logging.debug('job %s is ready, looking for next to (%s) iteration, start_pos set to %d',
+            _logger.debug('job %s is ready, looking for next to (%s) iteration, start_pos set to %d',
                           self.job.name, str(prev_iteration), start_pos)
 
             repeats = 2
@@ -257,7 +260,7 @@ class SchedulingJob:
         will be executed or it's resorce requirements exceedes available resources. This iteration should not be
         returned another time by the get_ready_iteration.
         """
-        logging.debug('iteration %s processed - removing from list', iteration_job.name)
+        _logger.debug('iteration %s processed - removing from list', iteration_job.name)
         self._iteration_sub_jobs.remove(iteration_job)
 
     def get_minimum_require_cores(self):
@@ -329,7 +332,7 @@ class SchedulingIteration:
 
                 dep_job = self._scheduling_job.manager.job_list.get(job_name)
                 if dep_job is None:
-                    logging.warning("Dependency %s job not registered - %s not feasible", job_name, self.name)
+                    _logger.warning("Dependency %s job not registered - %s not feasible", job_name, self.name)
                     self._is_feasible = False
                     break
 
@@ -343,7 +346,7 @@ class SchedulingIteration:
 
             self._after_subjobs -= finished
 
-            logging.debug("#%d dependency (%s feasible) jobs after update of job %s", len(self._after_subjobs),
+            _logger.debug("#%d dependency (%s feasible) jobs after update of job %s", len(self._after_subjobs),
                           str(self._is_feasible), self.name)
 
     @property
@@ -427,7 +430,7 @@ class DirectManager:
         if Config.SYSTEM_CORE.get(conf):
             self.resources.allocate_for_system()
 
-        logging.info('available resources: %s', self.resources)
+        _logger.info('available resources: %s', self.resources)
 
         self._executor = Executor(self, conf, self.resources)
         self._scheduler = Scheduler(self.resources)
@@ -448,14 +451,14 @@ class DirectManager:
         """Initialize manager after all incoming interfaces has been started. """
         if self._parent_manager:
             try:
-                logging.info('registering in parent manager %s ...', self._parent_manager)
+                _logger.info('registering in parent manager %s ...', self._parent_manager)
                 await self.register_in_parent()
                 self.register_notifier(self._notify_parent_with_job)
             except Exception:
-                logging.error('Failed to register manager in parent governor manager: %s', sys.exc_info()[0])
+                _logger.error('Failed to register manager in parent governor manager: %s', sys.exc_info()[0])
                 raise
         else:
-            logging.info('no parent manager set')
+            _logger.info('no parent manager set')
 
     def set_zmq_address(self, zmq_address):
         """Set ZMQ address of input interface.
@@ -493,7 +496,7 @@ class DirectManager:
         """
         new_schedule_queue = []
 
-        logging.debug("scheduling loop with %d jobs in queue", len(self._schedule_queue))
+        _logger.debug("scheduling loop with %d jobs in queue", len(self._schedule_queue))
 
         for idx, sched_job in enumerate(self._schedule_queue):
             if not self.resources.free_cores:
@@ -502,7 +505,7 @@ class DirectManager:
 
             min_res_cores = sched_job.get_minimum_require_cores()
             if min_res_cores is not None and min_res_cores > self.resources.free_cores:
-                logging.debug('minimum # of cores %d for job %s exceeds # of free cores %s', min_res_cores,
+                _logger.debug('minimum # of cores %d for job %s exceeds # of free cores %s', min_res_cores,
                               sched_job.job.name, self.resources.free_cores)
                 DirectManager._append_to_schedule_queue(new_schedule_queue, sched_job)
                 continue
@@ -511,28 +514,28 @@ class DirectManager:
 
             if not sched_job.is_feasible:
                 # job will never be ready
-                logging.debug("job %s not feasible - omitting", sched_job.job.name)
+                _logger.debug("job %s not feasible - omitting", sched_job.job.name)
                 self.change_job_state(sched_job.job, iteration=None, state=JobState.OMITTED)
                 sched_job.job.clear_queue_pos()
             else:
                 prev_iteration = None
                 while self.resources.free_cores:
                     if min_res_cores is not None and min_res_cores > self.resources.free_cores:
-                        logging.debug('minimum # of cores %d for job %s exceeds # of free cores %d', min_res_cores,
+                        _logger.debug('minimum # of cores %d for job %s exceeds # of free cores %d', min_res_cores,
                                       sched_job.job.name, self.resources.free_cores)
                         break
 
                     job_iteration = sched_job.get_ready_iteration(prev_iteration)
                     if job_iteration:
                         # job is ready - try to find resources
-                        logging.debug("job %s is ready", job_iteration.name)
+                        _logger.debug("job %s is ready", job_iteration.name)
                         try:
                             allocation = self._scheduler.allocate_job(job_iteration.resources)
                             if allocation:
                                 sched_job.remove_iteration(job_iteration)
                                 prev_iteration = None
 
-                                logging.debug("found resources for job %s", job_iteration.name)
+                                _logger.debug("found resources for job %s", job_iteration.name)
 
                                 # allocation has been created - execute job
                                 self.change_job_state(sched_job.job, iteration=job_iteration.iteration,
@@ -541,11 +544,11 @@ class DirectManager:
                                 asyncio.ensure_future(self._executor.execute(allocation, job_iteration))
                             else:
                                 # missing resources
-                                logging.debug("missing resources for job %s", job_iteration.name)
+                                _logger.debug("missing resources for job %s", job_iteration.name)
                                 prev_iteration = job_iteration
                         except (NotSufficientResources, InvalidResourceSpec) as exc:
                             # jobs will never schedule
-                            logging.warning("Job %s scheduling failed - %s", job_iteration.name, str(exc))
+                            _logger.warning("Job %s scheduling failed - %s", job_iteration.name, str(exc))
                             sched_job.remove_iteration(job_iteration)
                             prev_iteration = None
                             self.change_job_state(sched_job.job, iteration=job_iteration.iteration,
@@ -554,7 +557,7 @@ class DirectManager:
                         break
 
                 if sched_job.has_more_iterations:
-                    logging.warning("Job %s preserved in scheduling queue", sched_job.job.name)
+                    _logger.warning("Job %s preserved in scheduling queue", sched_job.job.name)
                     DirectManager._append_to_schedule_queue(new_schedule_queue, sched_job)
 
         self._schedule_queue = new_schedule_queue
@@ -573,7 +576,7 @@ class DirectManager:
 
         self._fire_job_state_notifies(job.name, iteration, state)
         if parent_job_changed_status:
-            logging.debug("parent job %s status changed to %s - notifing", job.name, parent_job_changed_status.name)
+            _logger.debug("parent job %s status changed to %s - notifing", job.name, parent_job_changed_status.name)
             self._fire_job_state_notifies(job.name, None, state)
 
     def job_executing(self, job_iteration):
@@ -599,7 +602,7 @@ class DirectManager:
         if exit_code != 0:
             state = JobState.FAILED
 
-        logging.info('job %s finished with exit code %d, error message: %s', job_iteration.name, exit_code, error_msg)
+        _logger.info('job %s finished with exit code %d, error message: %s', job_iteration.name, exit_code, error_msg)
 
         self.change_job_state(job_iteration.job, iteration=job_iteration.iteration, state=state, error_msg=error_msg)
         self._scheduler.release_allocation(allocation)
@@ -615,7 +618,7 @@ class DirectManager:
             state (JobState): new job status
         """
         if len(self._job_states_cbs) > 0:
-            logging.debug("notifies callbacks about %s job status change %s",
+            _logger.debug("notifies callbacks about %s job status change %s",
                           job_id if iteration is None else '{}:{}'.format(job_id, iteration), state)
             asyncio.ensure_future(self._call_callbacks(job_id, iteration, state, self._job_states_cbs.values()))
 
@@ -633,7 +636,7 @@ class DirectManager:
                 try:
                     callb.callback(job_id, iteration, state, *callb.args)
                 except Exception as exc:
-                    logging.exception("Callback function failed: %s", str(exc))
+                    _logger.exception("Callback function failed: %s", str(exc))
 
     def unregister_notifier(self, nid):
         """Unregister callback function for job state changes.
@@ -748,7 +751,7 @@ class DirectManager:
                     out_socket.close()
                 except Exception:
                     # ignore errors during cleanup
-                    logging.debug('failed to close socket: %s', str(sys.exc_info()))
+                    _logger.debug('failed to close socket: %s', str(sys.exc_info()))
 
     async def _send_parent_manager_request_with_valid_async(self, request):
         """Send a request to the governor manager with asynchronous socket.
@@ -799,8 +802,8 @@ class DirectManager:
                 }
                 asyncio.ensure_future(self._send_parent_manager_request_with_valid_async(req_data))
             except Exception:
-                logging.error('failed to send job notification to the parent manager: %s', sys.exc_info())
-                logging.error(traceback.format_exc())
+                _logger.error('failed to send job notification to the parent manager: %s', sys.exc_info())
+                _logger.error(traceback.format_exc())
 
     async def register_in_parent(self):
         """Register manager instance in parent governor manager.
@@ -910,7 +913,7 @@ class DirectManagerHandler:
 
             return Response.ok('{} jobs submitted'.format(len(jobs)), data=data)
         except Exception as exc:
-            logging.exception('Submit error')
+            _logger.exception('Submit error')
             return Response.error(str(exc))
 
     def _prepare_jobs(self, req_jobs):
@@ -958,7 +961,7 @@ class DirectManagerHandler:
             except JobAlreadyExist as exc:
                 raise exc
             except Exception as exc:
-                logging.exception('Wrong submit request: %s', str(exc))
+                _logger.exception('Wrong submit request: %s', str(exc))
                 raise InvalidRequest('Wrong submit request: {}'.format(str(exc)))
 
         # verify job dependencies
@@ -1157,7 +1160,7 @@ class DirectManagerHandler:
         """
         job_names = self._manager.job_list.jobs()
 
-        logging.info("got %d jobs from list", len(job_names))
+        _logger.info("got %d jobs from list", len(job_names))
 
         jobs = {}
         for job_name in job_names:
@@ -1233,7 +1236,7 @@ class DirectManagerHandler:
             job = self._manager.job_list.get(job_name)
 
             if job is None:
-                logging.warning('missing job\'s %s data', job_name)
+                _logger.warning('missing job\'s %s data', job_name)
             else:
                 if job.state() in [JobState.QUEUED, JobState.SCHEDULED]:
                     scheduling_jobs += 1
@@ -1296,12 +1299,12 @@ class DirectManagerHandler:
 
     async def _wait_for_all_jobs(self):
         """Wait until all jobs finish and stop receiver."""
-        logging.info("waiting for all jobs to finish (the new method)")
+        _logger.info("waiting for all jobs to finish (the new method)")
 
         while not self._manager.is_all_jobs_finished:
             await asyncio.sleep(0.2)
 
-        logging.info("detected all jobs finished")
+        _logger.info("detected all jobs finished")
         self.stop_receiver()
 
     async def _delayed_finish(self, delay):
@@ -1310,7 +1313,7 @@ class DirectManagerHandler:
         Args:
             delay (int): number of seconds to wait before stoping receiver
         """
-        logging.info("finishing in %d seconds", delay)
+        _logger.info("finishing in %d seconds", delay)
 
         await asyncio.sleep(delay)
 
@@ -1321,4 +1324,4 @@ class DirectManagerHandler:
         if self._receiver:
             self._receiver.set_finish(True)
         else:
-            logging.warning('Failed to set finish flag due to lack of receiver access')
+            _logger.warning('Failed to set finish flag due to lack of receiver access')
