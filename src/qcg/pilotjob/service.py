@@ -11,6 +11,7 @@ from datetime import datetime
 from multiprocessing import Process
 from os.path import exists, join, isabs
 
+from qcg.pilotjob import logger as top_logger
 import qcg.pilotjob.profile
 from qcg.pilotjob.config import Config
 from qcg.pilotjob.errors import InvalidArgument
@@ -20,6 +21,9 @@ from qcg.pilotjob.partitions import GovernorManager
 from qcg.pilotjob.receiver import Receiver
 from qcg.pilotjob.reports import get_reporter
 from qcg.pilotjob.zmqinterface import ZMQInterface
+
+
+_logger = logging.getLogger(__name__)
 
 
 class QCGPMService:
@@ -248,7 +252,7 @@ class QCGPMService:
             self._setup_address_file()
         except Exception:
             if self._log_handler:
-                logging.getLogger().removeHandler(self._log_handler)
+                logging.getLogger('qcg.pilotjob').removeHandler(self._log_handler)
                 self._log_handler = None
 
             raise
@@ -259,7 +263,7 @@ class QCGPMService:
         Args:
             parent_manager (str): address of parent manager - currently not supported.
         """
-        logging.info('starting governor manager ...')
+        _logger.info('starting governor manager ...')
         self._manager = GovernorManager(self._conf, parent_manager)
         self._manager.register_notifier(self._job_status_change_notify, self._manager)
 
@@ -272,7 +276,7 @@ class QCGPMService:
             parent_manager (str): if defined the partition manager instance will be created controlled by the
                 governor manager with this address
         """
-        logging.info('starting direct manager (with parent manager address %s)...', parent_manager)
+        _logger.info('starting direct manager (with parent manager address %s)...', parent_manager)
         self._manager = DirectManager(self._conf, parent_manager)
         self._manager.register_notifier(self._job_status_change_notify, self._manager)
 
@@ -290,7 +294,7 @@ class QCGPMService:
             with open(address_file, 'w') as address_f:
                 address_f.write(self._receiver.zmq_address)
 
-            logging.debug('address interface written to the %s file...', address_file)
+            _logger.debug('address interface written to the %s file...', address_file)
 
     def _setup_reports(self):
         """Setup job report file and proper reporter according to configuration."""
@@ -321,16 +325,15 @@ class QCGPMService:
         if exists(log_file):
             os.remove(log_file)
 
-        root_logger = logging.getLogger()
         self._log_handler = logging.FileHandler(filename=log_file, mode='a', delay=False)
         self._log_handler.setFormatter(logging.Formatter('%(asctime)-15s: %(message)s'))
-        root_logger.addHandler(self._log_handler)
-        root_logger.setLevel(logging._nameToLevel.get(Config.LOG_LEVEL.get(self._conf).upper()))
+        top_logger.addHandler(self._log_handler)
+        top_logger.setLevel(logging._nameToLevel.get(Config.LOG_LEVEL.get(self._conf).upper()))
 
-        logging.info('service %s version %s started %s @ %s (with tags %s)', Config.MANAGER_ID.get(self._conf),
+        _logger.info('service %s version %s started %s @ %s (with tags %s)', Config.MANAGER_ID.get(self._conf),
                      qcg.pilotjob.__version__, str(datetime.now()), socket.gethostname(),
                      ','.join(Config.MANAGER_TAGS.get(self._conf)))
-        logging.info('log level set to: %s', Config.LOG_LEVEL.get(self._conf).upper())
+        _logger.info('log level set to: %s', Config.LOG_LEVEL.get(self._conf).upper())
 
         env_file_path = join(self._aux_dir, 'env.log')
         with open(env_file_path, "wt") as env_file:
@@ -341,29 +344,29 @@ class QCGPMService:
     def _setup_event_loop():
         """Setup event loop."""
 #        tasks = asyncio.Task.all_tasks(asyncio.get_event_loop())
-#        logging.info('#{} all tasks in event loop before checking for open'.format(len(tasks)))
+#        _logger.info('#{} all tasks in event loop before checking for open'.format(len(tasks)))
 #        for idx, task in enumerate(tasks):
-#            logging.info('\ttask {}: {}'.format(idx, str(task)))
+#            _logger.info('\ttask {}: {}'.format(idx, str(task)))
 #                asyncio.get_event_loop().run_until_complete(task)
 
 #        tasks = asyncio.Task.current_task(asyncio.get_event_loop())
 #        if tasks:
-#            logging.info('#{} current tasks in event loop before checking for open'.format(len(tasks)))
+#            _logger.info('#{} current tasks in event loop before checking for open'.format(len(tasks)))
 #            for idx, task in enumerate(tasks):
-#                logging.info('\ttask {}: {}'.format(idx, str(task)))
+#                _logger.info('\ttask {}: {}'.format(idx, str(task)))
 
-        logging.debug('checking event loop')
+        _logger.debug('checking event loop')
         if asyncio.get_event_loop() and asyncio.get_event_loop().is_closed():
-            logging.debug('setting new event loop')
+            _logger.debug('setting new event loop')
             asyncio.set_event_loop(asyncio.new_event_loop())
 
 #        try:
 #            import nest_asyncio
 #            nest_asyncio.apply()
 #        except ImportError:
-#            logging.debug('not found nest_asyncio')
+#            _logger.debug('not found nest_asyncio')
 #        except Exception as exc:
-#            logging.info(f'not applying nest_asyncio: {str(exc)}')
+#            _logger.info(f'not applying nest_asyncio: {str(exc)}')
 
 #        asyncio.get_event_loop().set_debug(True)
 #        different child watchers - available in Python >=3.8
@@ -380,7 +383,7 @@ class QCGPMService:
         while not receiver.is_finished:
             await asyncio.sleep(0.5)
 
-        logging.info('receiver stopped')
+        _logger.info('receiver stopped')
 
         try:
             response = await receiver.generate_status_response()
@@ -394,9 +397,9 @@ class QCGPMService:
             with open(status_file, 'w') as status_f:
                 status_f.write(response.to_json())
         except Exception as exc:
-            logging.warning('failed to write final status: %s', str(exc))
+            _logger.warning('failed to write final status: %s', str(exc))
 
-        logging.info('stopping receiver ...')
+        _logger.info('stopping receiver ...')
         await receiver.stop()
 
     @profile
@@ -434,10 +437,10 @@ class QCGPMService:
 
         This task can be treatd as the main processing task.
         """
-        logging.debug('starting receiver ...')
+        _logger.debug('starting receiver ...')
         self._receiver.run()
 
-        logging.debug('finishing intialization of managers ...')
+        _logger.debug('finishing intialization of managers ...')
 
         try:
             await self._manager.setup_interfaces()
@@ -445,8 +448,8 @@ class QCGPMService:
             await self._stop_interfaces(self._receiver)
             self.exit_code = 0
         except Exception:
-            logging.error('Service failed: %s', sys.exc_info())
-            logging.error(traceback.format_exc())
+            _logger.error('Service failed: %s', sys.exc_info())
+            _logger.error(traceback.format_exc())
         finally:
             if self._job_reporter:
                 self._job_reporter.flush()
@@ -454,16 +457,16 @@ class QCGPMService:
             if self._receiver:
                 await self._receiver.stop()
 
-            logging.info('receiver stopped')
+            _logger.info('receiver stopped')
 
             if self._manager:
                 await self._manager.stop()
 
-            logging.info('manager stopped')
+            _logger.info('manager stopped')
 
             usage = QCGPMService.get_rusage()
-            logging.info('service resource usage: %s', str(usage.get('service', {})))
-            logging.info('jobs resource usage: %s', str(usage.get('jobs', {})))
+            _logger.info('service resource usage: %s', str(usage.get('service', {})))
+            _logger.info('jobs resource usage: %s', str(usage.get('jobs', {})))
 
     @profile
     def start(self):
@@ -474,29 +477,29 @@ class QCGPMService:
         try:
             asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(self._run_service()))
         finally:
-            logging.info('closing event loop')
+            _logger.info('closing event loop')
 
             tasks = asyncio.Task.all_tasks(asyncio.get_event_loop())
-            logging.info('#%d all tasks in event loop before closing', len(tasks))
+            _logger.info('#%d all tasks in event loop before closing', len(tasks))
             for idx, task in enumerate(tasks):
-                logging.info('\ttask %d: %s', idx, str(task))
+                _logger.info('\ttask %d: %s', idx, str(task))
 #                asyncio.get_event_loop().run_until_complete(task)
 
             tasks = asyncio.Task.current_task(asyncio.get_event_loop())
             if tasks:
-                logging.info('#%d current tasks in event loop before closing after waiting', len(tasks))
+                _logger.info('#%d current tasks in event loop before closing after waiting', len(tasks))
                 for idx, task in enumerate(tasks):
-                    logging.info('\ttask %d: %s', idx, str(task))
+                    _logger.info('\ttask %d: %s', idx, str(task))
 
 #           asyncio.get_event_loop()._default_executor.shutdown(wait=True)
 #           asyncio.get_event_loop().shutdown_asyncgens()
             asyncio.get_event_loop().run_until_complete(asyncio.sleep(1))
             asyncio.get_event_loop().close()
-            logging.info('event loop closed')
+            _logger.info('event loop closed')
 
 #           remove custom log handler
             if self._log_handler:
-                logging.getLogger().removeHandler(self._log_handler)
+                top_logger.removeHandler(self._log_handler)
 
     @staticmethod
     def get_rusage():
@@ -535,21 +538,20 @@ class QCGPMServiceProcess(Process):
         this service is sent to calling thread.
         """
         try:
-            print('starting qcgpm service ...')
             self.service = QCGPMService(self.args)
 
             if self.queue:
-                print('communication queue defined ...')
+                _logger.info('communication queue defined ...')
                 zmq_ifaces = self.service.get_interfaces(ZMQInterface)
-                print('sending configuration through communication queue ...')
+                _logger.info('sending configuration through communication queue ...')
                 self.queue.put({'zmq_addresses': [str(iface.real_address) for iface in zmq_ifaces]})
             else:
-                print('communication queue not defined')
+                _logger.info('communication queue not defined')
 
-            print('starting qcgpm service inside process ....')
+            _logger.info('starting qcgpm service inside process ....')
             self.service.start()
         except Exception as exc:
-            logging.error('Error: %s', str(exc))
+            _logger.error('Error: %s', str(exc))
             traceback.print_exc()
             sys.exit(1)
 

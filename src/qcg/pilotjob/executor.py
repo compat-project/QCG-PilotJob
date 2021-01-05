@@ -9,6 +9,9 @@ from qcg.pilotjob.resources import ResourcesType
 import qcg.pilotjob.profile
 
 
+_logger = logging.getLogger(__name__)
+
+
 class Executor:
     """Class for tracing execution of job iterations.
 
@@ -39,7 +42,7 @@ class Executor:
         self.base_wd = abspath(Config.EXECUTOR_WD.get(config))
         self.aux_dir = abspath(Config.AUX_DIR.get(config))
 
-        logging.info("executor base working directory set to %s", self.base_wd)
+        _logger.info("executor base working directory set to %s", self.base_wd)
 
         self.schema = ExecutionSchema.get_schema(resources, config)
 
@@ -47,7 +50,7 @@ class Executor:
         for env_name in set([env.lower() for env in Config.ENVIRONMENT_SCHEMA.get(config).split(',')]):
             if env_name:
                 envs_set.add(get_environment(env_name))
-        logging.info('job\' environment contains %s elements', str(envs_set))
+        _logger.info('job\' environment contains %s elements', str(envs_set))
         self.job_envs = [env() for env in envs_set]
 
         self._resources = resources
@@ -55,17 +58,17 @@ class Executor:
         self._is_node_launcher = False
 
         if self._resources.rtype == ResourcesType.SLURM and not Config.DISABLE_NL.get(config):
-            logging.info('initializing custom launching method (node launcher)')
+            _logger.info('initializing custom launching method (node launcher)')
             try:
                 LauncherExecutionJob.start_agents(self.base_wd, self.aux_dir, self._resources.nodes,
                                                   self._resources.binding)
                 self._is_node_launcher = True
-                logging.info('node launcher succesfully initialized')
+                _logger.info('node launcher succesfully initialized')
             except Exception as exc:
-                logging.error('failed to initialize node launcher agents: %s', str(exc))
+                _logger.error('failed to initialize node launcher agents: %s', str(exc))
                 raise exc
         else:
-            logging.info('custom launching method (node launcher) disabled')
+            _logger.info('custom launching method (node launcher) disabled')
 
     @property
     def zmq_address(self):
@@ -81,7 +84,7 @@ class Executor:
                 await LauncherExecutionJob.stop_agents()
                 self._is_node_launcher = False
             except Exception as exc:
-                logging.error('failed to stop node launcher agents: %s', str(exc))
+                _logger.error('failed to stop node launcher agents: %s', str(exc))
 
     @profile
     async def execute(self, allocation, job_iteration):
@@ -108,7 +111,7 @@ class Executor:
             if Config.PROGRESS.get(self._config):
                 print("failed to start job {}".format(job_iteration.name))
 
-            logging.exception("Failed to launch job %s", job_iteration.name)
+            _logger.exception("Failed to launch job %s", job_iteration.name)
             self._manager.job_finished(job_iteration, allocation, -1, str(exc))
 
     def is_all_jobs_finished(self):

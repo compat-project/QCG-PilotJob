@@ -12,6 +12,9 @@ from qcg.pilotjob.launcher.launcher import Launcher
 import qcg.pilotjob.profile
 
 
+_logger = logging.getLogger(__name__)
+
+
 class ExecutionJob:
     """
     Class is responsible for executing a single job iteration inside allocation.
@@ -210,7 +213,7 @@ class ExecutionJob:
 
             await self.launch()
         except Exception as ex:
-            logging.exception("failed to start job %s", self.job_iteration.name)
+            _logger.exception("failed to start job %s", self.job_iteration.name)
             self.postprocess(-1, str(ex))
 
 
@@ -271,7 +274,7 @@ class LocalSchemaExecutionJob(ExecutionJob):
                                                                                                 jexec.stderr)
                     stderr_p = open(stderr_path, 'w')
 
-            logging.debug("launching job %s: %s %s", self.job_iteration.name, jexec.exec, str(jexec.args))
+            _logger.debug("launching job %s: %s %s", self.job_iteration.name, jexec.exec, str(jexec.args))
 
             process = await asyncio.create_subprocess_exec(
                 jexec.exec, *jexec.args,
@@ -283,17 +286,17 @@ class LocalSchemaExecutionJob(ExecutionJob):
                 shell=False,
             )
 
-            logging.info("local process %d for job %s launched", process.pid, self.job_iteration.name)
+            _logger.info("local process %d for job %s launched", process.pid, self.job_iteration.name)
 
             await process.wait()
 
-            logging.info("local process for job %s finished", self.job_iteration.name)
+            _logger.info("local process for job %s finished", self.job_iteration.name)
 
             exit_code = process.returncode
 
             self.postprocess(exit_code)
         except Exception as exc:
-            logging.exception("execution failed: %s", str(exc))
+            _logger.exception("execution failed: %s", str(exc))
             self.postprocess(-1, str(exc))
         finally:
             try:
@@ -304,7 +307,7 @@ class LocalSchemaExecutionJob(ExecutionJob):
                 if stderr_p not in [asyncio.subprocess.DEVNULL, stdout_p]:
                     stderr_p.close()
             except Exception as exc:
-                logging.error("cleanup failed: %s", str(exc))
+                _logger.error("cleanup failed: %s", str(exc))
 
     @profile
     async def launch(self):

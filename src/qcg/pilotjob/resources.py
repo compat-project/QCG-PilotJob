@@ -7,6 +7,9 @@ from qcg.pilotjob.allocation import CRAllocation, CRBindAllocation, NodeAllocati
 from qcg.pilotjob.errors import InternalError, NotSufficientResources
 
 
+_logger = logging.getLogger(__name__)
+
+
 class CRType(Enum):
     """Consumable resource type."""
 
@@ -623,7 +626,7 @@ class Resources:
 
             if min_nodes > self.total_nodes:
                 # not enough nodes
-                logging.info('Not enough nodes')
+                _logger.info('Not enough nodes')
                 return False
 
             if job_reqs.has_cores:
@@ -638,11 +641,11 @@ class Resources:
 
                 if found_nodes < min_nodes:
                     # not enough cores on nodes
-                    logging.info('Not enough suitable nodes')
+                    _logger.info('Not enough suitable nodes')
                     return False
 
         if job_reqs.get_min_num_cores() > self.total_cores:
-            logging.info('Not enough total cores')
+            _logger.info('Not enough total cores')
             return False
 
         return True

@@ -12,6 +12,9 @@ from qcg.pilotjob.response import Response
 from qcg.pilotjob.zmqinterface import ZMQInterface
 
 
+_logger = logging.getLogger(__name__)
+
+
 class ResponseStatus(Enum):
     """Request response status."""
 
@@ -156,7 +159,7 @@ class Receiver:
         Args:
             iface (Interface): interface to listen to
         """
-        logging.info('Listener on interface %s started', iface.__class__.__name__)
+        _logger.info('Listener on interface %s started', iface.__class__.__name__)
 
         while True:
             try:
@@ -164,29 +167,29 @@ class Receiver:
 
                 if request is None:
                     # finishing listening - nothing more will come
-                    logging.info('Finishing listening on interface %s due to EOD', iface.__class__.__name__)
+                    _logger.info('Finishing listening on interface %s due to EOD', iface.__class__.__name__)
                     return
 
-                logging.info('Interface %s received request: %s', iface.__class__.__name__, str(request))
+                _logger.info('Interface %s received request: %s', iface.__class__.__name__, str(request))
 
                 # validate request
                 valid_response = Receiver._validate(request)
 
                 if valid_response.is_error:
-                    logging.debug('validate request failed: result(%s), msg(%s), request(%s)',
+                    _logger.debug('validate request failed: result(%s), msg(%s), request(%s)',
                                   str(valid_response.result), str(valid_response.msg), str(valid_response.request))
                     response = Response.error(valid_response.msg)
                 else:
                     response = await self._handle_request(iface, valid_response.request)
 
-                logging.info('sending response: %s', str(response.to_dict()))
+                _logger.info('sending response: %s', str(response.to_dict()))
                 await iface.reply(response.to_json())
             except CancelledError:
                 # listener was canceled - finished gracefully
-                logging.info('Finishing listening on interface %s due to interrupt', iface.__class__.__name__)
+                _logger.info('Finishing listening on interface %s due to interrupt', iface.__class__.__name__)
                 return
             except Exception:
-                logging.exception('Failed to process request from interface %s', iface.__class__.__name__)
+                _logger.exception('Failed to process request from interface %s', iface.__class__.__name__)
 
     async def _handle_request(self, iface, request):
         """Handle single request.
@@ -202,16 +205,16 @@ class Receiver:
             Response: response that should be returned to user
         """
         if request.__class__ not in self._handlers:
-            logging.error('Failed to handle request: unknown request class "%s"', request.__class__.__name__)
+            _logger.error('Failed to handle request: unknown request class "%s"', request.__class__.__name__)
             return Response.error('Unknown request type "{}"'.format(request.__class__.__name__))
 
         try:
-            logging.info('Handling %s request from %s interface',
+            _logger.info('Handling %s request from %s interface',
                          request.__class__.__name__, iface.__class__.__name__)
 
             return await self._handlers[request.__class__](iface, request)
         except Exception:
-            logging.exception('Failed to process request: %s', sys.exc_info()[0])
+            _logger.exception('Failed to process request: %s', sys.exc_info()[0])
             return Response.error('Failed to process request: {}'.format(sys.exc_info()[0]))
 
     @staticmethod
@@ -234,10 +237,10 @@ class Receiver:
             req = Request.parse(request)
             response.success(req)
         except InvalidRequest as exc:
-            logging.error("Failed to parse request - invalid request")
+            _logger.error("Failed to parse request - invalid request")
             response.error('Invalid request: {}'.format(exc.args[0]))
         except Exception:
-            logging.exception('Failed to parse request: %s', sys.exc_info()[0])
+            _logger.exception('Failed to parse request: %s', sys.exc_info()[0])
             response.error('Invalid request: {}'.format(sys.exc_info()[0]))
 
         # request is OK, but we have to validate request parameters, such as:
@@ -255,16 +258,16 @@ class Receiver:
 
         for iface in self._ifaces:
             try:
-                logging.info('Starting listener on interface %s', iface.__class__.__name__)
+                _logger.info('Starting listener on interface %s', iface.__class__.__name__)
                 task = asyncio.ensure_future(self._listen(iface))
             except Exception:
-                logging.exception('Failed to start listener for %s interface', iface.__class__.__name__)
+                _logger.exception('Failed to start listener for %s interface', iface.__class__.__name__)
                 task = None
 
             if task is not None:
                 self._tasks.append(task)
 
-        logging.info('Successfully initialized %d interfaces', len(self._tasks))
+        _logger.info('Successfully initialized %d interfaces', len(self._tasks))
 
     async def stop(self):
         """Stop all listening on interfaces."""
@@ -274,24 +277,24 @@ class Receiver:
             try:
                 iface.close()
             except Exception:
-                logging.warning('failed to close interface: %s', str(sys.exc_info()))
+                _logger.warning('failed to close interface: %s', str(sys.exc_info()))
 
     async def cancel_listeners(self):
         """Cancel all interface listeners."""
-        logging.info('canceling %d listener tasks', len(self._tasks))
+        _logger.info('canceling %d listener tasks', len(self._tasks))
 
         for task in self._tasks:
             if task is not None:
-                logging.info('canceling listener task')
+                _logger.info('canceling listener task')
                 try:
                     task.cancel()
                 except Exception:
-                    logging.warning('failed to cancel listener task: %s', sys.exc_info()[0])
+                    _logger.warning('failed to cancel listener task: %s', sys.exc_info()[0])
 
                 try:
                     await task
                 except asyncio.CancelledError:
-                    logging.debug('listener canceled')
+                    _logger.debug('listener canceled')
 
         self._tasks = []
 
