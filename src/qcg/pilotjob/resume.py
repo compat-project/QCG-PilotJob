@@ -77,7 +77,7 @@ class StateTracker():
         if progress:
             print(f'read {len(job_statuses)} job/iteration previous states')
 
-        jobs_to_enqueue = job_requests
+        jobs_to_enqueue = dict(job_requests)
 
         for job_status in job_statuses:
             jstate = JobState[job_status['state']]
@@ -105,8 +105,11 @@ class StateTracker():
                 # we found iteration
                 pass
 
+        logging.info(f'job_requests length {len(job_requests)}')
+        logging.info(f'jobs_to_enqueue length {len(jobs_to_enqueue)}')
+
         # add all jobs to job list
-        for jname, job in job_requests.items():
+        for job in job_requests.values():
             manager.job_list.add(job)
 
         if progress:
