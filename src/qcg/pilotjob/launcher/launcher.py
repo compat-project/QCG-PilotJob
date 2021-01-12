@@ -178,6 +178,43 @@ class Launcher:
                     # ignore errors in this place
                     pass
 
+    async def cancel(self, agent_id, app_id):
+        """Cancel sumited application by the selected agent.
+
+        Args:
+            agent_id - agent that launched applicaton
+            app_id - application identifier
+        """
+        if agent_id not in self.agents:
+            _logger.error(f'agent {agent_id} not registered')
+            raise Exception(f'agent {agent_id} not registered')
+
+        agent = self.nodes[agent_id]
+
+        _logger.debug(f'sending cancel app ({app_id}) to agent ({agent_id})')
+        out_socket = self.zmq_ctx.socket(zmq.REQ) #pylint: disable=maybe-no-member
+        try:
+            out_socket.connect(agent['address'])
+
+            await out_socket.send_json({
+                'cmd': 'CANCEL',
+                'appid': app_id})
+            msg = await out_socket.recv_json()
+
+            if not msg.get('status', None) == 'OK':
+                _logger.error(f'failed to cancel application {app_id} by agent {agent_id}: {str(msg)}')
+
+                raise Exception(f'failed to run application {app_id} by agent {agent_id}: {str(msg)}')
+
+            _logger.debug(f'application {app_id} successfully canceled by agent {agent_id}')
+        finally:
+            if out_socket:
+                try:
+                    out_socket.close()
+                except Exception:
+                    # ignore errors in this place
+                    pass
+
     async def _cleanup(self):
         """ Release all resources.
         Stop all agents, cancel all async tasks and close sockets.

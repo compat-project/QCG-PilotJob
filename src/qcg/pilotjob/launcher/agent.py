@@ -4,11 +4,13 @@ import logging
 import os
 import socket
 import json
+import psutil
 from datetime import datetime
 from os.path import join
 
 import zmq
 from zmq.asyncio import Context
+from qcg.pilotjob.executionjob import ExecutionJob
 
 
 _logger = logging.getLogger(__name__)
@@ -56,6 +58,8 @@ class Agent:
         self.local_address = None
         self.remote_address = None
         self.local_export_address = None
+
+        self.processes = dict()
 
     def _clear(self):
         """Reset runtime settings. """
@@ -108,8 +112,6 @@ class Agent:
         while not self._finish:
             message = await self.in_socket.recv_json()
 
-            cmd = message.get('cmd', 'UNKNOWN')
-
             await self.in_socket.send_json({'status': 'OK'})
 
             cmd = message.get('cmd', 'unknown').lower()
@@ -117,8 +119,10 @@ class Agent:
                 self._cmd_exit(message)
             elif cmd == 'run':
                 self._cmd_run(message)
+            elif cmd == 'cancel':
+                self._cmd_cancel(message)
             else:
-                _logger.error('unknown command received from launcher: %s', message)
+                _logger.error(f'unknown command ({message}) received from launcher')
 
         try:
             await self._send_finishing()
@@ -162,6 +166,63 @@ class Agent:
             wdir=message.get('wdir', None),
             cores=message.get('cores', None)
         ))
+
+
+    def _cmd_cancel(self, message):
+        """Handler of CANCEL application command.
+
+        Args:
+            message - message with the following attributes:
+            appid - application identifier
+        """
+        appid = message.get('appid', None)
+        _logger.debug(f'handling cancel operation for application {appid}')
+        asyncio.ensure_future(self._cancel_app(appid))
+
+    async def _cancel_app(self, appid):
+        if appid and appid in self.processes:
+            try:
+                _logger.info(f'canceling application {appid} ...')
+                self.processes[appid].terminate()
+            except Exception as exc:
+                _logger.error(f'failed to cancel application {appid}: {str(exc)}')
+
+            cancel_start_time = datetime.now()
+
+            while self.processes.get(appid):
+                # wait a moment
+                await asyncio.sleep(1)
+
+                # check if processes still exists
+                process = self.processes.get(appid)
+
+                if not process:
+                    _logger.debug(f'canceled process finished')
+                    break
+                else:
+                    pid = process.pid
+
+                    try:
+                        p = psutil.Process(pid)
+                        _logger.debug(f'process {pid} still exists')
+                        # process not finished
+                    except psutil.NoSuchProcess:
+                        # process finished
+                        pass
+                        break
+                    except Exception as exc:
+                        _logger.warning(f'failed to check process status: {str(exc)}')
+
+                    if (datetime.now() - cancel_start_time).total_seconds() > ExecutionJob.SIG_KILL_TIMEOUT:
+                        # send SIGKILL signal
+                        try:
+                            _logger.info(f'killing {pid} process')
+                            self.processes[appid].kill()
+                        except Exception as exc:
+                            _logger.warning(f'failed to kill process {pid}: {str(exc)}')
+                        return
+        else:
+            _logger.info(f'missing app id {appid} or process ({",".join(self.processes.keys())}) for app id')
 
     async def _launch_app(self, appid, args, stdin, stdout, stderr, env, wdir, cores):
         """Run application.
@@ -222,6 +283,7 @@ class Agent:
 
             process = await asyncio.create_subprocess_exec(
                 app_exec, *app_args, stdin=stdin_p, stdout=stdout_p, stderr=stderr_p, cwd=wdir, env=env)
+            self.processes[appid] = process
 
             _logger.debug("process for job %s launched", appid)
 
@@ -230,6 +292,7 @@ class Agent:
             runtime = (datetime.now() - starttime).total_seconds()
 
             exit_code = process.returncode
+            del self.processes[appid]
 
             _logger.info("process for job %s finished with exit code %d", appid, exit_code)
 

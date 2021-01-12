@@ -470,7 +470,15 @@ class Manager:
         Raises:
             InternalError: always
         """
-        raise errors.InternalError('Request not implemented')
+        if isinstance(names, str):
+            job_names = [names]
+        else:
+            job_names = list(names)
+
+        self._send_and_validate_result({
+            "request": "cancelJob",
+            "jobNames": job_names
+        })
 
     def _send_finish(self):
         """Send finish request to the QCG-PilotJob manager, close connection.

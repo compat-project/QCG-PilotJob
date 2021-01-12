@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from os.path import abspath
 
 from qcg.pilotjob.executionschema import ExecutionSchema
@@ -6,6 +7,7 @@ from qcg.pilotjob.config import Config
 from qcg.pilotjob.environment import get_environment
 from qcg.pilotjob.executionjob import LocalSchemaExecutionJob, LauncherExecutionJob
 from qcg.pilotjob.resources import ResourcesType
+from qcg.pilotjob.errors import InternalError
 import qcg.pilotjob.profile
 
 
@@ -138,6 +140,8 @@ class Executor:
         Args:
             execution_job (ExecutorJob): execution job iteration data
         """
+        _logger.info(f'job finished with {execution_job.canceled} mode')
+
         if Config.PROGRESS.get(self._config):
             print("job {} finished".format(execution_job.job_iteration.name))
 
@@ -145,4 +149,21 @@ class Executor:
 
         if self._manager is not None:
             self._manager.job_finished(execution_job.job_iteration, execution_job.allocation, execution_job.exit_code,
-                                       execution_job.error_message)
+                                       execution_job.error_message, execution_job.canceled)
+
+    def cancel_iteration(self, job, iteration):
+        """Cancel already running job.
+
+        Args:
+            job (Job): an iteration to cancel
+            iteration (int, optional): an iteraiton index
+        """
+        # find iteration to cancel
+        try:
+            exec_job = next(exec_job for exec_job in self._not_finished.values() if exec_job.job_iteration.job == job and exec_job.job_iteration.iteration == iteration)
+            _logger.info(f'found execution job to cancel')
+        except StopIteration:
+            _logger.error(f'iteration to cancel {job_iteration.name} not found in executor')
+            raise InternalError('iteration to cancel not found')
+
+        asyncio.ensure_future(exec_job.cancel())

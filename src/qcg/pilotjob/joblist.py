@@ -560,6 +560,14 @@ class JobIteration:
         """
         return self.stop > index >= self.start
 
+    def iterations_gen(self):
+        """Iterations generator.
+
+        Returns:
+            int: the iteration indexes
+        """
+        return range(self.start, self.stop)
+
     def iterations(self):
         """Return number of iterations of a job.
 
@@ -777,6 +785,8 @@ class Job:
 
         self._runtime = {}
 
+        self.canceled = False
+
         # history must be initialized before
         self._state = None
         self.set_state(JobState.QUEUED)
@@ -940,8 +950,8 @@ class Job:
         """
         assert isinstance(state, JobState), "Wrong state type"
 
-        _logger.debug('job %s iteration %s status changed to %s (final ? %s)', self._name, iteration, state.name,
-                      state.is_finished())
+        _logger.debug(f'job {self._name} iteration {iteration} status changed to {state.name} '
+                      f'(final ? {state.is_finished()})')
 
         if iteration is not None:
             self._get_subjob(iteration).set_state(state, err_msg)
@@ -952,12 +962,15 @@ class Job:
                 if state in [JobState.FAILED, JobState.OMITTED, JobState.CANCELED]:
                     self._subjobs_failed += 1
 
-                _logger.debug('currently not finished subjobs %s, failed %s', self._subjobs_not_finished,
-                              self._subjobs_failed)
+                _logger.debug(f'for job {self._name} currently not finished subjobs {self._subjobs_not_finished}, '
+                              f'failed {self._subjobs_failed}')
 
                 if self._subjobs_not_finished == 0 and not self._state.is_finished():
                     # all subjobs finished - change whole job state
-                    final_state = JobState.SUCCEED if self._subjobs_failed == 0 else JobState.FAILED
+                    if self.canceled:
+                        final_state = JobState.CANCELED
+                    else:
+                        final_state = JobState.SUCCEED if self._subjobs_failed == 0 else JobState.FAILED
                     self.set_state(final_state)
                     return final_state
         else:
