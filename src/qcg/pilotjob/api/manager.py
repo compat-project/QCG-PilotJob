@@ -577,10 +577,19 @@ class Manager:
     def wait4all(self):
         """Wait for finish of all submitted jobs.
 
-        This method waits until all specified jobs finish its execution (successfully or not).
-        See 'wait4'.
+        This method waits until all jobs submitted to service finish its execution (successfully or not).
         """
-        self.wait4(self.list().keys())
+        not_finished = True
+        while not_finished:
+            status = self._send_and_validate_result({
+                "request": "status",
+                "options": { "allJobsFinished": True }
+            })
+            not_finished = status.get("AllJobsFinished", False) is False
+            if not_finished:
+                time.sleep(self._poll_delay)
+
+        logging.info("all jobs finished in manager")
 
     @staticmethod
     def is_status_finished(status):
