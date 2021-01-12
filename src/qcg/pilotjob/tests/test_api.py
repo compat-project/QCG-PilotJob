@@ -4,6 +4,7 @@ from os import stat
 from os.path import join, exists
 from shutil import rmtree
 from time import sleep
+from datetime import datetime
 
 import tempfile
 
@@ -1146,6 +1147,51 @@ def test_api_slurm_cancel_whole():
 
         m.remove(jid)
 
+    finally:
+        m.finish()
+        m.cleanup()
+
+    rmtree(tmpdir)
+
+
+def test_api_wait4all(tmpdir):
+    cores = 4
+
+    m = LocalManager(['--wd', str(tmpdir), '--nodes', str(cores), '--log', 'debug'], {'wdir': str(tmpdir)})
+
+    try:
+        res = m.resources()
+        assert all(('total_nodes' in res, 'total_cores' in res, res['total_nodes'] == 1, res['total_cores'] == cores))
+
+        start_time = datetime.now()
+        sleep = 2
+
+        iters = cores
+        ids = m.submit(Jobs().
+                       add(iteration=iters, exec='/bin/sleep', args=[f'{sleep}s'], stdout='sleep_${it}.out')
+                       )
+        jid = ids[0]
+        assert len(m.list()) == 1
+
+        m.wait4all()
+
+        finished_time = datetime.now()
+        wait_time = (finished_time - start_time).total_seconds()
+        assert all((wait_time > sleep, wait_time < sleep + 1))
+
+        jinfos = m.info_parsed(ids, withChilds=True)
+        assert all((len(jinfos) == 1, jid in jinfos, jinfos[jid].status  == 'SUCCEED'))
+        assert all((jinfos[jid].iterations, jinfos[jid].iterations.get('start', -1) == 0,
+                    jinfos[jid].iterations.get('stop', 0) == iters, jinfos[jid].iterations.get('total', 0) == iters,
+                    jinfos[jid].iterations.get('finished', 0) == iters, jinfos[jid].iterations.get('failed', -1) == 0))
+        assert len(jinfos[jid].childs) == iters
+        for iteration in range(iters):
+            job_it = jinfos[jid].childs[iteration]
+            assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format(jid, iteration),
+                        job_it.total_cores == 1, len(job_it.nodes) == 1)), str(job_it)
+
+        assert all(exists(tmpdir.join('sleep_{}.out'.format(i))) for i in range(iters))
+        m.remove(jid)
     finally:
         m.finish()
         m.cleanup()

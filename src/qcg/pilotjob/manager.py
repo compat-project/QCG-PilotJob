@@ -1480,7 +1480,10 @@ class DirectManagerHandler:
         if self._manager.stop_processing:
             return Response.error('processing stopped')
 
-        return await self.generate_status_response()
+        if request.allJobsFinished:
+            return Response.ok(data={'AllJobsFinished': self._manager.is_all_jobs_finished})
+        else:
+            return await self.generate_status_response()
 
     async def handle_notify_req(self, iface, request): #pylint: disable=W0613
         """Handler for notify request.

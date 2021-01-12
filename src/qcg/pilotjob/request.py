@@ -499,6 +499,7 @@ class StatusReq(Request):
         Args:
             data (dict): request data
         """
+        self.allJobsFinished = data.get('options', {}).get('allJobsFinished', False)
 
     def to_dict(self):
         """Serialize request to dictionary.
