@@ -10,6 +10,9 @@ from qcg.pilotjob.resources import CRType, CRBind, Node, Resources, ResourcesTyp
 from qcg.pilotjob.config import Config
 
 
+_logger = logging.getLogger(__name__)
+
+
 def parse_local_cpus():
     """Return information about available CPU's and cores in local system.
     The information is gathered from ``lscpu`` command which besides the available CPUs informations, also returns
@@ -36,7 +39,7 @@ def parse_local_cpus():
 
         elems = out_line.split(',')
         if len(elems) != 9:
-            logging.warning('warning: unknown output format "{}"'.format(out_line))
+            _logger.warning('warning: unknown output format "{}"'.format(out_line))
 
         cpu,core,socket = elems[0:3]
 
@@ -188,7 +191,7 @@ def parse_slurm_resources(config):
     else:
         node_end = min(node_end, len(node_names))
 
-    logging.debug('node range %d - %d from %d total nodes', node_start, node_end, len(node_names))
+    _logger.debug('node range %d - %d from %d total nodes', node_start, node_end, len(node_names))
 
     if node_start > node_end:
         raise SlurmEnvError(
@@ -217,12 +220,12 @@ def parse_slurm_resources(config):
     if allocation_data is not None and 'CPU_IDs' in allocation_data['map']:
         cpu_ids = parse_slurm_allocation_cpu_ids(allocation_data['list'], node_names[node_start:node_end],
                                                  job_cpus[node_start:node_end])
-        logging.debug('got available cpus per node: {}'.format(','.join(
+        _logger.debug('got available cpus per node: {}'.format(','.join(
             ['{}: [{}]'.format(node_name, ','.join([str(core) for core in node_cores]))
              for node_name, node_cores in cpu_ids.items()])))
 
         core_ids = {node_name: [str(cpu_id) for cpu_id in node_cpus] for node_name, node_cpus in cpu_ids.items()}
-        logging.debug('temporary core ids per node: {}'.format(','.join(
+        _logger.debug('temporary core ids per node: {}'.format(','.join(
             ['{}: [{}]'.format(node_name, ','.join([str(core) for core in node_cores]))
              for node_name, node_cores in cpu_ids.items()])))
 
@@ -236,12 +239,12 @@ def parse_slurm_resources(config):
             # to be able to assign system cpu's to physical cores we need information about cpu - for example from
             # execution of 'lscpu' - which need to be execute on each node - but currently we assume that all nodes
             # in allocation are homogenous
-            logging.debug('number of tasks ({}) differs from number of cpus ({}) - checking local cpus vs cores'.format(','.join([str(task) for task in job_tasks]), ','.join([str(cpu) for cpu in job_cpus])))
+            _logger.debug('number of tasks ({}) differs from number of cpus ({}) - checking local cpus vs cores'.format(','.join([str(task) for task in job_tasks]), ','.join([str(cpu) for cpu in job_cpus])))
             local_core_info, local_cpu_info = parse_local_cpus()
 
 #            if len(local_core_info) != len(local_cpu_info):
 
-            logging.info("number of available cpu's {} differs from number of available cores {} - "
+            _logger.info("number of available cpu's {} differs from number of available cores {} - "
                          "HyperThreading".format(len(local_core_info), len(local_cpu_info)))
 
             core_ids = {}
@@ -265,12 +268,12 @@ def parse_slurm_resources(config):
                         for task_nr in range(node_tasks):
                             node_cores = floor(avail_cores / (node_tasks - task_nr))
 
-#                            logging.debug('assigning #{} ({} - {}) cores for task {}'.format(node_cores, first_core, first_core + node_cores, task_nr))
+#                            _logger.debug('assigning #{} ({} - {}) cores for task {}'.format(node_cores, first_core, first_core + node_cores, task_nr))
                             cores_cpu_list = []
                             for core_id in range(first_core, first_core + node_cores):
                                 cores_cpu_list.extend(local_core_info[str(core_id)])
                             node_task_cpu_ids.append(','.join(cores_cpu_list))
-#                            logging.debug('assinged ({}) cpus for task {}'.format(node_task_cpu_ids[-1], task_nr))
+#                            _logger.debug('assinged ({}) cpus for task {}'.format(node_task_cpu_ids[-1], task_nr))
 
                             first_core += node_cores
                             avail_cores -= node_cores
@@ -287,13 +290,13 @@ def parse_slurm_resources(config):
                                            job_cpus[node_start:node_end])
         binding = True
     else:
-        logging.warning('warning: failed to get slurm binding information - missing SLURM_CPU_BIND_LIST and CPU_IDSs')
+        _logger.warning('warning: failed to get slurm binding information - missing SLURM_CPU_BIND_LIST and CPU_IDSs')
 
     if binding:
-        logging.debug('core binding for {} nodes: {}'.format(len(core_ids),
+        _logger.debug('core binding for {} nodes: {}'.format(len(core_ids),
             '; '.join(['{}: {}'.format(str(node), str(slots)) for node,slots in core_ids.items()])))
     else:
-        logging.warning('warning: no binding information')
+        _logger.warning('warning: no binding information')
 
     n_crs = None
     if 'CUDA_VISIBLE_DEVICES' in os.environ:
@@ -301,7 +304,7 @@ def parse_slurm_resources(config):
 
     nodes = [Node(node_names[i], slots_num[i], 0, core_ids=core_ids[node_names[i]] if core_ids is not None else None,
                   crs=n_crs) for i in range(node_start, node_end)]
-    logging.debug('generated %d nodes %s binding', len(nodes), 'with' if binding else 'without')
+    _logger.debug('generated %d nodes %s binding', len(nodes), 'with' if binding else 'without')
 
     return Resources(ResourcesType.SLURM, nodes, binding)
 
@@ -397,7 +400,7 @@ def parse_slurm_env_binding(slurm_cpu_bind_list, node_names, cores_num):
         raise SlurmEnvError("failed to parse cpu binding: the core list ({}) mismatch the cores per node ({})".format(
             str(core_ids), str(cores_num)))
 
-    logging.debug("cpu list on each node: %s", str(core_ids))
+    _logger.debug("cpu list on each node: %s", str(core_ids))
 
     return {node_name: core_ids for node_name in node_names}
 

@@ -6,6 +6,9 @@ from qcg.pilotjob.slurmres import in_slurm_allocation
 from qcg.pilotjob.resources import CRType
 
 
+_logger = logging.getLogger(__name__)
+
+
 class Environment:
     """Base class for setting job's environment variables.
 
@@ -37,10 +40,10 @@ class CommonEnvironment(Environment):
 
     def __init__(self):
         super(CommonEnvironment, self).__init__()
-        logging.info('initializing COMMON environment')
+        _logger.info('initializing COMMON environment')
 
     def update_env(self, job, env, opts=None):
-        logging.debug('updating common environment')
+        _logger.debug('updating common environment')
 
         env.update({
             'QCG_PM_NNODES': str(job.nnodes),
@@ -59,7 +62,7 @@ class SlurmEnvironment(Environment):
 
     def __init__(self):
         super(SlurmEnvironment, self).__init__()
-        logging.info('initializing SLURM environment')
+        _logger.info('initializing SLURM environment')
 
     @staticmethod
     def _merge_per_node_spec(str_list):
@@ -136,9 +139,9 @@ class SlurmEnvironment(Environment):
             job.env.update({
                 'SLURM_HOSTFILE': hostfile
             })
-            logging.debug('host file generated at %s', hostfile)
+            _logger.debug('host file generated at %s', hostfile)
         else:
-            logging.debug('not generating hostfile')
+            _logger.debug('not generating hostfile')
 
         node_with_gpu_crs = [node for node in job.allocation.nodes
                              if node.crs is not None and CRType.GPU in node.crs]

@@ -9,6 +9,9 @@ import os
 import glob
 
 
+_logger = logging.getLogger(__name__)
+
+
 class StateTracker():
     """
     This class traces incoming requests and job status changes to record current state which can be used
@@ -32,7 +35,7 @@ class StateTracker():
         self.reqs_file = join(path, f'track.reqs')
         self.finished_file = join(path, f'track.states')
 
-        logging.debug(f'tracer - status file set to {self.reqs_file}, {self.finished_file}')
+        _logger.debug(f'tracer - status file set to {self.reqs_file}, {self.finished_file}')
 
     @staticmethod
     def resume(path, manager, progress=False):
@@ -63,7 +66,7 @@ class StateTracker():
 
                 job_requests[jname] = Job(**job_req)
 
-        logging.info(f'tracker - read {len(job_requests)} job submit requests')
+        _logger.info(f'tracker - read {len(job_requests)} job submit requests')
         if progress:
             print(f'read {len(job_requests)} previous job descriptions')
 
@@ -73,7 +76,7 @@ class StateTracker():
                 for state_line in states_file:
                     job_statuses.append(json.loads(state_line))
 
-        logging.info(f'read {len(job_statuses)} job states')
+        _logger.info(f'read {len(job_statuses)} job states')
         if progress:
             print(f'read {len(job_statuses)} job/iteration previous states')
 
@@ -105,8 +108,8 @@ class StateTracker():
                 # we found iteration
                 pass
 
-        logging.info(f'job_requests length {len(job_requests)}')
-        logging.info(f'jobs_to_enqueue length {len(jobs_to_enqueue)}')
+        _logger.info(f'job_requests length {len(job_requests)}')
+        _logger.info(f'jobs_to_enqueue length {len(jobs_to_enqueue)}')
 
         # add all jobs to job list
         for job in job_requests.values():
@@ -117,7 +120,7 @@ class StateTracker():
 
         manager.enqueue(jobs_to_enqueue.values())
 
-        logging.info(f'tracker - found {len(job_requests)} total jobs with {len(jobs_to_enqueue)} unfinished')
+        _logger.info(f'tracker - found {len(job_requests)} total jobs with {len(jobs_to_enqueue)} unfinished')
 
     def new_submited_jobs(self, jobs):
         """Register new submit job request.
@@ -126,7 +129,7 @@ class StateTracker():
         Arguments:
             * jobs (Job[]) - a job list to submit.
         """
-        logging.debug(f'tracer - registering new submit request')
+        _logger.debug(f'tracer - registering new submit request')
         with open(self.reqs_file, "a") as req_file:
             for job in jobs:
                 req_file.write(job.to_json())
@@ -143,7 +146,7 @@ class StateTracker():
         """
         jname = job.get_name(iteration)
         jstate = job.str_state(iteration)
-        logging.debug(f'tracer - registering job {jname} finished in state {jstate}')
+        _logger.debug(f'tracer - registering job {jname} finished in state {jstate}')
         with open(self.finished_file, "a") as finished_file:
             finished_file.write(json.dumps({
                 'task': jname,
@@ -158,7 +161,7 @@ class StateTracker():
         """
         for filename in [self.reqs_file, self.finished_file]:
             try:
-                logging.info(f'tracer - removing tracker file {filename} ...')
+                _logger.info(f'tracer - removing tracker file {filename} ...')
                 #os.remove(filename)
             except Exception as exc:
-                logging.warning(f'tracer - failed to remove file {filename}: {str(exc)}')
+                _logger.warning(f'tracer - failed to remove file {filename}: {str(exc)}')

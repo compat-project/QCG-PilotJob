@@ -3,6 +3,9 @@ import logging
 import io
 
 
+_logger = logging.getLogger(__name__)
+
+
 class JobReport:
     """Base class for report generating classes.
 
@@ -72,7 +75,7 @@ class TextFileReport(JobReport):
             report_file (str): path to the report file
         """
         super(TextFileReport, self).__init__(report_file)
-        logging.info('initializing TEXT job report')
+        _logger.info('initializing TEXT job report')
 
     def report_job_entry(self, job, iteration, ostream):
         """Generate human readable entry for job's iteration.
@@ -106,7 +109,7 @@ class JsonFileReport(JobReport):
             report_file (str): path to the report file
         """
         super(JsonFileReport, self).__init__(report_file)
-        logging.info('initializing JSON job report')
+        _logger.info('initializing JSON job report')
 
     def report_job_entry(self, job, iteration, ostream):
         """Generate human readable entry for job's iteration.

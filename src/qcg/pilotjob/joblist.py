@@ -9,6 +9,9 @@ from qcg.pilotjob.resources import CRType
 from qcg.pilotjob.errors import JobAlreadyExist, IllegalResourceRequirements, IllegalJobDescription
 
 
+_logger = logging.getLogger(__name__)
+
+
 class JobState(Enum):
     """The job state."""
 
@@ -937,7 +940,7 @@ class Job:
         """
         assert isinstance(state, JobState), "Wrong state type"
 
-        logging.debug('job %s iteration %s status changed to %s (final ? %s)', self._name, iteration, state.name,
+        _logger.debug('job %s iteration %s status changed to %s (final ? %s)', self._name, iteration, state.name,
                       state.is_finished())
 
         if iteration is not None:
@@ -949,7 +952,7 @@ class Job:
                 if state in [JobState.FAILED, JobState.OMITTED, JobState.CANCELED]:
                     self._subjobs_failed += 1
 
-                logging.debug('currently not finished subjobs %s, failed %s', self._subjobs_not_finished,
+                _logger.debug('currently not finished subjobs %s, failed %s', self._subjobs_not_finished,
                               self._subjobs_failed)
 
                 if self._subjobs_not_finished == 0 and not self._state.is_finished():
