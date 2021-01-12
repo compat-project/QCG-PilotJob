@@ -27,7 +27,8 @@ setup(
 	install_requires=[
 		"zmq",
 		"click",
-		"prompt_toolkit"
+		"prompt_toolkit",
+                "psutil"
 		],
 
 	entry_points = {
