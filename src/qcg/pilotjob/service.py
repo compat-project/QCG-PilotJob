@@ -7,6 +7,7 @@ import resource
 import socket
 import sys
 import traceback
+import signal
 from datetime import datetime
 from multiprocessing import Process
 from os.path import exists, join, isabs
@@ -21,6 +22,8 @@ from qcg.pilotjob.partitions import GovernorManager
 from qcg.pilotjob.receiver import Receiver
 from qcg.pilotjob.reports import get_reporter
 from qcg.pilotjob.zmqinterface import ZMQInterface
+from qcg.pilotjob.resume import StateTracker
+from qcg.pilotjob.utils.auxdir import find_latest_aux_dir, is_aux_dir
 
 
 _logger = logging.getLogger(__name__)
@@ -128,7 +131,9 @@ class QCGPMService:
         parser.add_argument('--slurm-limit-nodes-range-end',
                             help='limit Slurm allocation to specified range of nodes (ending node)',
                             type=int, default=None)
-
+        parser.add_argument('--resume',
+                            help='path to the QCG-PilotJob working directory to resume',
+                            default=None)
         self._args = parser.parse_args(args)
 
         if self._args.slurm_partition_nodes:
@@ -199,6 +204,7 @@ class QCGPMService:
             Config.SLURM_PARTITION_NODES: self._args.slurm_partition_nodes,
             Config.SLURM_LIMIT_NODES_RANGE_BEGIN: self._args.slurm_limit_nodes_range_begin,
             Config.SLURM_LIMIT_NODES_RANGE_END: self._args.slurm_limit_nodes_range_end,
+            Config.RESUME: self._args.resume,
         }
 
     def __init__(self, args=None):
@@ -213,7 +219,7 @@ class QCGPMService:
 
         self._parse_args(args)
 
-        if not self._args.net and not self._args.file:
+        if not self._args.net and not self._args.file and self._args.resume is None:
             raise InvalidArgument("no interface enabled - finishing")
 
         self._create_config()
@@ -231,7 +237,12 @@ class QCGPMService:
 
         try:
             self._setup_reports()
+
+            self._setup_signals()
+
             QCGPMService._setup_event_loop()
+
+            self._setup_tracker()
 
             self._ifaces = []
             if self._args.file:
@@ -250,6 +261,10 @@ class QCGPMService:
                 self._setup_direct_manager(self._args.parent)
 
             self._setup_address_file()
+
+            if Config.RESUME.get(self._conf):
+                # in case of resume, the aux dir is set to given resume path
+                StateTracker.resume(self._aux_dir, self._manager, Config.PROGRESS.get(self._conf))
         except Exception:
             if self._log_handler:
                 logging.getLogger('qcg.pilotjob').removeHandler(self._log_handler)
@@ -277,7 +292,7 @@ class QCGPMService:
                 governor manager with this address
         """
         _logger.info('starting direct manager (with parent manager address %s)...', parent_manager)
-        self._manager = DirectManager(self._conf, parent_manager)
+        self._manager = DirectManager(self._tracer, self._conf, parent_manager)
         self._manager.register_notifier(self._job_status_change_notify, self._manager)
 
         self._receiver = Receiver(self._manager.get_handler(), self._ifaces)
@@ -301,10 +316,22 @@ class QCGPMService:
         report_file = Config.REPORT_FILE.get(self._conf)
         job_report_file = report_file if isabs(report_file) else join(self._aux_dir, report_file)
 
-        if exists(job_report_file):
-            os.remove(job_report_file)
+#        if exists(job_report_file):
+#            os.remove(job_report_file)
 
         self._job_reporter = get_reporter(Config.REPORT_FORMAT.get(self._conf), job_report_file)
+
+    def _setup_signals(self):
+        """Register SIGINT handler."""
+        signal.signal(signal.SIGINT, self._handle_sig_int)
+
+    def _setup_tracker(self):
+        """Setup tracker which records status of computation to allow resuming."""
+
+        # just setup the path to the aux directory, the StateTracker is singleton but first initialization with
+        # proper path is crucial.
+        _logger.debug('initializing tracer ...')
+        self._tracer = StateTracker(self._aux_dir)
 
     def _setup_aux_dir(self):
         """This method should be called before all other '_setup' methods, as it sets the destination for the
@@ -312,7 +339,16 @@ class QCGPMService:
         """
         wdir = Config.EXECUTOR_WD.get(self._conf)
 
-        self._aux_dir = join(wdir, '.qcgpjm-service-{}'.format(Config.MANAGER_ID.get(self._conf)))
+        self._aux_dir = Config.RESUME.get(self._conf)
+        if self._aux_dir:
+            try:
+                self._aux_dir = is_aux_dir(self._aux_dir) or find_latest_aux_dir(self._aux_dir)
+            except Exception:
+                raise InvalidArgument(
+                    f'Resume directory {self._aux_dir} not exists or is not valid QCG-PilotJob auxiliary directory')
+        else:
+            self._aux_dir = join(wdir, '.qcgpjm-service-{}'.format(Config.MANAGER_ID.get(self._conf)))
+
         if not os.path.exists(self._aux_dir):
             os.makedirs(self._aux_dir)
 
@@ -322,8 +358,8 @@ class QCGPMService:
         """Setup logging handlers according to the configuration."""
         log_file = join(self._aux_dir, 'service.log')
 
-        if exists(log_file):
-            os.remove(log_file)
+#        if exists(log_file):
+#            os.remove(log_file)
 
         self._log_handler = logging.FileHandler(filename=log_file, mode='a', delay=False)
         self._log_handler.setFormatter(logging.Formatter('%(asctime)-15s: %(message)s'))
@@ -334,6 +370,7 @@ class QCGPMService:
                      qcg.pilotjob.__version__, str(datetime.now()), socket.gethostname(),
                      ','.join(Config.MANAGER_TAGS.get(self._conf)))
         _logger.info('log level set to: %s', Config.LOG_LEVEL.get(self._conf).upper())
+        _logger.info(f'service arguments {str(self._args)}')
 
         env_file_path = join(self._aux_dir, 'env.log')
         with open(env_file_path, "wt") as env_file:
@@ -372,6 +409,12 @@ class QCGPMService:
 #        different child watchers - available in Python >=3.8
 #        asyncio.set_child_watcher(asyncio.ThreadedChildWatcher())
 
+    def _handle_sig_int(self, sig, frame):
+        _logger.info("signal interrupt")
+        print(f"{datetime.now()} signal interrupt - stopping service")
+        self._manager.stop_processing = True
+        self._receiver.finished = True
+
     @profile
     async def _stop_interfaces(self, receiver):
         """Asynchronous task working in background waiting for receiver finish flag to finish receiver.
@@ -394,7 +437,7 @@ class QCGPMService:
             if exists(status_file):
                 os.remove(status_file)
 
-            with open(status_file, 'w') as status_f:
+            with open(status_file, 'a') as status_f:
                 status_f.write(response.to_json())
         except Exception as exc:
             _logger.warning('failed to write final status: %s', str(exc))
@@ -415,7 +458,9 @@ class QCGPMService:
         """
         if self._job_reporter:
             if state.is_finished():
-                self._job_reporter.report_job(manager.job_list.get(job_id), iteration)
+                job = manager.job_list.get(job_id)
+                self._job_reporter.report_job(job, iteration)
+                self._tracer.job_finished(job, iteration)
 
     def get_interfaces(self, iface_class=None):
         """Return list of available interfaces.
@@ -438,6 +483,10 @@ class QCGPMService:
         This task can be treatd as the main processing task.
         """
         _logger.debug('starting receiver ...')
+
+        if Config.PROGRESS.get(self._conf):
+            print(f'{datetime.now()} starting interfaces ...')
+
         self._receiver.run()
 
         _logger.debug('finishing intialization of managers ...')
@@ -445,7 +494,24 @@ class QCGPMService:
         try:
             await self._manager.setup_interfaces()
 
+            _logger.debug('waiting for stopped interfaces ...')
             await self._stop_interfaces(self._receiver)
+
+            if Config.PROGRESS.get(self._conf):
+                print(f'{datetime.now()} all interfaces closed')
+
+            _logger.debug('waiting for stopped manager ...')
+            while not self._manager.stop_processing and not self._manager.is_all_jobs_finished:
+                await asyncio.sleep(0.2)
+
+            if Config.PROGRESS.get(self._conf):
+                print(f'{datetime.now()} all iterations in manager stopped/finished')
+
+            _logger.debug('finishing run_service')
+
+            if Config.PROGRESS.get(self._conf):
+                print(f'{datetime.now()} finishing QCG-PilotJob')
+
             self.exit_code = 0
         except Exception:
             _logger.error('Service failed: %s', sys.exc_info())
@@ -551,9 +617,16 @@ class QCGPMServiceProcess(Process):
             _logger.info('starting qcgpm service inside process ....')
             self.service.start()
         except Exception as exc:
-            _logger.error('Error: %s', str(exc))
+            _logger.error(f'Error: {str(exc)}')
+
+            if self.queue:
+                try:
+                    self.queue.put({'error': str(exc)})
+                except Exception:
+                    pass
+
             traceback.print_exc()
-            sys.exit(1)
+#            sys.exit(1)
 
 
 if __name__ == "__main__":

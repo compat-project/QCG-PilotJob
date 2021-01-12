@@ -26,6 +26,7 @@ VOLUME ["/srv/src"]
 
 COPY reqs /srv/reqs
 RUN . /srv/venv/bin/activate && pip install -U --no-cache-dir -r /srv/reqs/requirements.txt
+RUN . /srv/venv/bin/activate && pip install -U --no-cache-dir docutils
 
 COPY pytest-cov.sh /srv/
 RUN chmod +x /srv/pytest-cov.sh

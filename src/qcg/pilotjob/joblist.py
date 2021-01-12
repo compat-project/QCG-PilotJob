@@ -144,7 +144,7 @@ class JobExecution:
         Returns:
             JSON description of ``execution`` element.
         """
-        return json.dumps(self.to_dict(), indent=2)
+        return json.dumps(self.to_dict())
 
 
 class ResourceSize:
@@ -457,7 +457,7 @@ class JobResources:
         Returns:
             JSON description of ``resource`` element of job description.
         """
-        return json.dumps(self.to_dict(), indent=2)
+        return json.dumps(self.to_dict())
 
 
 class JobDependencies:
@@ -517,7 +517,7 @@ class JobDependencies:
         Returns:
             JSON description of job's runtime dependencies
         """
-        return json.dumps(self.to_dict(), indent=2)
+        return json.dumps(self.to_dict())
 
 
 class JobIteration:
@@ -590,7 +590,7 @@ class JobIteration:
         Returns:
             JSON description of ``iteration`` element of job description
         """
-        return json.dumps(self.to_dict(), indent=2)
+        return json.dumps(self.to_dict())
 
     def __str__(self):
         """Return string representation of ``iteration`` element of job description.
@@ -1060,7 +1060,7 @@ class Job:
         Returns:
             JSON of job's description
         """
-        return json.dumps(self.to_dict(), indent=2)
+        return json.dumps(self.to_dict())
 
 
 class JobList:
