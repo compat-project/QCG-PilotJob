@@ -677,17 +677,30 @@ class LocalManager(Manager):
 
         self.qcgpm_queue = mp.Queue()
         self.qcgpm_process = QCGPMServiceProcess(server_args, self.qcgpm_queue)
+        self.qcgpm_conf = None
         _logger.debug('manager process created')
 
         self.qcgpm_process.start()
         _logger.debug('manager process started')
 
-        try:
-            self.qcgpm_conf = self.qcgpm_queue.get(block=True, timeout=600)
-        except queue.Empty:
-            raise errors.ServiceError('Service not started - timeout')
-        except Exception as exc:
-            raise errors.ServiceError('Service not started: {}'.format(str(exc)))
+        for i in range(1, 20):
+            if not self.qcgpm_process.is_alive():
+                raise errors.ServiceError('Service not started')
+
+            try:
+                self.qcgpm_conf = self.qcgpm_queue.get(block=True, timeout=3)
+                break
+            except queue.Empty:
+                continue
+#                raise errors.ServiceError('Service not started - timeout')
+            except Exception as exc:
+                raise errors.ServiceError('Service not started: {}'.format(str(exc)))
+
+        if not self.qcgpm_conf:
+            raise errors.ServiceError('Service not started')
+
+        if self.qcgpm_conf.get('error', None):
+            raise errors.ServiceError(self.qcgpm_conf['error'])
 
         _logger.debug('got manager configuration: %s', str(self.qcgpm_conf))
         if not self.qcgpm_conf.get('zmq_addresses', None):
