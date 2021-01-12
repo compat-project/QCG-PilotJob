@@ -49,8 +49,9 @@ class JobInfo:
         jinfo.status = child_data['state']
 
         jinfo.wdir = child_data.get('runtime', {}).get('wd')
-        jinfo.nodes = JobInfo._parse_allocation(child_data.get('runtime', {}).get('allocation', ''))
-        jinfo.total_cores = sum(len(cores) for _, cores in jinfo.nodes.items())
+        if child_data.get('runtime', {}).get('allocation'):
+            jinfo.nodes = JobInfo._parse_allocation(child_data['runtime']['allocation'])
+            jinfo.total_cores = sum(len(cores) for _, cores in jinfo.nodes.items())
 
         if child_data.get('runtime', {}).get('rtime'):
             jinfo.time = JobInfo._parse_runtime(child_data.get('runtime', {}).get('rtime'))

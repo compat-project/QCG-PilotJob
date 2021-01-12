@@ -116,6 +116,11 @@ class Config(Enum):
         'default': False
     }
 
+    RESUME = {
+        'name': 'resume.path',
+        'default': None
+    }
+
     PARENT_MANAGER = {
         'name': 'manager.parent',
         'default': None

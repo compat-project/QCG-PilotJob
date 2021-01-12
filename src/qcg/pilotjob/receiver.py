@@ -88,9 +88,12 @@ class Receiver:
             handler: manager that handles requests
             ifaces (Interface[]): list of interfaces
         """
-        assert ifaces is not None and isinstance(ifaces, list) and len(ifaces) > 0
+#        assert ifaces is not None and isinstance(ifaces, list) and len(ifaces) > 0
+        assert ifaces is not None
 
         self._handler = handler
+
+        self._active_ifaces = 0
 
         self._ifaces = ifaces
         self._tasks = []
@@ -114,6 +117,12 @@ class Receiver:
 
         self.finished = False
         self._handler.set_receiver(self)
+
+        # in case where there are no interfaces, set ``finished ``flag to True
+        # to not block the finishing of QCG-PilotJob
+        if len(self._ifaces) == 0:
+            self.finished = True
+
 
     def _find_zmq_address(self):
         """Look for ZMQ interface and get input address of this interface.
@@ -153,13 +162,26 @@ class Receiver:
         """bool: the value of finish flag"""
         return self.finished
 
+    def _started_iface(self, iface):
+        self._active_ifaces = self._active_ifaces + 1
+        _logger.info(f'receiver - interface {iface.__class__.__name__} activated ({self._active_ifaces} active)')
+
+    def _stopped_iface(self, iface):
+        self._active_ifaces = self._active_ifaces - 1
+        _logger.info(f'receiver - interface {iface.__class__.__name__} stopped ({self._active_ifaces} active)')
+
+        if self._active_ifaces == 0:
+            _logger.info('No more active interfaces - finishing')
+            self.set_finish(True)
+
     async def _listen(self, iface):
         """Task that listen on given interface and handles the incoming requests.
 
         Args:
             iface (Interface): interface to listen to
         """
-        _logger.info('Listener on interface %s started', iface.__class__.__name__)
+        self._started_iface(iface)
+        _logger.info(f'Listener on interface {iface.__class__.__name__} started')
 
         while True:
             try:
@@ -167,7 +189,9 @@ class Receiver:
 
                 if request is None:
                     # finishing listening - nothing more will come
-                    _logger.info('Finishing listening on interface %s due to EOD', iface.__class__.__name__)
+                    _logger.info(f'Finishing listening on interface {iface.__class__.__name__} due to EOD')
+
+                    self._stopped_iface(iface)
                     return
 
                 _logger.info('Interface %s received request: %s', iface.__class__.__name__, str(request))
@@ -186,10 +210,12 @@ class Receiver:
                 await iface.reply(response.to_json())
             except CancelledError:
                 # listener was canceled - finished gracefully
-                _logger.info('Finishing listening on interface %s due to interrupt', iface.__class__.__name__)
+                _logger.info(f'Finishing listening on interface {iface.__class__.__name__} due to interrupt')
+                self._stopped_iface(iface)
                 return
             except Exception:
-                _logger.exception('Failed to process request from interface %s', iface.__class__.__name__)
+                _logger.exception(f'Failed to process request from interface {iface.__class__.__name__}')
+                self._stopped_iface(iface)
 
     async def _handle_request(self, iface, request):
         """Handle single request.
