@@ -156,16 +156,17 @@ class SchedulingJob:
             # check single iteration job dependencies
             to_remove = []
             for iteration_job in self._iteration_sub_jobs:
-                iteration_job.check_dependencies()
+                if iteration_job is not None:
+                    iteration_job.check_dependencies()
 
-                if not iteration_job.is_feasible:
-                    self.manager.change_job_state(self.job, iteration=iteration_job.iteration,
-                                                  state=JobState.OMITTED)
-                    _logger.debug('iteration %s not feasible - removing', iteration_job.name)
-                    to_remove.append(iteration_job)
+                    if not iteration_job.is_feasible:
+                        self.manager.change_job_state(self.job, iteration=iteration_job.iteration,
+                                                      state=JobState.OMITTED)
+                        _logger.debug('iteration %s not feasible - removing', iteration_job.name)
+                        to_remove.append(iteration_job)
 
-            if to_remove:
-                map(lambda job: self._iteration_sub_jobs.remove(job), to_remove)
+            for iteration_job in to_remove:
+                self._iteration_sub_jobs.remove(iteration_job)
 
         _logger.debug("#%d dependency (%s feasible) jobs after update of job %s",
                       len(self._after_jobs), str(self._is_feasible), self.job.name)
@@ -177,29 +178,45 @@ class SchedulingJob:
         for iteration in range(self._current_solved_iterations, self._current_solved_iterations + niters):
             # prepare resources, dependencies
             subjob_iteration = iteration + self.job.iteration.start if self._has_iterations else None
-            subjob_resources = self.job.resources
+            if self.job.state(subjob_iteration) != JobState.CANCELED:
+                subjob_resources = self.job.resources
 
-            if self._res_cores_gen or self._res_nodes_gen:
-                job_resources = subjob_resources.to_dict()
+                if self._res_cores_gen or self._res_nodes_gen:
+                    job_resources = subjob_resources.to_dict()
 
-                if self._res_cores_gen:
-                    job_resources['numCores'] = next(self._res_cores_gen)
+                    if self._res_cores_gen:
+                        job_resources['numCores'] = next(self._res_cores_gen)
 
-                if self._res_nodes_gen:
-                    job_resources['numNodes'] = next(self._res_nodes_gen)
+                    if self._res_nodes_gen:
+                        job_resources['numNodes'] = next(self._res_nodes_gen)
 
-                subjob_resources = JobResources(**job_resources)
+                    subjob_resources = JobResources(**job_resources)
 
-            subjob_after = None
-            if self._after_iteration_jobs:
-                subjob_after = set()
-                for job_name in self._after_iteration_jobs:
-                    subjob_after.add(job_name.replace('${it}', subjob_iteration))
+                subjob_after = None
+                if self._after_iteration_jobs:
+                    subjob_after = set()
+                    for job_name in self._after_iteration_jobs:
+                        subjob_after.add(job_name.replace('${it}', str(subjob_iteration)))
 
-            self._iteration_sub_jobs.append(SchedulingIteration(self, subjob_iteration, subjob_resources, subjob_after))
+                sched_iter = SchedulingIteration(self, subjob_iteration, subjob_resources, subjob_after)
+                self._iteration_sub_jobs.append(sched_iter)
 
         self._current_solved_iterations += niters
         _logger.debug('%d currently iterations solved in job %s', self._current_solved_iterations, self.job.name)
+
+    def remove_iteration_index(self, iteration):
+        """Remove iteration from solved iterations.
+
+        Args:
+            iteration (int): iteration index
+        """
+        try:
+            it_pos = next(i for i, sched_it in enumerate(self._iteration_sub_jobs) if sched_it.iteration == iteration)
+            _logger.info(f'found iteration {iteration} index {it_pos} in generated iterations - removing it')
+            del self._iteration_sub_jobs[it_pos]
+        except StopIteration:
+            # ignore - iteration might not be generated yet
+            pass
 
     @property
     def is_feasible(self):
@@ -222,7 +239,7 @@ class SchedulingJob:
             SchedulingIteration: next ready iteration to allocate resources and execute or None - if none of iteration
                 is ready to execute
         """
-        if self.is_ready:
+        if self.is_ready and not self.job.canceled:
             if self._has_iterations and not self._iteration_sub_jobs and \
                     self._current_solved_iterations < self._total_iterations:
                 self.setup_iterations()
@@ -239,6 +256,7 @@ class SchedulingJob:
             while repeats > 0:
                 for i in range(start_pos, len(self._iteration_sub_jobs)):
                     iteration_job = self._iteration_sub_jobs[i]
+                    _logger.debug(f'found iteration in job {iteration_job} that is {iteration_job.is_ready}')
                     if iteration_job.is_ready:
                         return iteration_job
 
@@ -249,6 +267,7 @@ class SchedulingJob:
                 else:
                     break
 
+        _logger.debug('no new iterations to schedule')
         return None
 
     @property
@@ -257,7 +276,7 @@ class SchedulingJob:
             iterations, all iterations already scheduled"""
         return self._iteration_sub_jobs or self._current_solved_iterations < self._total_iterations
 
-    def remove_iteration(self, iteration_job):
+    def remove_iteration_job(self, iteration_job):
         """Called by the manager when iteration returned by the get_ready_iteration has been allocated resources and
         will be executed or it's resorce requirements exceedes available resources. This iteration should not be
         returned another time by the get_ready_iteration.
@@ -339,8 +358,9 @@ class SchedulingIteration:
                     break
 
                 dep_job_state = dep_job.state(job_it)
+                _logger.info(f'job {self.name} - checking dep it {job_it} of job {job_name} (in state {dep_job_state}')
                 if dep_job_state.is_finished():
-                    if dep_job.state() != JobState.SUCCEED:
+                    if dep_job_state != JobState.SUCCEED:
                         self._is_feasible = False
                         break
 
@@ -542,7 +562,7 @@ class DirectManager:
                         try:
                             allocation = self._scheduler.allocate_job(job_iteration.resources)
                             if allocation:
-                                sched_job.remove_iteration(job_iteration)
+                                sched_job.remove_iteration_job(job_iteration)
                                 prev_iteration = None
 
                                 _logger.debug("found resources for job %s", job_iteration.name)
@@ -559,7 +579,7 @@ class DirectManager:
                         except (NotSufficientResources, InvalidResourceSpec) as exc:
                             # jobs will never schedule
                             _logger.warning("Job %s scheduling failed - %s", job_iteration.name, str(exc))
-                            sched_job.remove_iteration(job_iteration)
+                            sched_job.remove_iteration_job(job_iteration)
                             prev_iteration = None
                             self.change_job_state(sched_job.job, iteration=job_iteration.iteration,
                                                   state=JobState.FAILED, error_msg=str(exc))
@@ -603,7 +623,7 @@ class DirectManager:
 
         self.change_job_state(job_iteration.job, iteration=job_iteration.iteration, state=JobState.EXECUTING)
 
-    def job_finished(self, job_iteration, allocation, exit_code, error_msg):
+    def job_finished(self, job_iteration, allocation, exit_code, error_msg, canceled=False):
         """Invoked to signal job finished.
         Allocation made for the job should be released.
 
@@ -619,7 +639,9 @@ class DirectManager:
 
         state = JobState.SUCCEED
 
-        if exit_code != 0:
+        if canceled:
+            state = JobState.CANCELED
+        elif exit_code != 0:
             state = JobState.FAILED
 
         _logger.info('job %s finished with exit code %d, error message: %s', job_iteration.name, exit_code, error_msg)
@@ -716,6 +738,82 @@ class DirectManager:
                 DirectManager._append_to_schedule_queue(self._schedule_queue, SchedulingJob(self, job))
 
             self._schedule_loop()
+
+    def _remove_job_from_schedule_queue(self, job):
+        """Remove job from schedule queue.
+
+        Args:
+            job (Job): job to remove from schedule queue
+
+        Note: even if job doesn't exist in queue, the function do not raise exception.
+        """
+        try:
+            # remove whole job from scheduling queue
+            job_pos = next(i for i, sched_job in enumerate(self._schedule_queue) if sched_job.job == job)
+            self._schedule_queue.pop(job_pos)
+        except StopIteration:
+            # ignore as the job could already be removed from scheduling queue (all iterations has been scheduled)
+            _logger.info(f"job {job.name} doesn't exist in scheduling queue")
+
+    def _remove_iteration_from_schedule_queue(self, job, iteration):
+        """Remove iteration from schedule queue.
+
+        Args:
+            job (Job): job to remove from schedule queue
+            iteration (int): iteration index
+
+        Note: even if job doesn't exist in queue, the function do not raise exception.
+        """
+        try:
+            # remove iteration (if generated) from scheduling job
+            sched_job = next(sched_job for sched_job in self._schedule_queue if sched_job.job == job)
+            sched_job.remove_iteration_index(iteration)
+        except StopIteration:
+            _logger.warning(f"job {job.name} doesn't exist in scheduling queue")
+
+    def cancel_iteration(self, job, iteration):
+        """Cancel single iteration.
+
+        Args:
+            job (Job): job to cancel
+            iteration (int): iteration index
+        """
+        if job.state(iteration) == JobState.QUEUED:
+            _logger.info(f'canceling iteration {iteration} of job {job.name} in queued state')
+            # job is in scheduling queue, but don't have assigned allocation
+            self._remove_iteration_from_schedule_queue(job, iteration)
+            self.change_job_state(job, iteration=iteration, state=JobState.CANCELED)
+        elif job.state(iteration) in [JobState.SCHEDULED, JobState.EXECUTING]:
+            _logger.info(f'canceling iteration {iteration} of job {job.name} in scheduled state')
+            self._executor.cancel_iteration(job, iteration)
+        else:
+            _logger.info(f'can\'t cancel iteration {iteration} of job {job.name} in state {job.state()}')
+
+    def cancel_job(self, job):
+        """Cancel job.
+
+        Args:
+            job (Job): job to cancel
+        """
+        try:
+            if job.canceled:
+                raise InvalidRequest(f'Job {job.name} already canceled')
+
+            job.canceled = True
+
+            if job.state() == JobState.QUEUED:
+                self._remove_job_from_schedule_queue(job)
+
+            if job.has_iterations:
+                # possible many iterations
+                for it in job.iteration.iterations_gen():
+                    self.cancel_iteration(job, it)
+            else:
+                # single iteration
+                self.cancel_iteration(job, None)
+        except Exception as e:
+            _logger.error(f'failed to cancel job: {str(e)}')
+            raise
 
     @staticmethod
     def _append_to_schedule_queue(queue, sched_job):
@@ -1151,8 +1249,6 @@ class DirectManagerHandler:
     async def handle_canceljob_req(self, iface, request): #pylint: disable=W0613
         """Handler for cancel job request.
 
-        Currently not supported.
-
         Args:
             iface (Interface): interface which received request
             request (CancelJobReq): cancel job request
@@ -1160,7 +1256,45 @@ class DirectManagerHandler:
         Returns:
             Response: the response data
         """
-        return Response.error('Cancel job is not supported')
+        canceled = 0
+        errors = {}
+
+        for job_name in request.job_names:
+            try:
+                real_job_name, job_iteration = JobList.parse_jobname(job_name)
+
+                job = self._manager.job_list.get(real_job_name)
+
+                if job is None:
+                    raise Exception(f'Job/iteration {job_name} doesn\'t exist')
+
+                if job_iteration is not None:
+                    if not job.iteration.in_range(job_iteration):
+                        raise Exception(f'Unknown iteration {job_iteration} for job {jreal_job_name}')
+
+                if job.state(iteration=job_iteration).is_finished():
+                    raise InvalidRequest('Job/iteration {job_name} already finished - can not be removed'.format(job_name))
+
+                if job_iteration is not None:
+                    _logger.info(f'handling cancel operation on iteration {job_iteration} of job {job.name}')
+                    self._manager.cancel_iteration(job, job_iteration)
+                else:
+                    _logger.info(f'handling cancel operation on job {job.name}')
+                    self._manager.cancel_job(job)
+
+                canceled += 1
+            except Exception as exc:
+                _logger.exception(f'failed to cancel job: {str(exc)}')
+                errors[job_name] = exc.args[0]
+
+        data = {
+            'canceled': canceled,
+        }
+
+        if len(errors) > 0:
+            data['errors'] = errors
+
+        return Response.ok(data=data)
 
     async def handle_removejob_req(self, iface, request): #pylint: disable=W0613
         """Handler for remove job request.

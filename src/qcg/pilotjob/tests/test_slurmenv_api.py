@@ -4,6 +4,7 @@ import tempfile
 from os.path import join, abspath, exists
 from shutil import rmtree
 from pathlib import Path
+from time import sleep
 
 from qcg.pilotjob.slurmres import in_slurm_allocation, get_num_slurm_nodes
 
@@ -12,6 +13,7 @@ from qcg.pilotjob.api.manager import LocalManager
 from qcg.pilotjob.api.job import Jobs
 from qcg.pilotjob.api.errors import ConnectionError
 from qcg.pilotjob.api.jobinfo import JobInfo
+from qcg.pilotjob.executionjob import ExecutionJob
 
 from qcg.pilotjob.tests.utils import SHARED_PATH, submit_2_manager_and_wait_4_info
 
@@ -762,3 +764,119 @@ def test_slurmenv_api_iteration_node_scheduling():
             m.cleanup()
 
     rmtree(tmpdir)
+
+
+def test_slurmenv_api_cancel_nl():
+    if not in_slurm_allocation() or get_num_slurm_nodes() < 2:
+        pytest.skip('test not run in slurm allocation or allocation is smaller than 2 nodes')
+
+    resources, allocation = get_slurm_resources_binded()
+
+    set_pythonpath_to_qcg_module()
+    tmpdir = str(tempfile.mkdtemp(dir=SHARED_PATH))
+    print(f'tmpdir: {tmpdir}')
+
+    try:
+        m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
+
+        iters=10
+        ids = m.submit(Jobs().
+                       add(exec='/bin/sleep', args=['5s'], iteration=iters, stdout='sleep.out.${it}',
+                           stderr='sleep.err.${it}', numCores=1)
+                       )
+        jid = ids[0]
+        assert len(m.list()) == 1
+
+        list_jid = list(m.list().keys())[0]
+        assert list_jid == jid
+
+        # wait for job to start executing
+        sleep(2)
+
+        m.cancel([jid])
+
+        m.wait4(m.list())
+
+        jinfos = m.info_parsed(ids, withChilds=True)
+        assert all((len(jinfos) == 1, jid in jinfos, jinfos[jid].status  == 'CANCELED'))
+
+        # the canceled iterations are included in 'failed' entry in job statistics
+        # the cancel status is presented in 'childs/state' entry
+        assert all((jinfos[jid].iterations, jinfos[jid].iterations.get('start', -1) == 0,
+                    jinfos[jid].iterations.get('stop', 0) == iters, jinfos[jid].iterations.get('total', 0) == iters,
+                    jinfos[jid].iterations.get('finished', 0) == iters, jinfos[jid].iterations.get('failed', -1) == iters))
+        assert len(jinfos[jid].childs) == iters
+        for iteration in range(iters):
+            job_it = jinfos[jid].childs[iteration]
+            assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format(jid, iteration),
+                        job_it.status == 'CANCELED')), str(job_it)
+
+        m.remove(jid)
+
+    finally:
+        m.finish()
+        m.cleanup()
+
+    rmtree(tmpdir)
+
+
+def test_slurmenv_api_cancel_kill_nl():
+    if not in_slurm_allocation() or get_num_slurm_nodes() < 2:
+        pytest.skip('test not run in slurm allocation or allocation is smaller than 2 nodes')
+
+    resources, allocation = get_slurm_resources_binded()
+
+    set_pythonpath_to_qcg_module()
+    tmpdir = str(tempfile.mkdtemp(dir=SHARED_PATH))
+    print(f'tmpdir: {tmpdir}')
+
+    try:
+        m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
+
+        iters=10
+        ids = m.submit(Jobs().
+                       add(script='trap "" SIGTERM; sleep 30s', iteration=iters, stdout='sleep.out.${it}',
+                           stderr='sleep.err.${it}', numCores=1)
+                       )
+        jid = ids[0]
+        assert len(m.list()) == 1
+
+        list_jid = list(m.list().keys())[0]
+        assert list_jid == jid
+
+        # wait for job to start executing
+        sleep(2)
+
+        m.cancel([jid])
+
+        # wait for SIGTERM job cancel
+        sleep(2)
+
+        jinfos = m.info_parsed(ids)
+        assert all((len(jinfos) == 1, jid in jinfos, jinfos[jid].status  == 'QUEUED'))
+
+        # wait for SIGKILL job cancel (~ExecutionJob.SIG_KILL_TIMEOUT)
+        sleep(ExecutionJob.SIG_KILL_TIMEOUT)
+
+        jinfos = m.info_parsed(ids, withChilds=True)
+        assert all((len(jinfos) == 1, jid in jinfos, jinfos[jid].status  == 'CANCELED'))
+
+        # the canceled iterations are included in 'failed' entry in job statistics
+        # the cancel status is presented in 'childs/state' entry
+        assert all((jinfos[jid].iterations, jinfos[jid].iterations.get('start', -1) == 0,
+                    jinfos[jid].iterations.get('stop', 0) == iters, jinfos[jid].iterations.get('total', 0) == iters,
+                    jinfos[jid].iterations.get('finished', 0) == iters, jinfos[jid].iterations.get('failed', -1) == iters))
+        assert len(jinfos[jid].childs) == iters
+        for iteration in range(iters):
+            job_it = jinfos[jid].childs[iteration]
+            assert all((job_it.iteration == iteration, job_it.name == '{}:{}'.format(jid, iteration),
+                        job_it.status == 'CANCELED')), str(job_it)
+
+        m.remove(jid)
+
+    finally:
+        m.finish()
+        m.cleanup()
+
+#    rmtree(tmpdir)
+

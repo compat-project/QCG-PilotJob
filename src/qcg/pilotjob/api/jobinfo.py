@@ -106,8 +106,9 @@ class JobInfo:
             dict(str,list(str)): list of node names along with allocated cores on each of the node
         """
         nodes = {}
-        for node in allocation.split(','):
-            nodes[node[:node.index('[')]] = node[node.index('[') + 1:-1].split(':')
+        if allocation:
+            for node in allocation.split(','):
+                nodes[node[:node.index('[')]] = node[node.index('[') + 1:-1].split(':')
 
         return nodes
 
