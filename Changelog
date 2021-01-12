@@ -1,3 +1,14 @@
+Version 0.10   2021-01-12 Piotr Kopta <pkopta@man.poznan.pl>, Laurens Veen
+<L.E.Veen@uva.nl>
+	* support for resuming prematurely interrupted execution
+	* fixed logs (thanks to Lourens Veen)
+	* support for canceling submited jobs
+	* optimized wait4all client API method
+	* automatically close service when all jobs finish and there is no active
+	interface
+	* launching slurm tests with docker compose documentation
+	* bugfixes
+
 Version 0.9   2020-09-21 Piotr Kopta <pkopta@man.poznan.pl>
 	* new execution models 'intelmpi', 'srunmpi', 'openmpi'
 	* initial support for hyper-threading nodes
