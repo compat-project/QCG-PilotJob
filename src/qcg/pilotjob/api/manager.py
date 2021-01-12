@@ -589,7 +589,7 @@ class Manager:
             if not_finished:
                 time.sleep(self._poll_delay)
 
-        logging.info("all jobs finished in manager")
+        _logger.info("all jobs finished in manager")
 
     @staticmethod
     def is_status_finished(status):
