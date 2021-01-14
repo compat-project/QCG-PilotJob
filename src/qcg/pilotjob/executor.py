@@ -1,12 +1,18 @@
 import logging
+import asyncio
 from os.path import abspath
+from datetime import datetime
 
 from qcg.pilotjob.executionschema import ExecutionSchema
 from qcg.pilotjob.config import Config
 from qcg.pilotjob.environment import get_environment
 from qcg.pilotjob.executionjob import LocalSchemaExecutionJob, LauncherExecutionJob
 from qcg.pilotjob.resources import ResourcesType
+from qcg.pilotjob.errors import InternalError
 import qcg.pilotjob.profile
+
+
+_logger = logging.getLogger(__name__)
 
 
 class Executor:
@@ -39,7 +45,7 @@ class Executor:
         self.base_wd = abspath(Config.EXECUTOR_WD.get(config))
         self.aux_dir = abspath(Config.AUX_DIR.get(config))
 
-        logging.info("executor base working directory set to %s", self.base_wd)
+        _logger.info("executor base working directory set to %s", self.base_wd)
 
         self.schema = ExecutionSchema.get_schema(resources, config)
 
@@ -47,7 +53,7 @@ class Executor:
         for env_name in set([env.lower() for env in Config.ENVIRONMENT_SCHEMA.get(config).split(',')]):
             if env_name:
                 envs_set.add(get_environment(env_name))
-        logging.info('job\' environment contains %s elements', str(envs_set))
+        _logger.info('job\' environment contains %s elements', str(envs_set))
         self.job_envs = [env() for env in envs_set]
 
         self._resources = resources
@@ -55,17 +61,17 @@ class Executor:
         self._is_node_launcher = False
 
         if self._resources.rtype == ResourcesType.SLURM and not Config.DISABLE_NL.get(config):
-            logging.info('initializing custom launching method (node launcher)')
+            _logger.info('initializing custom launching method (node launcher)')
             try:
                 LauncherExecutionJob.start_agents(self.base_wd, self.aux_dir, self._resources.nodes,
                                                   self._resources.binding)
                 self._is_node_launcher = True
-                logging.info('node launcher succesfully initialized')
+                _logger.info('node launcher succesfully initialized')
             except Exception as exc:
-                logging.error('failed to initialize node launcher agents: %s', str(exc))
+                _logger.error('failed to initialize node launcher agents: %s', str(exc))
                 raise exc
         else:
-            logging.info('custom launching method (node launcher) disabled')
+            _logger.info('custom launching method (node launcher) disabled')
 
     @property
     def zmq_address(self):
@@ -81,7 +87,7 @@ class Executor:
                 await LauncherExecutionJob.stop_agents()
                 self._is_node_launcher = False
             except Exception as exc:
-                logging.error('failed to stop node launcher agents: %s', str(exc))
+                _logger.error('failed to stop node launcher agents: %s', str(exc))
 
     @profile
     async def execute(self, allocation, job_iteration):
@@ -96,19 +102,22 @@ class Executor:
         job_iteration.job.append_runtime({'allocation': allocation.description()}, job_iteration.iteration)
 
         try:
-            if all((self._is_node_launcher, len(allocation.nodes) == 1, allocation.nodes[0].ncores == 1)):
-                execution_job = LauncherExecutionJob(self, self.job_envs, allocation, job_iteration)
-            else:
-                execution_job = LocalSchemaExecutionJob(self, self.job_envs, allocation, job_iteration, self.schema)
+            try:
+                if all((self._is_node_launcher, len(allocation.nodes) == 1, allocation.nodes[0].ncores == 1)):
+                    execution_job = LauncherExecutionJob(self, self.job_envs, allocation, job_iteration)
+                else:
+                    execution_job = LocalSchemaExecutionJob(self, self.job_envs, allocation, job_iteration, self.schema)
 
-            self._not_finished[execution_job.jid] = execution_job
+                self._not_finished[execution_job.jid] = execution_job
+            finally:
+                self._manager.queued_to_execute -= 1
 
             await execution_job.run()
         except Exception as exc:
-            if Config.PROGRESS.get(self._config):
-                print("failed to start job {}".format(job_iteration.name))
+            if not self._manager.stop_processing and Config.PROGRESS.get(self._config):
+                print(f"{datetime.now()} failed to start job {job_iteration.name}")
 
-            logging.exception("Failed to launch job %s", job_iteration.name)
+            _logger.exception("Failed to launch job %s", job_iteration.name)
             self._manager.job_finished(job_iteration, allocation, -1, str(exc))
 
     def is_all_jobs_finished(self):
@@ -122,8 +131,8 @@ class Executor:
         Args:
             execution_job (ExecutorJob): execution job iteration data
         """
-        if Config.PROGRESS.get(self._config):
-            print("executing job {} ...".format(execution_job.job_iteration.name))
+        if not self._manager.stop_processing and Config.PROGRESS.get(self._config):
+            print(f"{datetime.now()} executing job {execution_job.job_iteration.name} ...")
 
         if self._manager is not None:
             self._manager.job_executing(execution_job.job_iteration)
@@ -135,11 +144,30 @@ class Executor:
         Args:
             execution_job (ExecutorJob): execution job iteration data
         """
-        if Config.PROGRESS.get(self._config):
-            print("job {} finished".format(execution_job.job_iteration.name))
+        _logger.info(f'job finished with {execution_job.canceled} cancel mode')
+
+        if not self._manager.stop_processing and Config.PROGRESS.get(self._config):
+            print(f"{datetime.now()} job {execution_job.job_iteration.name} finished")
 
         del self._not_finished[execution_job.jid]
 
         if self._manager is not None:
             self._manager.job_finished(execution_job.job_iteration, execution_job.allocation, execution_job.exit_code,
-                                       execution_job.error_message)
+                                       execution_job.error_message, execution_job.canceled)
+
+    def cancel_iteration(self, job, iteration):
+        """Cancel already running job.
+
+        Args:
+            job (Job): an iteration to cancel
+            iteration (int, optional): an iteraiton index
+        """
+        # find iteration to cancel
+        try:
+            exec_job = next(exec_job for exec_job in self._not_finished.values() if exec_job.job_iteration.job == job and exec_job.job_iteration.iteration == iteration)
+            _logger.info(f'found execution job to cancel')
+        except StopIteration:
+            _logger.error(f'iteration to cancel {job_iteration.name} not found in executor')
+            raise InternalError('iteration to cancel not found')
+
+        asyncio.ensure_future(exec_job.cancel())

@@ -3,6 +3,7 @@ import logging
 import uuid
 import os
 import json
+import psutil
 
 from datetime import datetime
 from string import Template
@@ -10,6 +11,9 @@ from string import Template
 from qcg.pilotjob.joblist import JobExecution
 from qcg.pilotjob.launcher.launcher import Launcher
 import qcg.pilotjob.profile
+
+
+_logger = logging.getLogger(__name__)
 
 
 class ExecutionJob:
@@ -36,6 +40,8 @@ class ExecutionJob:
         tasks_per_node (str): string describing number of cores (separated by comma) on each node
         job_execution (JobExecution): job execution element with variables replaced for specific iteration
     """
+
+    SIG_KILL_TIMEOUT = 10 # in seconds
 
     @profile
     def __init__(self, executor, envs, allocation, job_iteration):
@@ -64,6 +70,8 @@ class ExecutionJob:
 
         self._start_time = None
         self._stop_time = None
+
+        self.canceled = False
 
         self.nnodes = len(self.allocation.nodes)
         self.ncores = sum([node.ncores for node in self.allocation.nodes])
@@ -210,8 +218,13 @@ class ExecutionJob:
 
             await self.launch()
         except Exception as ex:
-            logging.exception("failed to start job %s", self.job_iteration.name)
+            _logger.exception("failed to start job %s", self.job_iteration.name)
             self.postprocess(-1, str(ex))
+
+    async def cancel(self):
+        """Cancel running job."""
+        _logger.info('setting executing job canceled mode to TRUE')
+        self.canceled = True
 
 
 class LocalSchemaExecutionJob(ExecutionJob):
@@ -236,6 +249,8 @@ class LocalSchemaExecutionJob(ExecutionJob):
         self._schema = schema
         if schema:
             self.env_opts = schema.get_env_opts()
+
+        self._process = None
 
     def preprocess(self):
         """Prepare environment for job execution.
@@ -271,9 +286,9 @@ class LocalSchemaExecutionJob(ExecutionJob):
                                                                                                 jexec.stderr)
                     stderr_p = open(stderr_path, 'w')
 
-            logging.debug("launching job %s: %s %s", self.job_iteration.name, jexec.exec, str(jexec.args))
+            _logger.debug("launching job %s: %s %s", self.job_iteration.name, jexec.exec, str(jexec.args))
 
-            process = await asyncio.create_subprocess_exec(
+            self._process = await asyncio.create_subprocess_exec(
                 jexec.exec, *jexec.args,
                 stdin=stdin_p,
                 stdout=stdout_p,
@@ -283,17 +298,19 @@ class LocalSchemaExecutionJob(ExecutionJob):
                 shell=False,
             )
 
-            logging.info("local process %d for job %s launched", process.pid, self.job_iteration.name)
+            _logger.info("local process %d for job %s launched", self._process.pid, self.job_iteration.name)
 
-            await process.wait()
+            await self._process.wait()
 
-            logging.info("local process for job %s finished", self.job_iteration.name)
+            _logger.info("local process for job %s finished", self.job_iteration.name)
 
-            exit_code = process.returncode
+            exit_code = self._process.returncode
+
+            self._process = None
 
             self.postprocess(exit_code)
         except Exception as exc:
-            logging.exception("execution failed: %s", str(exc))
+            _logger.exception("execution failed: %s", str(exc))
             self.postprocess(-1, str(exc))
         finally:
             try:
@@ -304,13 +321,54 @@ class LocalSchemaExecutionJob(ExecutionJob):
                 if stderr_p not in [asyncio.subprocess.DEVNULL, stdout_p]:
                     stderr_p.close()
             except Exception as exc:
-                logging.error("cleanup failed: %s", str(exc))
+                _logger.error("cleanup failed: %s", str(exc))
 
     @profile
     async def launch(self):
         """Create asynchronous task to launch job iteration"""
         asyncio.ensure_future(self._execute_local_process())
 
+    async def cancel(self):
+        """Cancel running job."""
+        _logger.info('canceling local job ...')
+        await super().cancel()
+
+        if self._process:
+            # initialy send SIGTERM signal
+            self._process.terminate()
+
+        cancel_start_time = datetime.now()
+
+        while self._process:
+            # wait a moment
+            await asyncio.sleep(1)
+
+            # check if processes still exists
+            if not self._process:
+                _logger.debug(f'canceled process finished')
+                break
+            else:
+                pid = self._process.pid
+
+                try:
+                    p = psutil.Process(pid)
+                    _logger.debug(f'process {pid} still exists')
+                    # process not finished
+                except psutil.NoSuchProcess:
+                    # process finished
+                    pass
+                    break
+                except Exception as exc:
+                    _logger.warning(f'failed to check process status: {str(exc)}')
+
+                if (datetime.now() - cancel_start_time).total_seconds() > ExecutionJob.SIG_KILL_TIMEOUT:
+                    # send SIGKILL signal
+                    try:
+                        _logger.info(f'killing {pid} process')
+                        self._process.kill()
+                    except Exception as exc:
+                        _logger.warning(f'failed to kill process {pid}: {str(exc)}')
+                    return
 
 class LauncherExecutionJob(ExecutionJob):
     """Run job iteration with Launcher service.
@@ -393,3 +451,14 @@ class LauncherExecutionJob(ExecutionJob):
                 and ``message`` key as error description
         """
         self.postprocess(int(message.get('ec', -1)), message.get('message', None))
+
+    async def cancel(self):
+        """Cancel running job."""
+        await super().cancel()
+
+        node = self.allocation.nodes[0]
+        try:
+            _logger.info('canceling launcher job ...')
+            await self.__class__.launcher.cancel(node.node.name, self.jid)
+        except Exception as exc:
+            _logger.error(f'failed to cancel application {self.jid}: {str(exc)}')

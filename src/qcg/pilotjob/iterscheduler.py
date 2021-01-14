@@ -11,6 +11,9 @@ import math
 from qcg.pilotjob.errors import InvalidRequest
 
 
+_logger = logging.getLogger(__name__)
+
+
 class IterScheduler:
     """Iteration resources schedulers utility class."""
 
@@ -87,7 +90,7 @@ class MaximumIters:
         Raises:
             InvalidRequest: when parameter ``max`` is used in resource description
         """
-        logging.debug("iteration scheduler '%s' algorithm called", MaximumIters.SCHED_NAME)
+        _logger.debug("iteration scheduler '%s' algorithm called", MaximumIters.SCHED_NAME)
 
         if 'max' in self.job_resources:
             raise InvalidRequest(
@@ -99,7 +102,7 @@ class MaximumIters:
 
         if self.iterations * pmin <= self.avail_resources:
             # a single round
-            logging.debug("iterations in single round to schedule: %s, available resources: %s, "
+            _logger.debug("iterations in single round to schedule: %s, available resources: %s, "
                           "minimum iteration resources: %s", self.iterations, self.avail_resources, pmin)
 
             avail_resources = self.avail_resources
@@ -108,7 +111,7 @@ class MaximumIters:
                 iteration_resources = math.floor(avail_resources / (self.iterations - iteration))
                 avail_resources -= iteration_resources
 
-                logging.debug("iteration: %s/%s, iteration_resources: %s, rest avail_resources: %s",
+                _logger.debug("iteration: %s/%s, iteration_resources: %s, rest avail_resources: %s",
                               iteration, self.iterations, iteration_resources, avail_resources)
 
                 yield IterScheduler.get_exact_iter_plan(self.job_resources.copy(), iteration_resources)
@@ -119,7 +122,7 @@ class MaximumIters:
             rounds = math.ceil((self.iterations / math.floor(float(self.avail_resources) / pmin)))
             iterations_to_schedule = self.iterations
 
-            logging.debug("iterations to schedule: %s, rounds: %s, resources: %s, minimum iteration "
+            _logger.debug("iterations to schedule: %s, rounds: %s, resources: %s, minimum iteration "
                           "resources: %s", iterations_to_schedule, rounds, self.avail_resources, pmin)
 
             while iterations_to_schedule > 0:
@@ -127,21 +130,21 @@ class MaximumIters:
                     iterations_in_round = math.ceil(iterations_to_schedule / (rounds - ex_round))
                     round_resources = self.avail_resources
 
-                    logging.debug("round: %s/%s, iterations_in_round: %s", ex_round, rounds, iterations_in_round)
+                    _logger.debug("round: %s/%s, iterations_in_round: %s", ex_round, rounds, iterations_in_round)
 
                     for iteration_in_round in range(iterations_in_round):
                         # assign part of round_resources to the iteration_in_round
                         iteration_resources = math.floor(round_resources / (iterations_in_round - iteration_in_round))
                         round_resources -= iteration_resources
 
-                        logging.debug("round: %s/%s, iteration_in_round: %s/%s, iteration_resources: %s, rest "
+                        _logger.debug("round: %s/%s, iteration_in_round: %s/%s, iteration_resources: %s, rest "
                                       "round_resources: %s", ex_round, rounds, iteration_in_round, iterations_in_round,
                                       iteration_resources, round_resources)
 
                         yield IterScheduler.get_exact_iter_plan(self.job_resources.copy(), iteration_resources)
 
                     iterations_to_schedule -= iterations_in_round
-                    logging.debug("end of round: %s/%s, iterations_to_schedule: %s", ex_round, rounds,
+                    _logger.debug("end of round: %s/%s, iterations_to_schedule: %s", ex_round, rounds,
                                   iterations_to_schedule)
 
 
@@ -183,7 +186,7 @@ class SplitInto:
         Raises:
             InvalidRequest: when parameter ``max`` is used in resource description
         """
-        logging.debug("iteration scheduler '%s' algorithm called", SplitInto.SCHED_NAME)
+        _logger.debug("iteration scheduler '%s' algorithm called", SplitInto.SCHED_NAME)
 
         if 'max' in self.job_resources:
             raise InvalidRequest(
@@ -193,7 +196,7 @@ class SplitInto:
         if split_part <= 0:
             raise InvalidRequest('Wrong submit request - split-into resolved to zero')
 
-        logging.debug("split-into algorithm of %s self.iterations with %s split-into on %s self.avail_resources "
+        _logger.debug("split-into algorithm of %s self.iterations with %s split-into on %s self.avail_resources "
                       "finished with %s splits", self.iterations, self.split_into, self.avail_resources, split_part)
 
         for _ in range(0, self.iterations):

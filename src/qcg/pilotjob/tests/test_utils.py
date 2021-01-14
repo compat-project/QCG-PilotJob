@@ -1,13 +1,13 @@
 import pytest
 import os
 import shutil
+import time
 
 
-from qcg.pilotjob.utils.auxdir import find_aux_dirs, find_single_aux_dir
+from qcg.pilotjob.utils.auxdir import find_aux_dirs, find_single_aux_dir, find_latest_aux_dir
 
 
 def test_aux_dir_find(tmpdir):
-
     # in fresh directory there should be no aux dirs
     assert len(find_aux_dirs(tmpdir)) == 0
 
@@ -65,4 +65,15 @@ def test_aux_dir_find(tmpdir):
     os.makedirs(tmpdir.join(dname))
     assert find_single_aux_dir(str(tmpdir)) == os.path.abspath(str(tmpdir.join(dname)))
     shutil.rmtree(tmpdir.join(dname))
+
+    # last modified (last created) auxiliary dir
+    dnames = ['.qcgpjm-service-manager-1', '.qcgpjm-service-manager-3', '.qcgpjm-service-manager-2']
+    for dname in dnames:
+        os.makedirs(tmpdir.join(dname))
+        time.sleep(1)
+    with pytest.raises(Exception):
+        find_single_aux_dir(str(tmpdir))
+    assert find_latest_aux_dir(tmpdir) == os.path.abspath(str(tmpdir.join(dnames[-1])))
+    for dname in dnames:
+        shutil.rmtree(str(tmpdir.join(dname)))
 

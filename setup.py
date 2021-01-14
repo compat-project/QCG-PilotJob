@@ -5,16 +5,17 @@ with open("README.md", "r") as fh:
 
 setup(
 	name="qcg-pilotjob",
-	version="0.9.0",
+	version="0.10.0",
 
 	author="Piotr Kopta",
 	author_email="pkopta@man.poznan.pl",
 
-	packages=["qcg.pilotjob", "qcg.pilotjob.api", "qcg.pilotjob.launcher"],
+	packages=["qcg.pilotjob", "qcg.pilotjob.api", "qcg.pilotjob.launcher", "qcg.pilotjob.utils"],
 	package_dir={
 		"qcg.pilotjob": "src/qcg/pilotjob",
 		"qcg.pilotjob.api": "src/qcg/pilotjob/api",
 		"qcg.pilotjob.launcher": "src/qcg/pilotjob/launcher",
+		"qcg.pilotjob.utils": "src/qcg/pilotjob/utils",
 	},
 
 	url="http://github.com/vecma-project/QCG-PilotJob",
@@ -26,7 +27,8 @@ setup(
 	install_requires=[
 		"zmq",
 		"click",
-		"prompt_toolkit"
+		"prompt_toolkit",
+                "psutil"
 		],
 
 	entry_points = {

@@ -4,11 +4,16 @@ import logging
 import os
 import socket
 import json
+import psutil
 from datetime import datetime
 from os.path import join
 
 import zmq
 from zmq.asyncio import Context
+from qcg.pilotjob.executionjob import ExecutionJob
+
+
+_logger = logging.getLogger(__name__)
 
 
 class Agent:
@@ -45,7 +50,7 @@ class Agent:
         # set default options
         self.options.setdefault('binding', False)
 
-        logging.info('agent options: %s', str(self.options))
+        _logger.info('agent options: %s', str(self.options))
 
         self.context = None
         self.in_socket = None
@@ -53,6 +58,8 @@ class Agent:
         self.local_address = None
         self.remote_address = None
         self.local_export_address = None
+
+        self.processes = dict()
 
     def _clear(self):
         """Reset runtime settings. """
@@ -80,7 +87,7 @@ class Agent:
         self.remote_address = remote_address
         self.context = Context.instance()
 
-        logging.debug('agent with id (%s) run to report to (%s)', self.agent_id, self.remote_address)
+        _logger.debug('agent with id (%s) run to report to (%s)', self.agent_id, self.remote_address)
 
         self.in_socket = self.context.socket(zmq.REP) #pylint: disable=maybe-no-member
 
@@ -91,21 +98,19 @@ class Agent:
         self.local_export_address = '{}://{}:{}'.format(proto, socket.gethostbyname(socket.gethostname()),
                                                         self.local_port)
 
-        logging.debug('agent with id (%s) listen at address (%s), export address (%s)',
+        _logger.debug('agent with id (%s) listen at address (%s), export address (%s)',
                       self.agent_id, self.local_address, self.local_export_address)
 
         try:
             await self._send_ready()
         except Exception:
-            logging.error('failed to signaling ready to manager: %s', sys.exc_info())
+            _logger.error('failed to signaling ready to manager: %s', sys.exc_info())
             self._cleanup()
             self._clear()
             raise
 
         while not self._finish:
             message = await self.in_socket.recv_json()
-
-            cmd = message.get('cmd', 'UNKNOWN')
 
             await self.in_socket.send_json({'status': 'OK'})
 
@@ -114,13 +119,15 @@ class Agent:
                 self._cmd_exit(message)
             elif cmd == 'run':
                 self._cmd_run(message)
+            elif cmd == 'cancel':
+                self._cmd_cancel(message)
             else:
-                logging.error('unknown command received from launcher: %s', message)
+                _logger.error(f'unknown command ({message}) received from launcher')
 
         try:
             await self._send_finishing()
         except Exception as exc:
-            logging.error('failed to signal shuting down: %s', str(exc))
+            _logger.error('failed to signal shuting down: %s', str(exc))
 
         self._cleanup()
         self._clear()
@@ -136,7 +143,7 @@ class Agent:
         Args:
             message - message from the launcher
         """
-        logging.debug('handling finish cmd with message (%s)', str(message))
+        _logger.debug('handling finish cmd with message (%s)', str(message))
         self._finish = True
 
     def _cmd_run(self, message):
@@ -147,7 +154,7 @@ class Agent:
                 appid - application identifier
                 args - the application arguments
         """
-        logging.debug('running app %s with args %s ...', message.get('appid', 'UNKNOWN'), str(message.get('args', [])))
+        _logger.debug('running app %s with args %s ...', message.get('appid', 'UNKNOWN'), str(message.get('args', [])))
 
         asyncio.ensure_future(self._launch_app(
             message.get('appid', 'UNKNOWN'),
@@ -159,6 +166,63 @@ class Agent:
             wdir=message.get('wdir', None),
             cores=message.get('cores', None)
         ))
+
+
+    def _cmd_cancel(self, message):
+        """Handler of CANCEL application command.
+
+        Args:
+            message - message with the following attributes:
+            appid - application identifier
+        """
+        appid = message.get('appid', None)
+        _logger.debug(f'handling cancel operation for application {appid}')
+        asyncio.ensure_future(self._cancel_app(appid))
+
+    async def _cancel_app(self, appid):
+        if appid and appid in self.processes:
+            try:
+                _logger.info(f'canceling application {appid} ...')
+                self.processes[appid].terminate()
+            except Exception as exc:
+                _logger.error(f'failed to cancel application {appid}: {str(exc)}')
+
+            cancel_start_time = datetime.now()
+
+            while self.processes.get(appid):
+                # wait a moment
+                await asyncio.sleep(1)
+
+                # check if processes still exists
+                process = self.processes.get(appid)
+
+                if not process:
+                    _logger.debug(f'canceled process finished')
+                    break
+                else:
+                    pid = process.pid
+
+                    try:
+                        p = psutil.Process(pid)
+                        _logger.debug(f'process {pid} still exists')
+                        # process not finished
+                    except psutil.NoSuchProcess:
+                        # process finished
+                        pass
+                        break
+                    except Exception as exc:
+                        _logger.warning(f'failed to check process status: {str(exc)}')
+
+                    if (datetime.now() - cancel_start_time).total_seconds() > ExecutionJob.SIG_KILL_TIMEOUT:
+                        # send SIGKILL signal
+                        try:
+                            _logger.info(f'killing {pid} process')
+                            self.processes[appid].kill()
+                        except Exception as exc:
+                            _logger.warning(f'failed to kill process {pid}: {str(exc)}')
+                        return
+        else:
+            _logger.info(f'missing app id {appid} or process ({",".join(self.processes.keys())}) for app id')
 
     async def _launch_app(self, appid, args, stdin, stdout, stderr, env, wdir, cores):
         """Run application.
@@ -192,9 +256,9 @@ class Agent:
                 app_exec = args[0]
                 app_args = args[1:] if len(args) > 1 else []
 
-            logging.info("creating process for job %s with executable (%s) and args (%s)",
+            _logger.info("creating process for job %s with executable (%s) and args (%s)",
                          appid, app_exec, str(app_args))
-            logging.debug("process env: %s", str(env))
+            _logger.debug("process env: %s", str(env))
 
             if stdin and wdir and not os.path.isabs(stdin):
                 stdin = os.path.join(wdir, stdin)
@@ -219,16 +283,18 @@ class Agent:
 
             process = await asyncio.create_subprocess_exec(
                 app_exec, *app_args, stdin=stdin_p, stdout=stdout_p, stderr=stderr_p, cwd=wdir, env=env)
+            self.processes[appid] = process
 
-            logging.debug("process for job %s launched", appid)
+            _logger.debug("process for job %s launched", appid)
 
             await process.wait()
 
             runtime = (datetime.now() - starttime).total_seconds()
 
             exit_code = process.returncode
+            del self.processes[appid]
 
-            logging.info("process for job %s finished with exit code %d", appid, exit_code)
+            _logger.info("process for job %s finished with exit code %d", appid, exit_code)
 
             status_data = {
                 'appid': appid,
@@ -238,7 +304,7 @@ class Agent:
                 'ec': exit_code,
                 'runtime': runtime}
         except Exception as exc:
-            logging.error('launching process for job %s finished with error - %s', appid, str(exc))
+            _logger.error('launching process for job %s finished with error - %s', appid, str(exc))
             status_data = {
                 'appid': appid,
                 'agent_id': self.agent_id,
@@ -261,7 +327,7 @@ class Agent:
 
             await out_socket.send_json(status_data)
             msg = await out_socket.recv_json()
-            logging.debug("got confirmation for process finish %s", str(msg))
+            _logger.debug("got confirmation for process finish %s", str(msg))
         finally:
             if out_socket:
                 try:
@@ -287,10 +353,10 @@ class Agent:
 
             msg = await out_socket.recv_json()
 
-            logging.debug('received ready message confirmation: %s', str(msg))
+            _logger.debug('received ready message confirmation: %s', str(msg))
 
             if not msg.get('status', 'UNKNOWN') == 'CONFIRMED':
-                logging.error('agent %s not registered successfully in launcher: %s', self.agent_id, str(msg))
+                _logger.error('agent %s not registered successfully in launcher: %s', self.agent_id, str(msg))
                 raise Exception('not successfull registration in launcher: {}'.format(str(msg)))
         finally:
             if out_socket:
@@ -307,7 +373,7 @@ class Agent:
         out_socket = self.context.socket(zmq.REQ) #pylint: disable=maybe-no-member
         out_socket.setsockopt(zmq.LINGER, 0) #pylint: disable=maybe-no-member
 
-        logging.debug("sending finishing message")
+        _logger.debug("sending finishing message")
         try:
             out_socket.connect(self.remote_address)
 
@@ -316,10 +382,10 @@ class Agent:
                 'date': datetime.now().isoformat(),
                 'agent_id': self.agent_id,
                 'local_address': self.local_address})
-            logging.debug("finishing message sent, waiting for confirmation")
+            _logger.debug("finishing message sent, waiting for confirmation")
             msg = await out_socket.recv_json()
 
-            logging.debug('received finishing message confirmation: %s', str(msg))
+            _logger.debug('received finishing message confirmation: %s', str(msg))
         finally:
             if out_socket:
                 try:
@@ -358,5 +424,5 @@ if __name__ == '__main__':
     asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(agent.agent(raddress)))
     asyncio.get_event_loop().close()
 
-    logging.info('node agent %s exiting', agent_id)
+    _logger.info('node agent %s exiting', agent_id)
     sys.exit(0)

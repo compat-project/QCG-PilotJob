@@ -32,6 +32,7 @@ The full list of currently supported options is presented below.
                          [--slurm-partition-nodes SLURM_PARTITION_NODES]
                          [--slurm-limit-nodes-range-begin SLURM_LIMIT_NODES_RANGE_BEGIN]
                          [--slurm-limit-nodes-range-end SLURM_LIMIT_NODES_RANGE_END]
+                         [--resume RESUME]
 
    optional arguments:
      -h, --help            show this help message and exit
@@ -82,4 +83,4 @@ The full list of currently supported options is presented below.
      --slurm-limit-nodes-range-end SLURM_LIMIT_NODES_RANGE_END
                            limit Slurm allocation to specified range of nodes
                            (ending node)
-
+     --resume RESUME       path to the QCG-PilotJob working directory to resume

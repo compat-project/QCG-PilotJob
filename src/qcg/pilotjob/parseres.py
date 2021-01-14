@@ -5,6 +5,9 @@ from qcg.pilotjob.localres import parse_local_resources
 from qcg.pilotjob.slurmres import parse_slurm_resources, in_slurm_allocation
 
 
+_logger = logging.getLogger(__name__)
+
+
 def _detect_resources(config):
     """Return resource parse function according to actual environment.
 
@@ -19,17 +22,17 @@ def _detect_resources(config):
     Returns:
         function: function for parsing available resources
     """
-    logging.info('determining source of information about available resources ...')
+    _logger.info('determining source of information about available resources ...')
 
     if Config.EXECUTION_NODES.get(config):
-        logging.info('selected local resources information')
+        _logger.info('selected local resources information')
         return parse_local_resources(config)
 
     if in_slurm_allocation():
-        logging.info('selected SLURM resources information')
+        _logger.info('selected SLURM resources information')
         return parse_slurm_resources(config)
 
-    logging.info('selected local resources information')
+    _logger.info('selected local resources information')
     return parse_local_resources(config)
 
 
@@ -69,5 +72,5 @@ def get_resources(config):
     if res_source not in __RESOURCES_HANDLING__:
         raise ValueError('Invalid resources configuration setting: {}'.format(str(res_source)))
 
-    logging.info('source of information about available resources: %s', str(res_source))
+    _logger.info('source of information about available resources: %s', str(res_source))
     return __RESOURCES_HANDLING__[res_source](config)
