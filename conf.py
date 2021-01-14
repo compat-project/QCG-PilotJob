@@ -18,11 +18,11 @@
 # -- Project information -----------------------------------------------------
 
 project = 'QCG-PilotJob'
-copyright = '2020, Piotr Kopta'
+copyright = '2021, Piotr Kopta'
 author = 'Piotr Kopta'
 
 # The full version, including alpha/beta/rc tags
-release = '0.9.0'
+release = '0.10.0'
 
 
 # -- General configuration ---------------------------------------------------
