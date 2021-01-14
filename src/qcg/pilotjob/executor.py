@@ -102,12 +102,15 @@ class Executor:
         job_iteration.job.append_runtime({'allocation': allocation.description()}, job_iteration.iteration)
 
         try:
-            if all((self._is_node_launcher, len(allocation.nodes) == 1, allocation.nodes[0].ncores == 1)):
-                execution_job = LauncherExecutionJob(self, self.job_envs, allocation, job_iteration)
-            else:
-                execution_job = LocalSchemaExecutionJob(self, self.job_envs, allocation, job_iteration, self.schema)
+            try:
+                if all((self._is_node_launcher, len(allocation.nodes) == 1, allocation.nodes[0].ncores == 1)):
+                    execution_job = LauncherExecutionJob(self, self.job_envs, allocation, job_iteration)
+                else:
+                    execution_job = LocalSchemaExecutionJob(self, self.job_envs, allocation, job_iteration, self.schema)
 
-            self._not_finished[execution_job.jid] = execution_job
+                self._not_finished[execution_job.jid] = execution_job
+            finally:
+                self._manager.queued_to_execute -= 1
 
             await execution_job.run()
         except Exception as exc:

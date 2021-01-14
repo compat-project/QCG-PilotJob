@@ -474,6 +474,11 @@ class DirectManager:
 
         self.stop_processing = False
 
+        # used to track jobs that has been removed from schedule_queue but not
+        # started (registered in executor._not_finished dict)
+        self.queued_to_execute = 0
+
+
     async def setup_interfaces(self):
         """Initialize manager after all incoming interfaces has been started. """
         if self._parent_manager:
@@ -513,7 +518,7 @@ class DirectManager:
     @property
     def is_all_jobs_finished(self):
         """bool: returns True if there are no jobs in scheduling queue and no jobs are executing"""
-        return len(self._schedule_queue) == 0 and self._executor.is_all_jobs_finished()
+        return len(self._schedule_queue) == 0 and self._executor.is_all_jobs_finished() and self.queued_to_execute == 0
 
     @profile
     def _schedule_loop(self):
@@ -526,7 +531,7 @@ class DirectManager:
         if self.stop_processing:
             return
 
-        _logger.debug("scheduling loop with {len(self._schedule_queue)} jobs in queue")
+        _logger.debug(f"scheduling loop with {len(self._schedule_queue)} jobs in queue")
 
         for idx, sched_job in enumerate(self._schedule_queue):
             if not self.resources.free_cores:
@@ -571,6 +576,7 @@ class DirectManager:
                                 self.change_job_state(sched_job.job, iteration=job_iteration.iteration,
                                                       state=JobState.SCHEDULED)
 
+                                self.queued_to_execute += 1
                                 asyncio.ensure_future(self._executor.execute(allocation, job_iteration))
                             else:
                                 # missing resources

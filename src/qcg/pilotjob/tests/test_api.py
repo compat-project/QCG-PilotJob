@@ -1177,7 +1177,7 @@ def test_api_wait4all(tmpdir):
 
         finished_time = datetime.now()
         wait_time = (finished_time - start_time).total_seconds()
-        assert all((wait_time > sleep, wait_time < sleep + 1))
+        assert all((wait_time > sleep, wait_time < sleep + 2))
 
         jinfos = m.info_parsed(ids, withChilds=True)
         assert all((len(jinfos) == 1, jid in jinfos, jinfos[jid].status  == 'SUCCEED'))
