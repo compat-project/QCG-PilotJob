@@ -145,7 +145,17 @@ class Launcher:
 
         agent = self.nodes[agent_id]
 
-        out_socket = self.zmq_ctx.socket(zmq.REQ) #pylint: disable=maybe-no-member
+        socket_open_attempts = 0
+        while True:
+            try:
+                out_socket = self.zmq_ctx.socket(zmq.REQ) #pylint: disable=maybe-no-member
+                break
+            except ZMQError:
+                if socket_open_attempts > 5:
+                    raise Exception('failed to communicate with agent - too many connections in the same time')
+                await asyncio.sleep(0.1)
+                socket_open_attempts += 1
+
         try:
             out_socket.connect(agent['address'])
 
@@ -352,6 +362,10 @@ class Launcher:
             if (datetime.now() - start_t).total_seconds() > Launcher.START_TIMEOUT_SECS:
                 _logger.error('timeout while waiting for agents - currenlty registered %s from launched %s',
                               len(self.nodes), len(self.agents))
+                _logger.error(f'not registered instances: ')
+                for agent_id, agent in self.agents.items():
+                    if agent_id not in self.nodes:
+                        _logger.error(f'{agent_id}: process ({agent["process"]}), data ({agent["data"]})')
                 raise Exception('timeout while waiting for agents')
 
             await asyncio.sleep(0.2)
@@ -443,9 +457,22 @@ class Launcher:
             address = '{}:{}'.format(addr, port)
 
         self.local_address = address
-        self.local_export_address = '{}://{}:{}'.format(proto, socket.gethostbyname(socket.gethostname()), port)
 
-        _logger.debug('local address accessible by other machines: %s', self.local_export_address)
+        local_hostname = socket.gethostname()
+
+        if os.getenv('SLURM_CLUSTER_NAME', 'unknown') == 'supermucng':
+            logging.info(f'modifing launcher export address for supermucng')
+            local_opa_hostname='.'.join(elem + '-opa' if it == 0 else elem for it,elem in enumerate(local_hostname.split('.')))
+            _logger.info(f'local hostname: {local_hostname}')
+            _logger.info(f'local modified hostname: {local_opa_hostname}')
+
+            _logger.info(f'local hostname ip address: {socket.gethostbyname(local_hostname)}')
+            _logger.info(f'local modified hostname ip address: {socket.gethostbyname(local_opa_hostname)}')
+            local_hostname = local_opa_hostname
+
+        self.local_export_address = '{}://{}:{}'.format(proto, socket.gethostbyname(local_hostname), port)
+
+        _logger.debug('local zmq address accessible by other machines: %s', self.local_export_address)
 
         self.iface_task = asyncio.ensure_future(self._input_iface())
 
