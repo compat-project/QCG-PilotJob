@@ -316,16 +316,21 @@ class ManagerInstance:
         Raises:
             InvalidRequest: when request has wrong format
         """
-        _logger.info(f'sedning finish request to partition manager {self.mid}')
-        await self.get_socket().send_json({
-            'request': 'control',
-            'command': ControlReq.REQ_CONTROL_CMD_FINISHAFTERALLTASKSDONE 
-        })
+        _logger.info(f'sending finish request to partition manager {self.mid}')
+        try:
+            await asyncio.wait_for(self.get_socket().send_json({
+                'request': 'control',
+                'command': ControlReq.REQ_CONTROL_CMD_FINISHAFTERALLTASKSDONE
+                }), timeout=2.0)
 
-        msg = await self.get_socket().recv_json()
-        if not msg['code'] == 0:
-            raise InvalidRequest(
-                'Failed to finish manager instance: {}'.format(msg.get('message', '')))
+            msg = await asyncio.wait_for(self.get_socket().recv_json(), timeout=2.0)
+
+            if not msg['code'] == 0:
+                raise InvalidRequest(
+                    'Failed to finish manager instance: {}'.format(msg.get('message', '')))
+        except asyncio.TimeoutError:
+            _logger.warning(f'failed to send finish command to partition manager {self.mid}: timeout')
+
 
 
 class TotalResources:
