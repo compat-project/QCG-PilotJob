@@ -601,7 +601,7 @@ def test_slurm_partition_resources():
 
     governor_id = 'm-governor'
     governor_args = ['--log', 'debug', '--wd', governor_dir, '--report-format', 'json', '--id', governor_id,
-                     '--slurm-partition-nodes', '1']
+                     '--system-core', '--slurm-partition-nodes', '1']
     governor_process, governor_address = fork_manager(governor_args)
 
     time.sleep(10)
@@ -642,7 +642,7 @@ def test_slurm_partition_submit():
 
     governor_id = 'm-governor'
     governor_args = ['--log', 'debug', '--wd', str(governor_dir), '--report-format', 'json', '--id', governor_id,
-                     '--slurm-partition-nodes', '1']
+                     '--system-core', '--slurm-partition-nodes', '1']
     governor_process, governor_address = fork_manager(governor_args)
 
     time.sleep(10)
