@@ -3,6 +3,7 @@ import re
 
 
 AUX_DIR_PTRN = re.compile(r'\.qcgpjm-service-.*')
+PROC_TRACE_PTRN = re.compile(r'ptrace_.*\.log')
 
 
 def is_aux_dir(path):
@@ -65,3 +66,19 @@ def find_latest_aux_dir(path):
         raise Exception('No auxiliary directory exist in path {}'.format(path))
 
     return max(paths, key=os.path.getmtime)
+
+
+def find_proc_traces_files(path):
+    """Find in given path files which names matches processes trace log name pattern.
+
+    Args:
+        path (str): path where processes trace logs will be searched
+
+    Returns:
+        list(str): list of paths with files matches processes trace logs name pattern
+    """
+    apath = os.path.abspath(path)
+    return [os.path.join(apath, entry) for entry in os.listdir(apath)
+            if PROC_TRACE_PTRN.match(entry) and os.path.isfile(os.path.join(apath, entry))]
+
+

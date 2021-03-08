@@ -139,6 +139,10 @@ class QCGPMService:
         parser.add_argument(Config.OPENMPI_MODEL_MODULE.value['cmd_opt'],
                             help='name of the module to load before launching openmpi model job',
                             default=Config.OPENMPI_MODEL_MODULE.value['default'])
+        parser.add_argument(Config.DISABLE_PROC_STATS.value['cmd_opt'],
+                            help='do not gather information about launched processes from system',
+                            default=Config.DISABLE_PROC_STATS.value['default'],
+                            action='store_true')
         self._args = parser.parse_args(args)
 
         if self._args.slurm_partition_nodes:
@@ -211,6 +215,7 @@ class QCGPMService:
             Config.SLURM_LIMIT_NODES_RANGE_END: self._args.slurm_limit_nodes_range_end,
             Config.RESUME: self._args.resume,
             Config.OPENMPI_MODEL_MODULE: self._args.openmpi_module,
+            Config.DISABLE_PROC_STATS: self._args.disable_proc_stats,
         }
 
     def __init__(self, args=None):

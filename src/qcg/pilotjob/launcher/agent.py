@@ -5,15 +5,78 @@ import os
 import socket
 import json
 import psutil
+import time
 from datetime import datetime
 from os.path import join
+import threading
+import concurrent
 
 import zmq
 from zmq.asyncio import Context
 from qcg.pilotjob.executionjob import ExecutionJob
+from qcg.pilotjob.utils.processes import update_processes_status
 
 
 _logger = logging.getLogger(__name__)
+
+
+class ProcStats:
+    """The processes statistics class.
+
+    Attributes:
+        proc_stats (dict()) - processes data
+        cancel_event (threading.Event) - an event to singal cancel
+        nodename (str) - local site name
+        interval (float) - the delay between following processes check
+    """
+    def __init__(self, cancel_event):
+        self.proc_stats = dict()
+        self.cancel_event = cancel_event
+        self.nodename = socket.gethostname()
+        self.interval = 1.0
+
+    def trace(self):
+        """Gather information about all processes (whole tree) started by Slurm on this node (the localy started
+        processes should be also traced, as they are started by the Agent which is launched by Slurm
+        """
+        def proc_selector(process):
+            """Select processes to be traced.
+            Arg:
+                process (psutil.Process) - process pid (.pid) and name (.name())
+            """
+            return process.name() == "slurmstepd"
+
+        try:
+            # cyclically gather info about processes
+            while not self.cancel_event.is_set():
+                try:
+                    pid_trace_start = time.perf_counter()
+                    update_processes_status(proc_selector, self.proc_stats, self.nodename)
+                    pid_trace_secs = time.perf_counter() - pid_trace_start
+                    _logger.info(f'gathering processes stats took {pid_trace_secs} secs ...')
+                    time.sleep(self.interval)
+                except Exception as exc:
+                    _logger.info(f'something went wrong: {str(exc)}')
+                    _logger.exception(exc)
+                    raise
+        finally:
+            _logger.info('finishing gathering processes statistics')
+            try:
+                trace_fname=f'ptrace_{self.nodename}_{str(datetime.now())}_{str(os.getpid())}.log'
+
+                def set_encoder(obj):
+                    if isinstance(obj, set):
+                        return list(obj)
+                    else:
+                        return str(obj)
+                
+                with open(trace_fname, 'wt') as out_f:
+                    out_f.write(json.dumps({ 'node': self.nodename,
+                                             'pids': self.proc_stats },
+                                             indent=2, default=set_encoder))
+            except Exception as exc:
+                _logger.error(f'failed to save process statistics: {str(exc)}')
+                _logger.exception(exc)
 
 
 class Agent:
@@ -285,7 +348,8 @@ class Agent:
                 app_exec, *app_args, stdin=stdin_p, stdout=stdout_p, stderr=stderr_p, cwd=wdir, env=env)
             self.processes[appid] = process
 
-            _logger.debug("process for job %s launched", appid)
+            process_pid = process.pid
+            _logger.debug(f"process for job {appid} launched with pid {process_pid}")
 
             await process.wait()
 
@@ -302,6 +366,7 @@ class Agent:
                 'date': datetime.now().isoformat(),
                 'status': 'APP_FINISHED',
                 'ec': exit_code,
+                'pid': process_pid,
                 'runtime': runtime}
         except Exception as exc:
             _logger.error('launching process for job %s finished with error - %s', appid, str(exc))
@@ -394,6 +459,32 @@ class Agent:
                     pass
 
 
+async def start_agent(agent_id, raddress, options):
+    agent = Agent(agent_id, options)
+
+    enable_proc_stats = options.get('proc_stats', True)
+
+    if enable_proc_stats:
+        _logger.info('gathering process statistics enabled')
+        # launch process statistics gathering in separate thread
+        proc_stats_cancel_event = threading.Event()
+        proc_stats = ProcStats(proc_stats_cancel_event)
+        thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+        proc_stats_task = asyncio.ensure_future(asyncio.get_event_loop().run_in_executor(thread_pool, proc_stats.trace))
+        thread_pool.shutdown(wait=False)
+    else:
+        _logger.info('gathering process statistics disabled')
+
+    await agent.agent(raddress)
+
+    if enable_proc_stats:
+        # signal process statistics gathering to finish
+        proc_stats_cancel_event.set()
+
+        # wait for process statistics gathering finish
+        await proc_stats_task
+
+
 if __name__ == '__main__':
     if len(sys.argv) < 3 or len(sys.argv) > 5:
         print('error: wrong arguments\n\n\tagent {id} {remote_address} [options_in_json]\n\n')
@@ -412,16 +503,14 @@ if __name__ == '__main__':
             sys.exit(1)
 
     logging.basicConfig(
-        level=logging.DEBUG,  # level=logging.INFO
+        level=logging._nameToLevel.get(options.get('log_level', 'info').upper()),
         filename=join(options.get('auxDir', '.'), 'nl-agent-{}.log'.format(agent_id)),
         format='%(asctime)-15s: %(message)s')
 
     if asyncio.get_event_loop() and asyncio.get_event_loop().is_closed():
         asyncio.set_event_loop(asyncio.new_event_loop())
 
-    agent = Agent(agent_id, options)
-
-    asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(agent.agent(raddress)))
+    asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(start_agent(agent_id, raddress, options)))
     asyncio.get_event_loop().close()
 
     _logger.info('node agent %s exiting', agent_id)

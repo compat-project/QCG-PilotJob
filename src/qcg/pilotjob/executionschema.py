@@ -308,7 +308,7 @@ class SlurmExecution(ExecutionSchema):
         """
         job_model = ex_job.job_execution.model or 'default'
 
-        _logger.info(f'looking for job model {job_model}')
+        _logger.debug(f'looking for job model {job_model}')
         preprocess_method = SlurmExecution.JOB_MODELS.get(job_model)
         if not preprocess_method:
             raise InternalError(f"unknown job execution model '{job_model}'")

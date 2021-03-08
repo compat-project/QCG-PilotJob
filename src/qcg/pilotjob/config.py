@@ -85,7 +85,7 @@ class Config(Enum):
     REPORT_FORMAT = {
         'name': 'report.format',
         'cmd_opt': '--report-format',
-        'default': 'text'
+        'default': 'json'
     }
 
     REPORT_FILE = {
@@ -184,6 +184,11 @@ class Config(Enum):
         'default': 'openmpi'
     }
 
+    DISABLE_PROC_STATS = {
+        'name': 'disable.proc.stats',
+        'cmd_opt': '--disable-proc-stats',
+        'default': False
+    }
 
     def get(self, config):
         """Return configuration entry value from dictionary

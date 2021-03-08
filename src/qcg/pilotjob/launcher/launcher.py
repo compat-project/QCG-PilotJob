@@ -10,6 +10,7 @@ from datetime import datetime
 import zmq
 from zmq.asyncio import Context
 
+from qcg.pilotjob.config import Config
 from qcg.pilotjob import logger as top_logger
 
 
@@ -43,13 +44,17 @@ class Launcher:
     START_TIMEOUT_SECS = 600
     SHUTDOWN_TIMEOUT_SECS = 30
 
-    def __init__(self, wdir, aux_dir):
+    def __init__(self, config, wdir, aux_dir):
         """Initialize instance.
 
         Args:
+            config (dict): configuration dictionary
             wdir (str): path to the working directory (the same on all nodes)
             aux_dir (str): path to the auxilary directory (the same on all nodes)
         """
+        # config
+        self.config = config
+
         # working directory
         self.work_dir = wdir
 
