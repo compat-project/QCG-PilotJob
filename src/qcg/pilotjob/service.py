@@ -8,6 +8,7 @@ import socket
 import sys
 import traceback
 import signal
+import json
 from datetime import datetime
 from multiprocessing import Process
 from os.path import exists, join, isabs
@@ -441,19 +442,6 @@ class QCGPMService:
 
         _logger.info('receiver stopped')
 
-        try:
-            response = await receiver.generate_status_response()
-
-            status_file = Config.FINAL_STATUS_FILE.get(self._conf)
-            status_file = status_file if isabs(status_file) else join(self._aux_dir, status_file)
-
-            if exists(status_file):
-                os.remove(status_file)
-
-            with open(status_file, 'a') as status_f:
-                status_f.write(response.to_json())
-        except Exception as exc:
-            _logger.warning('failed to write final status: %s', str(exc))
 
         _logger.info('stopping receiver ...')
         await receiver.stop()
@@ -488,6 +476,23 @@ class QCGPMService:
             return [iface for iface in self._ifaces if isinstance(iface, iface_class)]
 
         return self._ifaces
+
+    async def _write_final_status(self):
+        try:
+            _logger.info('writing final status')
+
+            response = await self._receiver.generate_status_response()
+
+            status_file = Config.FINAL_STATUS_FILE.get(self._conf)
+            status_file = status_file if isabs(status_file) else join(self._aux_dir, status_file)
+
+            if exists(status_file):
+                os.remove(status_file)
+
+            with open(status_file, 'a') as status_f:
+                status_f.write(json.dumps(response.data, indent=2))
+        except Exception as exc:
+            _logger.warning('failed to write final status: %s', str(exc))
 
     async def _run_service(self):
         """Asynchronous background task that starts receiver, waits for it's finish (signaled by the
@@ -542,6 +547,8 @@ class QCGPMService:
                 await self._manager.stop()
 
             _logger.info('manager stopped')
+
+            await self._write_final_status()
 
             usage = QCGPMService.get_rusage()
             _logger.info('service resource usage: %s', str(usage.get('service', {})))
