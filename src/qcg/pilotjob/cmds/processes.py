@@ -13,49 +13,6 @@ from qcg.pilotjob.utils.reportstats import JobsReportStats
 
 
 
-def generate_series_stats(serie):
-    """
-    Generate statistics about given data serie.
-
-    Args:
-        serie (float[]) - serie data
-
-    Return:
-        serie statistics in form of dictionary
-    """
-    stats = {}
-    stats['max'] = max(serie)
-    stats['min'] = min(serie)
-    stats['mean'] = statistics.mean(serie)
-    stats['median'] = statistics.median(serie)
-    stats['median_lo'] = statistics.median_low(serie)
-    stats['median_hi'] = statistics.median_high(serie)
-    stats['stdev'] = statistics.stdev(serie)
-    stats['pstdev'] = statistics.pstdev(serie)
-    stats['var'] = statistics.variance(serie)
-    stats['pvar'] = statistics.pvariance(serie)
-    return stats
-
-
-def print_stats(stats):
-    print('{} jobs executed in {} secs'.format(len(stats.get('jobs', {})),
-        stats['total_time'].total_seconds() if 'total_time' in stats else 0))
-    print('\t{:>20}: {}'.format('first job queued', str(stats.get('first_queue', 0))))
-    print('\t{:>20}: {}'.format('last job queued', str(stats.get('last_queue', 0))))
-    print('\t{:>20}: {}'.format('total queuing time', stats['queue_time'].total_seconds() if 'queue_time' in stats else 0))
-    print('\t{:>20}: {}'.format('first job start', str(stats.get('first_start', 0))))
-    print('\t{:>20}: {}'.format('last job finish', str(stats.get('last_finish', 0))))
-    print('\t{:>20}: {}'.format('total execution time', stats['execution_time'].total_seconds() if 'execution_time' in stats else 0))
-
-    print('jobs runtime statistics:')
-    for k, v in stats.get('rstats', {}).items():
-        print('\t{:>20}: {}'.format(k, v))
-
-    print('jobs launching statistics:')
-    for k, v in stats.get('launchstats', {}).items():
-        print('\t{:>20}: {}'.format(k, v))
-
-
 def print_process_tree(procs, job_pid, pname=None, only_target=False):
     for process, level in procs.process_iterator(job_pid):
         created = process.get('created', None)
