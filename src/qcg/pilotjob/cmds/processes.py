@@ -6,7 +6,7 @@ import statistics
 from termcolor import colored
 from datetime import datetime, timedelta
 
-from qcg.pilotjob.utils.auxdir import find_single_aux_dir, find_proc_traces_files, is_aux_dir
+from qcg.pilotjob.utils.auxdir import find_single_aux_dir, find_proc_traces_files, is_aux_dir, find_report_files
 from qcg.pilotjob.utils.proc_traces import ProcTraces
 from qcg.pilotjob.utils.util import parse_datetime
 from qcg.pilotjob.utils.reportstats import JobsReportStats
@@ -52,13 +52,7 @@ def find_child_processes_with_name(procs, pid, pname):
 
 
 def read_logs(wdir, verbose):
-    aux_dir = find_single_aux_dir(wdir)
-
-    jobs_report_path = os.path.join(aux_dir, 'jobs.report')
-    if not os.path.isfile(jobs_report_path):
-        sys.stderr.write(f'error: pilotjob directory do not contain jobs.report file')
-        sys.exit(1)
-
+    jobs_report_paths = find_report_files(wdir)
     proc_traces_paths = find_proc_traces_files(wdir)
     if not proc_traces_paths:
         sys.stderr.write(f'error: process traces log files not found in "{wdir}"')
@@ -67,7 +61,7 @@ def read_logs(wdir, verbose):
     if verbose:
         print(f'found {len(proc_traces_paths)} process traces log files')
 
-    stats = JobsReportStats([jobs_report_path]).job_stats()
+    stats = JobsReportStats(jobs_report_paths).job_stats()
     if verbose:
         print(f'job report file "{jobs_report_path}" read')
 
