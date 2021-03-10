@@ -10,7 +10,13 @@ setup(
 	author="Piotr Kopta",
 	author_email="pkopta@man.poznan.pl",
 
-	packages=["qcg.pilotjob", "qcg.pilotjob.api", "qcg.pilotjob.launcher", "qcg.pilotjob.utils"],
+	packages=[
+            "qcg.pilotjob",
+            "qcg.pilotjob.api",
+            "qcg.pilotjob.launcher",
+            "qcg.pilotjob.utils",
+            "qcg.pilotjob.cmds",
+            ],
 	package_dir={
 		"qcg.pilotjob": "src/qcg/pilotjob",
 		"qcg.pilotjob.api": "src/qcg/pilotjob/api",
