@@ -115,7 +115,7 @@ class Config(Enum):
     FINAL_STATUS_FILE = {
         'name': 'final.status.file',
         'cmd_opt': None,
-        'default': 'final_status'
+        'default': 'final_status.json'
     }
 
     DISABLE_NL = {
