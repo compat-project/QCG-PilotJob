@@ -16,6 +16,7 @@ setup(
 		"qcg.pilotjob.api": "src/qcg/pilotjob/api",
 		"qcg.pilotjob.launcher": "src/qcg/pilotjob/launcher",
 		"qcg.pilotjob.utils": "src/qcg/pilotjob/utils",
+		"qcg.pilotjob.cmds": "src/qcg/pilotjob/cmds",
 	},
 
 	url="http://github.com/vecma-project/QCG-PilotJob",
@@ -32,6 +33,11 @@ setup(
 		],
 
 	entry_points = {
-		'console_scripts': ['qcg-pm-service=qcg.pilotjob.command_line:service','qcg-pm=qcg.pilotjob.client_cmd:qcgpjm'],
+		'console_scripts': [
+                    'qcg-pm-service=qcg.pilotjob.command_line:service',
+                    'qcg-pm=qcg.pilotjob.client_cmd:qcgpjm',
+                    'qcg-pm-report=qcg.pilotjob.cmds.report:reports',
+                    'qcg-pm-processes=qcg.pilotjob.cmds.processes:processes',
+                ],
 	},
 )
