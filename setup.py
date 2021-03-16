@@ -35,7 +35,8 @@ setup(
 		"zmq",
 		"click",
 		"prompt_toolkit",
-                "psutil"
+                "psutil",
+                "termcolor"
 		],
 
 	entry_points = {

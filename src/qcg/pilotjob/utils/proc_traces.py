@@ -114,7 +114,38 @@ class ProcTraces:
 
         return None
 
-    def childs_on_other_nodes(self, process):
+    def _find_slurmstepd_with_step_id(self, slurm_step_id):
+        """Look for processes with name `slurmstepd` and 'slurmstepd:` argument set to `slurm_step_id`.
+
+        Args:
+            slurm_step_id (str) - slurm step identifier
+
+        Returns:
+            list(str) - list of found `slurmstepd` processes with given identifier
+        """
+        stepd_procs = []
+#        print(f'looking for slurmstepd with step id {slurm_step_id}')
+        for node_name, node_procs in self.nodes_procs.items():
+            for pid, proc in node_procs.items():
+                if proc.get('name', 'X') == 'slurmstepd':
+                    cmdargs = proc.get('cmdline', [])
+#                    print(f'found slurmstepd with args: {cmdargs}')
+                    if len(cmdargs) >= 2:
+                        arg_idx = cmdargs.index('slurmstepd:')
+                        stepid = None
+                        if len(cmdargs) > arg_idx + 1:
+                            stepid = cmdargs[arg_idx + 1].strip('[]')
+#                            print(f'found stepid in args: {stepid}')
+
+                        if stepid == slurm_step_id:
+#                            print(f'stepid matches {slurm_step_id}')
+                            stepd_procs.append(pid)
+#                        else:
+#                            print(f'stepid NOT matches {slurm_step_id}')
+
+        return stepd_procs
+
+    def childs_on_other_nodes(self, process, slurm_step_id=None):
         """Find child process on other nodes not explicitely linked.
         For example when launching openmpi application where some of the instances will be launched
         on other nodes, mpirun should launch 'orted' deamon (via slurm) with identifier. When
@@ -123,19 +154,27 @@ class ProcTraces:
 
         Args:
             process (dict) - process data
+            slurm_step_id (str) - a slurm's step identifier (optional)
 
         Return:
             list(str): list of process identifiers that has been run on other nodes
         """
-
-        if process.get('name') == 'srun' and not process.get('childs'):
+        if process.get('name') == 'srun':
             orted_jobid = self._check_orted_jobid(process)
             if orted_jobid:
                 orted_procs = self._find_orted_procs_with_jobid(orted_jobid)
                 if orted_procs:
                     return orted_procs
+            elif slurm_step_id:
+                stepsd_step_ids = self._find_slurmstepd_with_step_id(slurm_step_id)
+                return stepsd_step_ids
+            elif process.get('slurm_step_id'):
+                stepsd_step_ids = self._find_slurmstepd_with_step_id(process.get('slurm_step_id'))
+                return stepsd_step_ids
 
-    def _iterate_childs(self, process, level=0):
+        return None
+
+    def _iterate_childs(self, process, level=0, slurm_step_id=None):
         """Generator recursive function which looks for child processes.
 
         Args:
@@ -152,7 +191,7 @@ class ProcTraces:
         childs = process.get('childs', [])
         childs_node = process.get('node')
 
-        other_childs = self.childs_on_other_nodes(process)
+        other_childs = self.childs_on_other_nodes(process, slurm_step_id)
         if other_childs:
             childs.extend(other_childs)
             childs_node = None
@@ -160,7 +199,7 @@ class ProcTraces:
         for child_pid in childs:
             child_process = self.get_process(child_pid, childs_node)
             if child_process:
-                yield from self._iterate_childs(child_process, level)
+                yield from self._iterate_childs(child_process, level, slurm_step_id)
             else:
                 if not self.ignore_errors:
                     raise ValueError(f'child process {child_pid} not found')
@@ -179,4 +218,4 @@ class ProcTraces:
         """
         process = self.get_process(pid, node_name)
 
-        yield from self._iterate_childs(process)
+        yield from self._iterate_childs(process, slurm_step_id=process.get('slurm_step_id'))
