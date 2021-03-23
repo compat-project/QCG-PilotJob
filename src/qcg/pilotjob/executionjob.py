@@ -414,7 +414,7 @@ class LauncherExecutionJob(ExecutionJob):
                    'options': {'binding': binding,
                                'aux_dir': aux_dir,
                                'log_level': Config.LOG_LEVEL.get(config),
-                               'proc_stats': False if Config.DISABLE_PROC_STATS.get(config) else True }} for node in nodes]
+                               'proc_stats': Config.ENABLE_PROC_STATS.get(config) }} for node in nodes]
         cls.launcher = Launcher(config, wdir, aux_dir)
 
         asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(cls.launcher.start(agents)))

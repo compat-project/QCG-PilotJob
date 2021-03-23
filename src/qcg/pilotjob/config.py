@@ -184,9 +184,9 @@ class Config(Enum):
         'default': 'openmpi'
     }
 
-    DISABLE_PROC_STATS = {
-        'name': 'disable.proc.stats',
-        'cmd_opt': '--disable-proc-stats',
+    ENABLE_PROC_STATS = {
+        'name': 'enable.proc.stats',
+        'cmd_opt': '--enable-proc-stats',
         'default': False
     }
 
@@ -200,3 +200,4 @@ class Config(Enum):
             return self.value['get'](config)
 
         return config.get(self, self.value['default'])
+
