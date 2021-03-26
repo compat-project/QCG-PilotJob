@@ -41,10 +41,21 @@ def print_process_tree(procs, job_pid, pname=None, only_target=False):
             print(output)
 
 
+def print_process_detail(process):
+    print(f'{process.get("pid", "X")}:{process.get("name", "X")}')
+    print(f'\tcreated: {process.get("created", "X")}')
+    print(f'\tcmdline: {" ".join(process.get("cmdline", []))}')
+    print(f'\tparent: {process.get("parent", "X")}:{process.get("parent_name", "X")}')
+    print(f'\tcpu affinity: {process.get("cpu_affinity", "X")}')
+    print(f'\tcpu times: {process.get("cpu_times", "X")}')
+    print(f'\tcpu memory info: {process.get("memory_info", "X")}')
+    print(f'\tcpu memory percent: {process.get("memory_percent", "X")}')
+
+
 def find_child_processes_with_name(procs, pid, pname):
     result = []
 
-    for process, _ in procs.process_iterator(job_pid):
+    for process, _ in procs.process_iterator(pid):
         if process.get('name', 'X') == pname:
             result.append(process)
 
@@ -106,9 +117,8 @@ def tree(wdir, jobids, all, verbose):
 @processes.command()
 @click.argument('wdir', type=click.Path(exists=True, file_okay=False, dir_okay=True))
 @click.argument('jobids', type=str, nargs=-1)
-@click.option('--all', is_flag=True, default=False)
 @click.option('--verbose', is_flag=True, default=False)
-def apps(wdir, jobids, all, verbose):
+def apps(wdir, jobids, verbose):
     stats, procs = read_logs(wdir, verbose)
 
     for job_name in jobids:
@@ -123,15 +133,10 @@ def apps(wdir, jobids, all, verbose):
             sys.stderr.write(f'warning: not found job "{job_name}" PID')
             continue
 
-        job_process = procs.get_process(job_pid)
-        if job_process:
-            print(f'job {job_name}, job process id {job_pid}, application name {job_pname}')
-            print_process_tree(procs, job_pid, pname=job_pname, only_target=not all)
-        else:
-            sys.stderr.write(f'warning: process {job_pname or "unknown"} with PID {job_pid} not found on any node')
-
         target_processes = find_child_processes_with_name(procs, job_pid, job_pname)
         print(f'found {len(target_processes)} target processes')
+        for process in target_processes:
+            print_process_detail(process)
 
 
 if __name__ == '__main__':
