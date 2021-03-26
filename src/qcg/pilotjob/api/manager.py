@@ -675,7 +675,7 @@ class LocalManager(Manager):
               'log_level' - the log level ('DEBUG'); by default the log level is set to INFO
         """
         _logger.debug('initializing MP start method with "spawn"')
-        mp.set_start_method("spawn", force=True)
+        mp.set_start_method("fork", force=True)
         mp.freeze_support()
                         
         try:
