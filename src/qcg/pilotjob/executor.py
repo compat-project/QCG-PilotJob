@@ -63,8 +63,8 @@ class Executor:
         if self._resources.rtype == ResourcesType.SLURM and not Config.DISABLE_NL.get(config):
             _logger.info('initializing custom launching method (node launcher)')
             try:
-                LauncherExecutionJob.start_agents(self.base_wd, self.aux_dir, self._resources.nodes,
-                                                  self._resources.binding)
+                LauncherExecutionJob.start_agents(self._config, self.base_wd, self.aux_dir,
+                                                  self._resources.nodes, self._resources.binding)
                 self._is_node_launcher = True
                 _logger.info('node launcher succesfully initialized')
             except Exception as exc:
@@ -167,7 +167,7 @@ class Executor:
             exec_job = next(exec_job for exec_job in self._not_finished.values() if exec_job.job_iteration.job == job and exec_job.job_iteration.iteration == iteration)
             _logger.info(f'found execution job to cancel')
         except StopIteration:
-            _logger.error(f'iteration to cancel {job.name}:{iteration} not found in executor')
+            _logger.error(f'iteration to cancel {job_iteration.name} not found in executor')
             raise InternalError('iteration to cancel not found')
 
         asyncio.ensure_future(exec_job.cancel())

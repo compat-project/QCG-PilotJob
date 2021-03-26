@@ -37,6 +37,7 @@ A python service for easy execution of many tasks inside a single allocation.
    resourceschedulers
    resume
    performance_tuning
+   processes
 
 .. toctree::
    :maxdepth: 2
