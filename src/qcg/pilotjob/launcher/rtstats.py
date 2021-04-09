@@ -61,7 +61,7 @@ class RunTimeStats:
         finally:
             _logger.info(f'finishing gathering run times statistics')
             try:
-                rt_fname=f'rt_{self.nodename}_{str(datetime.now())}_{str(os.getpid())}.log'
+                rt_fname=f'rtimes_{self.nodename}_{str(datetime.now())}_{str(os.getpid())}.log'
 
                 def set_encoder(obj):
                     if isinstance(obj, set):
