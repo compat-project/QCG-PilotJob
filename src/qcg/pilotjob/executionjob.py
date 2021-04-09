@@ -429,7 +429,7 @@ class LauncherExecutionJob(ExecutionJob):
             cls.launcher = None
 
     @profile
-    def __init__(self, executor, envs, allocation, job_iteration):
+    def __init__(self, executor, envs, allocation, job_iteration, schema):
         """Initialize instance.
 
         Args:
@@ -437,15 +437,19 @@ class LauncherExecutionJob(ExecutionJob):
             envs (list(Environment)): list of environment instances
             allocation (Allocation): scheduled allocation for job iteration
             job_iteration (SchedulingIteration): execution schema
+            schema (ExecutionSchema): execution schema
         """
         super().__init__(executor, envs, allocation, job_iteration)
-        self.env_opts = {'nohostfile': True}
+        self._schema = schema
+        if schema:
+            self.env_opts = schema.get_env_opts()
 
     def preprocess(self):
         """Prepare environment for job execution.
         Setup sandbox and environment variables. Resolve module loading and virtual environment activation.
         """
         super().setup_sandbox()
+        self._schema.preprocess(self)
         super().preprocess()
 
     @profile
