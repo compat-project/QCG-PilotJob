@@ -50,7 +50,7 @@ class JobsReportStats:
             self._parse_service_logs(self.log_files)
 
         if self.rt_files:
-            self._parse_rt_logs(self.log_files)
+            self._parse_rt_logs(self.rt_files)
 
     @staticmethod
     def _parse_allocation(allocation):
@@ -242,7 +242,7 @@ class JobsReportStats:
         for rt_log in rt_logs:
             try:
                 if self.verbose:
-                    print('reading real time log file {rt_log} ...')
+                    print(f'reading real time log file {rt_log} ...')
 
                 with open(rt_log, 'rt') as rt_file:
                     node_rtimes = json.load(rt_file)
@@ -286,10 +286,13 @@ class JobsReportStats:
         if all((min_real_start is not None, max_real_finish is not None)):
             self.jstats['total_real_time'] = (max_real_finish - min_real_start).total_seconds()
 
-    def job_start_finish_launch_overheads(self, detail=False):
+    def job_start_finish_launch_overheads(self, details=False):
         total_start_overhead = 0
         total_finish_overhead = 0
         total_jobs = 0
+        total_real_runtime = 0
+        total_qcg_runtime = 0
+        total_job_overhead_per_runtime = 0
 
         result = {}
         for job_name, job_data in self.jstats['jobs'].items():
@@ -300,13 +303,24 @@ class JobsReportStats:
                 qcg_job_finish = job_data['f_time']
 
                 start_overhead = (real_job_start - qcg_job_start).total_seconds()
-                finish_overhead = (real_job_finish - qcg_job_finish).total_seconds()
+                finish_overhead = (qcg_job_finish - real_job_finish).total_seconds()
 
-                if detail:
+                job_real_runtime = (real_job_finish - real_job_start).total_seconds()
+                job_qcg_runtime = (qcg_job_finish - qcg_job_start).total_seconds()
+
+                total_real_runtime += job_real_runtime
+                total_qcg_runtime += job_qcg_runtime
+
+                if details:
                     result.setdefault('jobs', {})[job_name] = {'start': start_overhead, 'finish': finish_overhead}
 
                 total_start_overhead += start_overhead
                 total_finish_overhead += finish_overhead
+
+#                print(f'job {job_name} overhead: {(start_overhead + finish_overhead)}')
+#                print(f'job {job_name} runtime: {job_real_runtime}')
+#                print(f'job {job_name} overhead per runtime %: {100.0 * ((start_overhead + finish_overhead) / job_real_runtime)}')
+                total_job_overhead_per_runtime += 100.0 * ((start_overhead + finish_overhead) / job_real_runtime)
                 total_jobs += 1
 
         if self.verbose:
@@ -315,9 +329,12 @@ class JobsReportStats:
         result['start'] = total_start_overhead
         result['finish'] = total_finish_overhead
         result['total'] = total_start_overhead + total_finish_overhead
-        result['job_start_avg'] = total_start_overhead/total_jobs
-        result['job_finish_avg'] = total_finish_overhead/total_jobs
-        result['job_avg'] = (total_start_overhead + total_finish_overhead)/total_jobs
+        result['job_start_avg'] = total_start_overhead/total_jobs if total_jobs else 0
+        result['job_finish_avg'] = total_finish_overhead/total_jobs if total_jobs else 0
+        result['job_avg'] = (total_start_overhead + total_finish_overhead)/total_jobs if total_jobs else 0
+        result['job_real_rt_avg'] = (total_real_runtime)/total_jobs if total_jobs else 0
+        result['job_qcg_rt_avg'] = (total_qcg_runtime)/total_jobs if total_jobs else 0
+        result['job_avg_per_rt'] = (total_job_overhead_per_runtime)/total_jobs if total_jobs else 0
         result['analyzed_jobs'] = total_jobs
 
         return result
@@ -325,8 +342,8 @@ class JobsReportStats:
     def _generate_gantt_dataframe(self, start_metric_name, finish_metric_name):
         jobs_chart = []
 
-        for job_name, job_data in self.jstats.get('jobs', {}):
-            if all(elem in job_data for elem in ['nodes', start_metric_name, finish_metric_name]):
+        for job_name, job_data in self.jstats.get('jobs', {}).items():
+            if all(job_data.get(elem) is not None for elem in ['nodes', start_metric_name, finish_metric_name]):
                 for node_name, cores in job_data.get('nodes', {}).items():
                     jobs_chart.extend([{'Job': job_name,
                                         'Start': str(job_data.get(start_metric_name)),
@@ -352,7 +369,7 @@ class JobsReportStats:
 
         jobs_chart = self._generate_gantt_dataframe(start_metric_name, finish_metric_name)
 
-        for job_name, job_data in self.jstats.get('jobs', {}):
+        for job_name, job_data in self.jstats.get('jobs', {}).items():
             if all(elem in job_data for elem in ['nodes', 'real_start', 'real_finish']):
                 for node_name, cores in job_data.get('nodes', {}).items():
                     jobs_chart.extend([{'Job': job_name,
@@ -364,16 +381,17 @@ class JobsReportStats:
             print(f'generated {len(jobs_chart)} dataframes')
 
         df = pd.DataFrame(jobs_chart)
-        fig = px.timeline(df, x_start='Start', x_end='Finish', y='Core', color='Task')
+        fig = px.timeline(df, x_start='Start', x_end='Finish', y='Core', color='Job')
         fig.write_image(output_file)
 
-    def resource_usage(self):
+    def resource_usage(self, details=False):
         resource_nodes = {}
         jobs = {}
+        report = {}
 
         # assign jobs to cores
         for job_name, job_data in self.jstats.get('jobs', {}).items():
-            if 'nodes' in job_data:
+            if job_data.get('nodes') is not None:
                 for node_name, cores in job_data.get('nodes', {}).items():
                     for core in cores:
                         resource_nodes.setdefault(node_name, {}).setdefault(core, []).append(job_data)
@@ -381,6 +399,9 @@ class JobsReportStats:
         min_start_moment = self.jstats.get('min_real_start')
         max_finish_moment = self.jstats.get('max_real_finish')
         total_time = (max_finish_moment - min_start_moment).total_seconds()
+
+        total_core_utilization = 0
+        total_cores = 0 
 
         # sort jobs in each of the core by the start time
         for node_name, cores in resource_nodes.items():
@@ -407,7 +428,109 @@ class JobsReportStats:
                     core_unused += core_finish_wait
 
                 core_utilization = ((total_time - core_unused) / total_time) * 100
-                print(f'node [{node_name}][{core_name}]: unused: {core_unused} (initial {core_initial_wait}, between jobs {core_injobs_wait}, finish {core_finish_wait}), utilization: {core_utilization:.1f}%')
+                total_core_utilization += core_utilization
+                total_cores += 1
+
+                if details:
+                  report.setdefault('nodes', {}).setdefault(node_name, {})[core_name] =  {
+                    'unused': core_unused,
+                    'utilization': core_utilization,
+                    'initial_unused': core_initial_wait,
+                    'injobs_unused': core_injobs_wait,
+                    'finish_unused': core_finish_wait,
+                  }
+
+        report['total_cores'] = total_cores
+        report['avg_core_utilization'] = total_core_utilization/total_cores if total_cores else 0
+
+        return report
+
+    def _find_previous_latest_job_finish_on_resources(self, resource_nodes, job_data):
+        """On resources allocated for job ``job_data``, find the last, previous job finish.
+
+        Args:
+           resource_nodes (dict): a mapping between 'nodes->cores->jobs' where jobs are sorted by the ``real_start`` attribute
+           job_data (dict): job attributes (from ``self.jstats['jobs']``)
+
+        Return:
+           datetime - a moment when the last job finished, before the specified one, on job's resources.
+        """
+        max_finish_time = None
+
+        job_start = job_data['real_start']
+        for node_name, cores in job_data.get('nodes', {}).items():
+            # find the last job that finished before 'job_start'
+            for core_name, core_jobs in cores.items():
+                core_jobs = resource_nodes.get(node_name, {}).get(core_name, [])
+                # find first job which start time is >= `job_start`
+                next_job = next((position for position, curr_job_data in enumerate(core_jobs) if curr_job_data >= job_start), None)
+                if next_job is not None and next_job > 0:
+                    prev_job = core_jobs[next_job - 1]
+                    if max_finish_time is None or prev_job['real_finish'] > max_finish_time:
+                        max_finish_time = prev_job['real_finish']
+    
+        return max_finish_time
+
+    def efficiency(self, details=False):
+        resource_nodes = {}
+        jobs = {}
+        report = {}
+
+        # assign jobs to cores
+        for job_name, job_data in self.jstats.get('jobs', {}).items():
+            if job_data.get('nodes') is not None:
+                for node_name, cores in job_data.get('nodes', {}).items():
+                    for core in cores:
+                        resource_nodes.setdefault(node_name, {}).setdefault(core, []).append(job_data)
+
+        min_start_moment = self.jstats.get('min_real_start')
+        max_finish_moment = self.jstats.get('max_real_finish')
+        total_time = (max_finish_moment - min_start_moment).total_seconds()
+
+        total_core_utilization = 0
+        total_cores = 0 
+
+        # sort jobs in each of the core by the start time
+        for node_name, cores in resource_nodes.items():
+            for core_name, core_jobs in cores.items():
+                core_jobs.sort(key=lambda job: job['real_start'])
+
+                core_unused = 0
+                if core_jobs:
+                    # moment between total scenario start and first job
+                    core_initial_wait = (core_jobs[0]['real_start'] - min_start_moment).total_seconds()
+                    core_unused += core_initial_wait
+
+                    core_injobs_wait = 0
+                    for job_nr in range(1,len(core_jobs)):
+                        curr_job = core_jobs[job_nr]
+                        prev_job = core_jobs[job_nr-1]
+
+                        # moments between current job start and last job finish
+                        core_injobs_wait += (curr_job['real_start'] - prev_job['real_finish']).total_seconds()
+                    core_unused += core_injobs_wait
+
+                    # moment between last job finish and total scenario finish
+                    core_finish_wait = (max_finish_moment - core_jobs[-1]['real_finish']).total_seconds()
+                    core_unused += core_finish_wait
+
+                core_utilization = ((total_time - core_unused) / total_time) * 100
+                total_core_utilization += core_utilization
+                total_cores += 1
+
+                if details:
+                  report.setdefault('nodes', {}).setdefault(node_name, {})[core_name] =  {
+                    'unused': core_unused,
+                    'utilization': core_utilization,
+                    'initial_unused': core_initial_wait,
+                    'injobs_unused': core_injobs_wait,
+                    'finish_unused': core_finish_wait,
+                  }
+
+        report['total_cores'] = total_cores
+        report['avg_core_utilization'] = total_core_utilization/total_cores if total_cores else 0
+
+        return report
 
     def print_stats(self):
         if self.jstats:
