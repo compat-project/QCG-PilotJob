@@ -1,21 +1,13 @@
-import argparse
 import json
-import sys
 import statistics
-import traceback
 import collections
 import re
 
-from qcg.pilotjob.utils.auxdir import find_single_aux_dir, find_report_files, find_log_files, \
-        find_rtimes_files, find_final_status_files
+from qcg.pilotjob.utils.auxdir import find_report_files, find_log_files, find_rtimes_files, find_final_status_files
 from qcg.pilotjob.utils.util import parse_datetime
 
 from json import JSONDecodeError
 from datetime import datetime, timedelta
-from os.path import exists, join, abspath, isdir
-from os import listdir
-from math import ceil
-
 
 
 class JobsReportStats:
@@ -98,7 +90,7 @@ class JobsReportStats:
         The read data with statistics data are written to the self.jstats dictionary.
 
         Args:
-            report_file (str) - path to the QCG-PJM json report file
+            report_files (list(str)) - list of paths to the QCG-PJM json report file
         """
         self.jstats = {'jobs': {}}
         min_queue, max_queue, min_start, max_finish = None, None, None, None
@@ -341,7 +333,7 @@ class JobsReportStats:
 
                     if global_service_started is None or service_started < global_service_started:
                         global_service_started = service_started
-                    if global_service_finished is None or serivce_finished > global_serivce_finished:
+                    if global_service_finished is None or service_finished > global_service_finished:
                         global_service_finished = service_finished
 
                 global_nodes += final_report.get('Resources', {}).get('TotalNodes', 0)
@@ -565,8 +557,8 @@ class JobsReportStats:
             import plotly.express as px
             import pandas as pd
         except ImportError:
-            raise ImportError('To generate gantt chart the following packages must be installed: '\
-                    'plotly.express, pandas, kaleido')
+            raise ImportError('To generate gantt chart the following packages must be installed: '
+                              'plotly.express, pandas, kaleido')
 
         start_metric_name = 's_time'
         finish_metric_name = 'f_time'
@@ -575,46 +567,6 @@ class JobsReportStats:
             finish_metric_name = 'real_finish'
 
         chart_data = dataframe_generator(start_metric_name, finish_metric_name)
-
-        if self.verbose:
-            print(f'generated dataframes for {chart_data.get("total_jobs")} jobs on {chart_data.get("total_cores")} cores')
-            print(f'total nodes {chart_data.get("total_nodes")}, total seconds {chart_data.get("total_seconds")}')
-
-        min_start_moment = self.jstats.get('min_real_start')
-        max_finish_moment = self.jstats.get('max_real_finish')
-
-#        print(f'node order: {chart_data.get("node_order")}')
-        df = pd.DataFrame(chart_data.get("chart_data"))
-        fig = px.timeline(df, x_start='Start', x_end='Finish', y='Core', color='Job', category_orders={'Core': chart_data.get('node_order')})
-        fig.update_layout(
-                autosize=False,
-                width=int(chart_data.get('total_seconds', 1))*20,
-                height=chart_data.get('total_cores', 1)*20,
-                yaxis=dict(
-                    title_text="Cores",
-                    ticktext=chart_data.get("node_order"),
-#                    tickvals=[1, 2, 3, 4],
-                    tickmode="array"
-                ))
-        fig.write_image(output_file)
-
-
-    def gantt(self, output_file, real=True):
-
-        try:
-            import plotly.express as px
-            import pandas as pd
-        except ImportError:
-            raise ImportError('To generate gantt chart the following packages must be installed: '\
-                    'plotly.express, pandas, kaleido')
-
-        start_metric_name = 's_time'
-        finish_metric_name = 'f_time'
-        if real:
-            start_metric_name = 'real_start'
-            finish_metric_name = 'real_finish'
-
-        chart_data = self._generate_gantt_dataframe(start_metric_name, finish_metric_name)
 
         if self.verbose:
             print(f'generated dataframes for {chart_data.get("total_jobs")} jobs on {chart_data.get("total_cores")} cores')
@@ -670,6 +622,9 @@ class JobsReportStats:
             for core_name, core_jobs in cores.items():
                 core_jobs.sort(key=lambda job: job['real_start'])
 
+                core_initial_wait = 0
+                core_injobs_wait = 0
+                core_finish_wait = 0
                 core_unused = 0
                 if core_jobs:
                     # moment between total scenario start and first job

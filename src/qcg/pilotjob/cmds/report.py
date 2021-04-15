@@ -230,7 +230,7 @@ def launch_stats(wdir, details, verbose):
     if details and 'jobs' in report:
         print('\t{:>40}'.format('individual job statistics'))
         for job_name, job_overheads in report.get('jobs', {}).items():
-            print(f'\t\t{job_name}: total {job_overheads.get("start", 0) + job_overheads.get("finish", 0):.4f}, '\
+            print(f'\t\t{job_name}: total {job_overheads.get("start", 0) + job_overheads.get("finish", 0):.4f}, '
                   f'start {job_overheads.get("start"):.4f}, stop {job_overheads.get("finish"):.4f}')
 
 
