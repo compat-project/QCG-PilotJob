@@ -89,6 +89,26 @@ def find_report_files(path):
     return report_files
 
 
+def find_final_status_files(path):
+    """Find all files named `final_status.json` in qcg-pilotjob auxiliary directories in given path.
+    First we look for auxilary directories, and then in those dirs we look for `final_status.json` files.
+
+    Args:
+        path (str): path to directory where to look for report files
+
+    Returns:
+        list(str): list of all `final_status.json` files in given path.
+    """
+    report_files = []
+
+    for aux_path in find_aux_dirs(path):
+        report_file = os.path.join(aux_path, 'final_status.json')
+        if os.path.isfile(report_file):
+            report_files.append(report_file)
+
+    return report_files
+
+
 def find_log_files(path):
     """Find all files named `service.log` in qcg-pilotjob auxiliary directories in given path.
     First we look for auxilary directories, and then in those dirs we look for `service.log` files.

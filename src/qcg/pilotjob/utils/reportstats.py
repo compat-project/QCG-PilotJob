@@ -3,9 +3,11 @@ import json
 import sys
 import statistics
 import traceback
+import collections
 import re
 
-from qcg.pilotjob.utils.auxdir import find_single_aux_dir, find_report_files, find_log_files
+from qcg.pilotjob.utils.auxdir import find_single_aux_dir, find_report_files, find_log_files, \
+        find_rtimes_files, find_final_status_files
 from qcg.pilotjob.utils.util import parse_datetime
 
 from json import JSONDecodeError
@@ -18,7 +20,24 @@ from math import ceil
 
 class JobsReportStats:
 
-    def __init__(self, report_files, log_files=None, rt_files=None, verbose=False):
+    @staticmethod
+    def from_workdir(workdir, verbose=False):
+        jobs_report_path = find_report_files(workdir)
+        if verbose:
+            print(f'found report files: {",".join(jobs_report_path)}')
+        log_files = find_log_files(workdir)
+        if verbose:
+            print(f'found log files: {",".join(log_files)}')
+        rt_files = find_rtimes_files(workdir)
+        if verbose:
+            print(f'found real time log files: {",".join(rt_files)}')
+        final_files = find_final_status_files(workdir)
+        if verbose:
+            print(f'found final status log files: {",".join(final_files)}')
+
+        return JobsReportStats(jobs_report_path, log_files, rt_files, final_files, verbose)
+
+    def __init__(self, report_files, log_files=None, rt_files=None, final_files=None, verbose=False):
         """
         Analyze QCG-PJM execution.
 
@@ -29,16 +48,25 @@ class JobsReportStats:
         self.report_files = report_files
         self.log_files = log_files or []
         self.rt_files = rt_files or []
+        self.final_files = final_files or []
 
         self.verbose = verbose
 
         self.jstats = {}
+        self.gstats = {}
         self.res = {}
 
         self._analyze()
 
+    def has_realtime_stats(self):
+        return self.rt_files and all(self.jstats.get(attr) for attr in ['min_real_start',
+            'max_real_finish', 'total_real_time'])
+
     def job_stats(self):
         return self.jstats
+
+    def global_stats(self):
+        return self.gstats
 
     def resources(self):
         return self.res
@@ -51,6 +79,9 @@ class JobsReportStats:
 
         if self.rt_files:
             self._parse_rt_logs(self.rt_files)
+
+        if self.final_files:
+            self._parse_final_files(self.final_files)
 
     @staticmethod
     def _parse_allocation(allocation):
@@ -106,13 +137,14 @@ class JobsReportStats:
                     exec_state = list(filter(lambda st_en: st_en['state'] == 'EXECUTING', job_entry['history']))
 
                     # find finish executing time
-                    finish_state = list(filter(lambda st_en: st_en['state'] == 'SUCCEED', job_entry['history']))
+                    finish_state = list(filter(lambda st_en: st_en['state'] in ['SUCCEED','FAILED'], job_entry['history']))
                     assert len(finish_state) == 1, 'for job {} in line {}'.format(job_entry['name'], line)
 
                     job_nodes = None
                     allocation = job_entry.get('runtime', {}).get('allocation', None)
                     if allocation is not None:
                         job_nodes = JobsReportStats._parse_allocation(allocation)
+#                        print(f'found allocation for job {job_entry["name"]}: {allocation}, after parsed: {job_nodes}')
 
                     queued_time = parse_datetime(queued_state[0]['date']) if queued_state else None
                     schedule_time = parse_datetime(schedule_state[0]['date']) if schedule_state else None
@@ -286,6 +318,72 @@ class JobsReportStats:
         if all((min_real_start is not None, max_real_finish is not None)):
             self.jstats['total_real_time'] = (max_real_finish - min_real_start).total_seconds()
 
+    def _parse_final_files(self, final_logs):
+
+        global_service_started = None
+        global_service_finished = None
+
+        global_nodes = 0
+        global_cores = 0
+        global_jobs = 0
+        global_iterations = 0
+        global_failed_jobs = 0
+        global_failed_iterations = 0
+
+        for final_log in final_logs:
+            try:
+                with open(final_log, 'rt') as final_file:
+                    final_report = json.load(final_file)
+
+                if all(attr in final_report.get('System', {}) for attr in ['Started', 'Generated']):
+                    service_started = parse_datetime(final_report['System']['Started'])
+                    service_finished = parse_datetime(final_report['System']['Generated'])
+
+                    if global_service_started is None or service_started < global_service_started:
+                        global_service_started = service_started
+                    if global_service_finished is None or serivce_finished > global_serivce_finished:
+                        global_service_finished = service_finished
+
+                global_nodes += final_report.get('Resources', {}).get('TotalNodes', 0)
+                global_cores += final_report.get('Resources', {}).get('TotalCores', 0)
+                global_jobs += final_report.get('JobStats', {}).get('TotalJobs', 0)
+                global_failed_jobs += final_report.get('JobStats', {}).get('FailedJobs', 0)
+                global_iterations += final_report.get('IterationStats', {}).get('TotalIterations', 0)
+                global_failed_iterations += final_report.get('IterationStats', {}).get('FailedIterations', 0)
+
+            except Exception as ex:
+                print(f'warning: failed to read final status log file {final_log}: {str(ex)}')
+
+        if all((global_service_started is not None, global_service_finished is not None)):
+            self.gstats['service_start'] = global_service_started
+            self.gstats['service_finish'] = global_service_finished
+
+        self.gstats['total_nodes'] = global_nodes
+        self.gstats['total_cores'] = global_cores
+        self.gstats['total_jobs'] = global_jobs
+        self.gstats['failed_jobs'] = global_failed_jobs
+        self.gstats['total_iterations'] = global_iterations
+        self.gstats['failed_iterations'] = global_failed_iterations
+
+    def job_info(self, *job_ids):
+        return {job_id: self.jstats.get('jobs', {}).get(job_id) for job_id in job_ids}
+
+    def filter_jobs(self, filter_def):
+        for job_name, job_data in self.jstats.get('jobs', {}).items():
+            if filter_def(job_data):
+                yield job_data
+
+    def allocation_jobs(self, node_name, core_name):
+        jobs = []
+        
+        for job_name, job_data in self.jstats.get('jobs', {}).items():
+            job_nodes = job_data.get('nodes')
+            if job_nodes and core_name in job_nodes.get(node_name, []):
+                jobs.append(job_data)
+
+        jobs.sort(key=lambda job: job['real_start'])
+        return jobs
+
     def job_start_finish_launch_overheads(self, details=False):
         total_start_overhead = 0
         total_finish_overhead = 0
@@ -342,15 +440,164 @@ class JobsReportStats:
     def _generate_gantt_dataframe(self, start_metric_name, finish_metric_name):
         jobs_chart = []
 
+        min_start = None
+        max_finish = None
+
+        avail_nodes = collections.OrderedDict()
+        total_jobs = 0
+
         for job_name, job_data in self.jstats.get('jobs', {}).items():
             if all(job_data.get(elem) is not None for elem in ['nodes', start_metric_name, finish_metric_name]):
+                total_jobs += 1
+
+                if min_start is None or job_data.get(start_metric_name) < min_start:
+                    min_start = job_data.get(start_metric_name)
+                if max_finish is None or job_data.get(finish_metric_name) > max_finish:
+                    max_finish = job_data.get(finish_metric_name)
+
                 for node_name, cores in job_data.get('nodes', {}).items():
+                    avail_nodes.setdefault(node_name, set()).update(int(core) for core in cores)
+
                     jobs_chart.extend([{'Job': job_name,
                                         'Start': str(job_data.get(start_metric_name)),
                                         'Finish': str(job_data.get(finish_metric_name)),
                                         'Core': f'{node_name}:{core}'} for core in cores])
 
-        return jobs_chart
+        total_nodes = len(avail_nodes)
+        total_cores = sum(len(cores) for _, cores in avail_nodes.items())
+        total_seconds = (max_finish - min_start).total_seconds()
+        node_order = []
+        while len(avail_nodes) > 0:
+            node_name, cores = avail_nodes.popitem(last=False)
+            node_order.extend([f'{node_name}:{core}' for core in sorted(cores)])
+
+        return {'chart_data': jobs_chart,
+                'total_jobs': total_jobs,
+                'total_nodes': total_nodes,
+                'total_cores': total_cores,
+                'total_seconds': total_seconds,
+                'node_order': node_order}
+
+    def _generate_gantt_gaps_dataframe(self, start_metric_name, finish_metric_name):
+        gaps_chart = []
+
+        min_start = None
+        max_finish = None
+
+        avail_nodes = collections.OrderedDict()
+        total_jobs = 0
+
+        resource_nodes = {}
+
+        # assign jobs to cores to compute time boundaries
+        for job_name, job_data in self.jstats.get('jobs', {}).items():
+            if all(job_data.get(elem) is not None for elem in ['nodes', start_metric_name, finish_metric_name]):
+                total_jobs += 1
+
+                if min_start is None or job_data.get(start_metric_name) < min_start:
+                    min_start = job_data.get(start_metric_name)
+                if max_finish is None or job_data.get(finish_metric_name) > max_finish:
+                    max_finish = job_data.get(finish_metric_name)
+
+                for node_name, cores in job_data.get('nodes', {}).items():
+                    avail_nodes.setdefault(node_name, set()).update(int(core) for core in cores)
+
+                    for core in cores:
+                        resource_nodes.setdefault(node_name, {}).setdefault(core, []).append(job_data)
+
+        total_nodes = len(avail_nodes)
+        total_cores = sum(len(cores) for _, cores in avail_nodes.items())
+        total_seconds = (max_finish - min_start).total_seconds()
+
+        # sort jobs in each of the core by the start time
+        for node_name, cores in resource_nodes.items():
+            for core_name, core_jobs in cores.items():
+                core_jobs.sort(key=lambda job: job[start_metric_name])
+
+                if core_jobs:
+                    if core_jobs[0][start_metric_name] != min_start:
+                        gaps_chart.append({'Job': 'gap',
+                                           'Start': min_start,
+                                           'Finish': core_jobs[0][start_metric_name],
+                                           'Core': f'{node_name}:{core_name}'})
+
+                    for job_nr in range(1,len(core_jobs)):
+                        curr_job = core_jobs[job_nr]
+                        prev_job = core_jobs[job_nr-1]
+
+                        gaps_chart.append({'Job': 'gap',
+                                           'Start': prev_job[finish_metric_name],
+                                           'Finish': curr_job[start_metric_name],
+                                           'Core': f'{node_name}:{core_name}'})
+
+                    if core_jobs[-1][finish_metric_name] != max_finish:
+                        gaps_chart.append({'Job': 'gap',
+                                           'Start': core_jobs[-1][finish_metric_name],
+                                           'Finish': max_finish,
+                                           'Core': f'{node_name}:{core_name}'})
+                else:
+                    gaps_chart.append({'Job': 'gap',
+                                       'Start': min_start,
+                                       'Finish': max_finish,
+                                       'Core': f'{node_name}:{core_name}'})
+
+        node_order = []
+        while len(avail_nodes) > 0:
+            node_name, cores = avail_nodes.popitem(last=False)
+            node_order.extend([f'{node_name}:{core}' for core in sorted(cores)])
+
+        return {'chart_data': gaps_chart,
+                'total_jobs': total_jobs,
+                'total_nodes': total_nodes,
+                'total_cores': total_cores,
+                'total_seconds': total_seconds,
+                'node_order': node_order}
+
+    def gantt(self, output_file, real=True):
+        self._generate_gantt_chart(output_file, self._generate_gantt_dataframe, real=real)
+
+    def gantt_gaps(self, output_file, real=True):
+        self._generate_gantt_chart(output_file, self._generate_gantt_gaps_dataframe, real=real)
+
+    def _generate_gantt_chart(self, output_file, dataframe_generator, real=True):
+
+        try:
+            import plotly.express as px
+            import pandas as pd
+        except ImportError:
+            raise ImportError('To generate gantt chart the following packages must be installed: '\
+                    'plotly.express, pandas, kaleido')
+
+        start_metric_name = 's_time'
+        finish_metric_name = 'f_time'
+        if real:
+            start_metric_name = 'real_start'
+            finish_metric_name = 'real_finish'
+
+        chart_data = dataframe_generator(start_metric_name, finish_metric_name)
+
+        if self.verbose:
+            print(f'generated dataframes for {chart_data.get("total_jobs")} jobs on {chart_data.get("total_cores")} cores')
+            print(f'total nodes {chart_data.get("total_nodes")}, total seconds {chart_data.get("total_seconds")}')
+
+        min_start_moment = self.jstats.get('min_real_start')
+        max_finish_moment = self.jstats.get('max_real_finish')
+
+#        print(f'node order: {chart_data.get("node_order")}')
+        df = pd.DataFrame(chart_data.get("chart_data"))
+        fig = px.timeline(df, x_start='Start', x_end='Finish', y='Core', color='Job', category_orders={'Core': chart_data.get('node_order')})
+        fig.update_layout(
+                autosize=False,
+                width=int(chart_data.get('total_seconds', 1))*20,
+                height=chart_data.get('total_cores', 1)*20,
+                yaxis=dict(
+                    title_text="Cores",
+                    ticktext=chart_data.get("node_order"),
+#                    tickvals=[1, 2, 3, 4],
+                    tickmode="array"
+                ))
+        fig.write_image(output_file)
+
 
     def gantt(self, output_file, real=True):
 
@@ -367,21 +614,28 @@ class JobsReportStats:
             start_metric_name = 'real_start'
             finish_metric_name = 'real_finish'
 
-        jobs_chart = self._generate_gantt_dataframe(start_metric_name, finish_metric_name)
-
-        for job_name, job_data in self.jstats.get('jobs', {}).items():
-            if all(elem in job_data for elem in ['nodes', 'real_start', 'real_finish']):
-                for node_name, cores in job_data.get('nodes', {}).items():
-                    jobs_chart.extend([{'Job': job_name,
-                                        'Start': job_data.get('real_start'),
-                                        'Finish': job_data.get('real_finish'),
-                                        'Core': f'{node_name}:{core}'} for core in cores])
+        chart_data = self._generate_gantt_dataframe(start_metric_name, finish_metric_name)
 
         if self.verbose:
-            print(f'generated {len(jobs_chart)} dataframes')
+            print(f'generated dataframes for {chart_data.get("total_jobs")} jobs on {chart_data.get("total_cores")} cores')
+            print(f'total nodes {chart_data.get("total_nodes")}, total seconds {chart_data.get("total_seconds")}')
 
-        df = pd.DataFrame(jobs_chart)
-        fig = px.timeline(df, x_start='Start', x_end='Finish', y='Core', color='Job')
+        min_start_moment = self.jstats.get('min_real_start')
+        max_finish_moment = self.jstats.get('max_real_finish')
+
+#        print(f'node order: {chart_data.get("node_order")}')
+        df = pd.DataFrame(chart_data.get("chart_data"))
+        fig = px.timeline(df, x_start='Start', x_end='Finish', y='Core', color='Job', category_orders={'Core': chart_data.get('node_order')})
+        fig.update_layout(
+                autosize=False,
+                width=int(chart_data.get('total_seconds', 1))*20,
+                height=chart_data.get('total_cores', 1)*20,
+                yaxis=dict(
+                    title_text="Cores",
+                    ticktext=chart_data.get("node_order"),
+#                    tickvals=[1, 2, 3, 4],
+                    tickmode="array"
+                ))
         fig.write_image(output_file)
 
     def resource_usage(self, details=False):
@@ -391,13 +645,21 @@ class JobsReportStats:
 
         # assign jobs to cores
         for job_name, job_data in self.jstats.get('jobs', {}).items():
-            if job_data.get('nodes') is not None:
+            if job_data.get('nodes') is not None and job_data.get('real_start') is not None:
                 for node_name, cores in job_data.get('nodes', {}).items():
                     for core in cores:
                         resource_nodes.setdefault(node_name, {}).setdefault(core, []).append(job_data)
 
-        min_start_moment = self.jstats.get('min_real_start')
-        max_finish_moment = self.jstats.get('max_real_finish')
+        report['method'] = 'from_service_start'
+
+        if all((self.gstats.get('service_start'), self.gstats.get('service_finish'))):
+            min_start_moment = self.gstats.get('service_start')
+            max_finish_moment = self.gstats.get('service_finish')
+        else:
+            min_start_moment = self.jstats.get('min_real_start')
+            max_finish_moment = self.jstats.get('max_real_finish')
+            report['method'] = 'from_first_job_start'
+
         total_time = (max_finish_moment - min_start_moment).total_seconds()
 
         total_core_utilization = 0
@@ -457,17 +719,18 @@ class JobsReportStats:
         """
         max_finish_time = None
 
-        job_start = job_data['real_start']
-        for node_name, cores in job_data.get('nodes', {}).items():
-            # find the last job that finished before 'job_start'
-            for core_name, core_jobs in cores.items():
-                core_jobs = resource_nodes.get(node_name, {}).get(core_name, [])
-                # find first job which start time is >= `job_start`
-                next_job = next((position for position, curr_job_data in enumerate(core_jobs) if curr_job_data >= job_start), None)
-                if next_job is not None and next_job > 0:
-                    prev_job = core_jobs[next_job - 1]
-                    if max_finish_time is None or prev_job['real_finish'] > max_finish_time:
-                        max_finish_time = prev_job['real_finish']
+        if job_data.get('real_start'):
+            job_start = job_data['real_start']
+            for node_name, cores in job_data.get('nodes', {}).items():
+                # find the last job that finished before 'job_start'
+                for core_name in cores:
+                    core_jobs = resource_nodes.get(node_name, {}).get(core_name, [])
+                    # find first job which start time is >= `job_start`
+                    next_job = next((position for position, curr_job_data in enumerate(core_jobs) if curr_job_data['real_start'] >= job_start), None)
+                    if next_job is not None and next_job > 0:
+                        prev_job = core_jobs[next_job - 1]
+                        if max_finish_time is None or prev_job['real_finish'] > max_finish_time:
+                            max_finish_time = prev_job['real_finish']
     
         return max_finish_time
 
@@ -476,12 +739,65 @@ class JobsReportStats:
         jobs = {}
         report = {}
 
+        min_start_moment = self.jstats.get('min_real_start')
+        max_finish_moment = self.jstats.get('max_real_finish')
+        total_time = (max_finish_moment - min_start_moment).total_seconds()
+
+        total_core_utilization = 0
+        total_cores = 0 
+
         # assign jobs to cores
         for job_name, job_data in self.jstats.get('jobs', {}).items():
-            if job_data.get('nodes') is not None:
+            if job_data.get('nodes') is not None and job_data.get('real_start') is not None:
                 for node_name, cores in job_data.get('nodes', {}).items():
                     for core in cores:
                         resource_nodes.setdefault(node_name, {}).setdefault(core, []).append(job_data)
+
+        # sort jobs in each of the core by the start time
+        for node_name, cores in resource_nodes.items():
+            for core_name, core_jobs in cores.items():
+                core_jobs.sort(key=lambda job: job['real_start'])
+
+        # sort jobs in each of the core by the start time
+        for node_name, cores in resource_nodes.items():
+            for core_name, core_jobs in cores.items():
+                core_unused = 0
+                prev_job = None
+
+                if core_jobs:
+                    for core_job in core_jobs:
+                        # moment between total scenario start and first job
+                        prev_job_finish_time = self._find_previous_latest_job_finish_on_resources(resource_nodes, core_job)
+
+                        if prev_job_finish_time:
+                            core_unused += (core_job['real_start'] - prev_job_finish_time).total_seconds()
+                        else:
+                            if prev_job:
+                                core_unused += (core_job['real_start'] - prev_job['real_finish']).total_seconds()
+                            else:
+                                core_unused += (core_job['real_start'] - min_start_moment).total_seconds()
+
+                        prev_job = core_job
+
+                core_utilization = ((total_time - core_unused) / total_time) * 100
+                if details:
+                    report.setdefault('nodes', {}).setdefault(node_name, {})[core_name] = {
+                            'unused': core_unused,
+                            'utilization': core_utilization
+                            }
+#                print(f'node {node_name}:{core_name}: utilization {core_utilization:.1f}%, unused {core_unused:.4f} of total {total_time:.4f}')
+                total_core_utilization += core_utilization
+                total_cores += 1
+
+        report['total_cores'] = total_cores
+        report['avg_core_utilization'] = total_core_utilization/total_cores if total_cores else 0
+        return report
+
+
+    def efficiency_core(self, dest_node_name, dest_core_name, details=False):
+        resource_nodes = {}
+        jobs = {}
+        report = {}
 
         min_start_moment = self.jstats.get('min_real_start')
         max_finish_moment = self.jstats.get('max_real_finish')
@@ -490,69 +806,50 @@ class JobsReportStats:
         total_core_utilization = 0
         total_cores = 0 
 
+        # assign jobs to cores
+        for job_name, job_data in self.jstats.get('jobs', {}).items():
+            if job_data.get('nodes') is not None:
+                for node_name, cores in job_data.get('nodes', {}).items():
+                    for core in cores:
+                        resource_nodes.setdefault(node_name, {}).setdefault(core, []).append(job_data)
+
         # sort jobs in each of the core by the start time
         for node_name, cores in resource_nodes.items():
             for core_name, core_jobs in cores.items():
                 core_jobs.sort(key=lambda job: job['real_start'])
 
-                core_unused = 0
-                if core_jobs:
-                    # moment between total scenario start and first job
-                    core_initial_wait = (core_jobs[0]['real_start'] - min_start_moment).total_seconds()
-                    core_unused += core_initial_wait
+#        for job_name, job_data in self.jstats.get('jobs', {}).items():
+#            if all(elem in job_data for elem in ['real_start', 'real_finish']):
+#                prev_job_finish_time = self._find_previous_latest_job_finish_on_resources(resource_nodes, job_data)
+#                print(f'{job_name}: started {job_data.get("real_start")}-{job_data.get("real_finish")} previous latest job finish time {prev_job_finish_time}')
 
-                    core_injobs_wait = 0
-                    for job_nr in range(1,len(core_jobs)):
-                        curr_job = core_jobs[job_nr]
-                        prev_job = core_jobs[job_nr-1]
+#        print(f'checking core {dest_core_name} on node {dest_node_name} ...')
+        core_jobs = resource_nodes.get(dest_node_name, {}).get(dest_core_name, {})
+#        print(f'found jobs {",".join([job["name"] for job in core_jobs])}')
+        core_unused = 0
+        prev_job = None
 
-                        # moments between current job start and last job finish
-                        core_injobs_wait += (curr_job['real_start'] - prev_job['real_finish']).total_seconds()
-                    core_unused += core_injobs_wait
+        if core_jobs:
+            for core_job in core_jobs:
+#                print(f'checking job {core_job["name"]} ...') 
 
-                    # moment between last job finish and total scenario finish
-                    core_finish_wait = (max_finish_moment - core_jobs[-1]['real_finish']).total_seconds()
-                    core_unused += core_finish_wait
+                # moment between total scenario start and first job
+                prev_job_finish_time = self._find_previous_latest_job_finish_on_resources(resource_nodes, core_job)
+#                print(f'found previous job latest finish time as {prev_job_finish_time}')
 
-                core_utilization = ((total_time - core_unused) / total_time) * 100
-                total_core_utilization += core_utilization
-                total_cores += 1
+                if prev_job_finish_time:
+                    core_unused += (core_job['real_start'] - prev_job_finish_time).total_seconds()
+                else:
+                    if prev_job:
+                        core_unused += (core_job['real_start'] - prev_job['real_finish']).total_seconds()
+                    else:
+                        core_unused += (core_job['real_start'] - min_start_moment).total_seconds()
 
-                if details:
-                  report.setdefault('nodes', {}).setdefault(node_name, {})[core_name] =  {
-                    'unused': core_unused,
-                    'utilization': core_utilization,
-                    'initial_unused': core_initial_wait,
-                    'injobs_unused': core_injobs_wait,
-                    'finish_unused': core_finish_wait,
-                  }
+                prev_job = core_job
+#                print(f'after job {core_job["name"]} core unused {core_unused:.5f} ...') 
 
-        report['total_cores'] = total_cores
-        report['avg_core_utilization'] = total_core_utilization/total_cores if total_cores else 0
-
-        return report
-
-    def print_stats(self):
-        if self.jstats:
-            print('{} jobs executed in {} secs'.format(len(self.jstats.get('jobs', {})),
-                self.jstats['total_time'].total_seconds() if 'total_time' in self.jstats else 0))
-            print('\t{:>20}: {}'.format('first job queued', str(self.jstats.get('first_queue', 0))))
-            print('\t{:>20}: {}'.format('last job queued', str(self.jstats.get('last_queue', 0))))
-            print('\t{:>20}: {}'.format('total queuing time', self.jstats['queue_time'].total_seconds() if 'queue_time' in self.jstats else 0))
-            print('\t{:>20}: {}'.format('first job start', str(self.jstats.get('first_start', 0))))
-            print('\t{:>20}: {}'.format('last job finish', str(self.jstats.get('last_finish', 0))))
-            print('\t{:>20}: {}'.format('total execution time', self.jstats['execution_time'].total_seconds() if 'execution_time' in self.jstats else 0))
-            
-            print('jobs runtime statistics:')
-            for k, v in self.jstats.get('rstats', {}).items():
-                print('\t{:>20}: {}'.format(k, v))
-
-            print('jobs launching statistics:')
-            for k, v in self.jstats.get('launchstats', {}).items():
-                print('\t{:>20}: {}'.format(k, v))
-
-        if self.res:
-            print('available resources:')
-            for k, v in self.res.items():
-                print('\t{:>20}: {}'.format(k, v))
+        core_utilization = ((total_time - core_unused) / total_time) * 100
+        print(f'node {dest_node_name}:{dest_core_name}: utilization {core_utilization:.1f}%, unused {core_unused:.4f} of total {total_time:.4f}')
+        total_core_utilization += core_utilization
+        total_cores += 1
 

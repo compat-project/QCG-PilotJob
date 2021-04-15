@@ -25,7 +25,9 @@ char* find_command_path(const char *command) {
 		strncat(buffer, "/", sizeof(buffer));
 		strncat(buffer, command, sizeof(buffer));
 
+#if DEBUG
 		printf("checking path [%s] ...\n", buffer);
+#endif
 		if (!access(buffer, X_OK)) {
 			printf("found command's path as [%s]\n", buffer);
 			return strdup(buffer);
