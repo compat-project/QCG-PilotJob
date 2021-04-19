@@ -38,11 +38,11 @@ Wrapper installation
 As the wrapper itself is written in C, it requires compilation on the target
 computing cluster. 
 
-Source code can be downloaded from the QCG-PilotJob project repository on
-`GitHub <https://github.com/vecma-project/QCG-PilotJob`_, e.g:
+Source code can be downloaded from the develop branch of QCG-PilotJob project repository on
+`GitHub <https://github.com/vecma-project/QCG-PilotJob/tree/develop`_, e.g:
 
 .. code:: bash
-    $ wget https://raw.githubusercontent.com/vecma-project/QCG-PilotJob/runtime_wrapper/utils/qcg_pj_launch_wrapper.c 
+    $ wget https://raw.githubusercontent.com/vecma-project/QCG-PilotJob/develop/utils/qcg_pj_launch_wrapper.c 
 
 and then compiled using the compiler of your choice:
 
