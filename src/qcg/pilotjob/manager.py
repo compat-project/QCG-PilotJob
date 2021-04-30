@@ -1275,7 +1275,7 @@ class DirectManagerHandler:
 
                 if job_iteration is not None:
                     if not job.iteration.in_range(job_iteration):
-                        raise Exception(f'Unknown iteration {job_iteration} for job {jreal_job_name}')
+                        raise Exception(f'Unknown iteration {job_iteration} for job {real_job_name}')
 
                 if job.state(iteration=job_iteration).is_finished():
                     raise InvalidRequest('Job/iteration {job_name} already finished - can not be removed'.format(job_name))
