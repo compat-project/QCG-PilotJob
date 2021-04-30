@@ -198,6 +198,7 @@ class SlurmExecution(ExecutionSchema):
                         rank_id = rank_id + 1
 
             mpi_args = [
+                '--mca rmaps_rank_file_physical 1',
                 '--rankfile',
                 str(rank_file),
             ]
