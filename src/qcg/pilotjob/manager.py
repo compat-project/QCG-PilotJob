@@ -523,7 +523,6 @@ class DirectManager:
         """bool: returns True if there are no jobs in scheduling queue and no jobs are executing"""
         return len(self._schedule_queue) == 0 and self._executor.is_all_jobs_finished() and self.queued_to_execute == 0
 
-    @profile
     def _schedule_loop(self):
         """Do schedule loop.
         Get jobs from schedule queue, check if they have workflow dependency meet and if yes,

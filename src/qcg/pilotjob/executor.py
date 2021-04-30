@@ -89,7 +89,6 @@ class Executor:
             except Exception as exc:
                 _logger.error('failed to stop node launcher agents: %s', str(exc))
 
-    @profile
     async def execute(self, allocation, job_iteration):
         """Asynchronusly execute job iteration inside allocation.
         After successfull prepared environment, a new execution job will be created
