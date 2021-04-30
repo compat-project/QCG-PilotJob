@@ -9,7 +9,7 @@ from os.path import exists, join, dirname, abspath
 import multiprocessing as mp
 
 import zmq
-from qcg.pilotjob import logger as top_logger
+from qcg.pilotjob.logger import top_logger
 from qcg.pilotjob.api import errors
 from qcg.pilotjob.api.jobinfo import JobInfo
 

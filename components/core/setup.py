@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
 	name="qcg-pilotjob",
-	version="0.11.1",
+	version="0.11.2",
 
 	author="Piotr Kopta",
 	author_email="pkopta@man.poznan.pl",
@@ -14,16 +14,8 @@ setup(
             "qcg.pilotjob",
             "qcg.pilotjob.api",
             "qcg.pilotjob.launcher",
-            "qcg.pilotjob.utils",
-            "qcg.pilotjob.cmds",
+            "qcg.pilotjob.utils"
             ],
-	package_dir={
-		"qcg.pilotjob": "src/qcg/pilotjob",
-		"qcg.pilotjob.api": "src/qcg/pilotjob/api",
-		"qcg.pilotjob.launcher": "src/qcg/pilotjob/launcher",
-		"qcg.pilotjob.utils": "src/qcg/pilotjob/utils",
-		"qcg.pilotjob.cmds": "src/qcg/pilotjob/cmds",
-	},
 
 	url="http://github.com/vecma-project/QCG-PilotJob",
 
@@ -43,8 +35,6 @@ setup(
 		'console_scripts': [
                     'qcg-pm-service=qcg.pilotjob.command_line:service',
                     'qcg-pm=qcg.pilotjob.client_cmd:qcgpjm',
-                    'qcg-pm-report=qcg.pilotjob.cmds.report:reports',
-                    'qcg-pm-processes=qcg.pilotjob.cmds.processes:processes',
                 ],
 	},
 )

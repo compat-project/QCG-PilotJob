@@ -11,7 +11,7 @@ import zmq
 from zmq.asyncio import Context
 
 from qcg.pilotjob.config import Config
-from qcg.pilotjob import logger as top_logger
+from qcg.pilotjob.logger import top_logger
 
 
 _logger = logging.getLogger(__name__)

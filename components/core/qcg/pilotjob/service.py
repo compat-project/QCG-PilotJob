@@ -13,7 +13,8 @@ from datetime import datetime
 from multiprocessing import Process
 from os.path import exists, join, isabs
 
-from qcg.pilotjob import logger as top_logger
+from qcg.pilotjob.logger import top_logger
+import qcg.pilotjob.version
 import qcg.pilotjob.profile
 from qcg.pilotjob.config import Config
 from qcg.pilotjob.errors import InvalidArgument
@@ -390,7 +391,7 @@ class QCGPMService:
         _logger = logging.getLogger(module_name)
 
         _logger.info('service %s version %s started %s @ %s (with tags %s)', Config.MANAGER_ID.get(self._conf),
-                     qcg.pilotjob.__version__, str(datetime.now()), socket.gethostname(),
+                     qcg.pilotjob.version.__version__, str(datetime.now()), socket.gethostname(),
                      ','.join(Config.MANAGER_TAGS.get(self._conf)))
         _logger.info('log level set to: %s', Config.LOG_LEVEL.get(self._conf).upper())
         _logger.info(f'service arguments {str(self._args)}')

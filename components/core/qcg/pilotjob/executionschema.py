@@ -1,7 +1,7 @@
 import os
 import logging
 
-from qcg.pilotjob import logger as top_logger
+from qcg.pilotjob.logger import top_logger
 from qcg.pilotjob.errors import InternalError
 from qcg.pilotjob.resources import ResourcesType
 from qcg.pilotjob.config import Config
