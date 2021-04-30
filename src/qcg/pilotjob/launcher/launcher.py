@@ -156,7 +156,8 @@ class Launcher:
             try:
                 out_socket = self.zmq_ctx.socket(zmq.REQ) #pylint: disable=maybe-no-member
                 break
-            except ZMQError:
+            except zmq.ZMQError:
+                _logger.info('too many connections while commuicating with launcher agent')
                 if socket_open_attempts > 5:
                     raise Exception('failed to communicate with agent - too many connections in the same time')
                 await asyncio.sleep(0.1)
@@ -312,7 +313,7 @@ class Launcher:
             if agent.get('process', None):
                 _logger.debug('killing agent %s ...', agent_id)
                 try:
-                    await asyncio.wait_for(agent['process'].wait(), 5)
+                    await asyncio.wait_for(agent['process'].wait(), 30)
                     agent['process'] = None
                 except Exception:
                     _logger.warning('Failed to kill agent: %s', str(sys.exc_info()))
