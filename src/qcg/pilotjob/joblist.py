@@ -53,10 +53,11 @@ class JobExecution:
         venv (str, optional): path to the virtual environment to initialize before job start
         wd (str, optional): path to the job's working directory
         model (str, optional): model of execution
+        model_opts (str, optional): model options
     """
 
     def __init__(self, exec=None, args=None, env=None, script=None, stdin=None, stdout=None, stderr=None,
-                 modules=None, venv=None, wd=None, model=None):
+                 modules=None, venv=None, wd=None, model=None, model_opts=None):
         """Initialize execution element of job description.
 
         Args:
@@ -70,6 +71,7 @@ class JobExecution:
             venv (str, optional): path to the virtual environment to initialize before job start
             wd (str, optional): path to the job's working directory
             model (str, optional): model of execution
+            model_opts (dict(str, str), optional): model options
 
         Raises:
             IllegalJobDescription: when:
@@ -105,6 +107,13 @@ class JobExecution:
             self.model = model.lower()
         else:
             self.model = model
+
+        if model_opts is not None:
+            if not isinstance(model_opts, dict):
+                raise IllegalJobDescription("Execution model options must be an dictionary")
+            self.model_opts = model_opts
+        else:
+            self.model_opts = {}
 
         if args is not None:
             if not isinstance(args, list):
@@ -145,6 +154,9 @@ class JobExecution:
 
         if self.model is not None:
             result['model'] = self.model
+
+        if self.model_opts is not None:
+            result['model_opts'] = self.model_opts
 
         return result
 
