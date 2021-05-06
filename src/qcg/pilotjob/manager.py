@@ -16,7 +16,6 @@ from qcg.pilotjob.errors import GovernorConnectionError, JobAlreadyExist
 from qcg.pilotjob.executor import Executor
 from qcg.pilotjob.joblist import JobList, JobState, JobResources
 from qcg.pilotjob.scheduler import Scheduler
-import qcg.pilotjob.profile
 from qcg.pilotjob.config import Config
 from qcg.pilotjob.parseres import get_resources
 from qcg.pilotjob.request import ControlReq
@@ -779,7 +778,7 @@ class DirectManager:
         except StopIteration:
             _logger.warning(f"job {job.name} doesn't exist in scheduling queue")
 
-    def cancel_iteration(self, job, iteration):
+    async def cancel_iteration(self, job, iteration):
         """Cancel single iteration.
 
         Args:
@@ -793,11 +792,11 @@ class DirectManager:
             self.change_job_state(job, iteration=iteration, state=JobState.CANCELED)
         elif job.state(iteration) in [JobState.SCHEDULED, JobState.EXECUTING]:
             _logger.info(f'canceling iteration {iteration} of job {job.name} in scheduled state')
-            self._executor.cancel_iteration(job, iteration)
+            await self._executor.cancel_iteration(job, iteration)
         else:
             _logger.info(f'can\'t cancel iteration {iteration} of job {job.name} in state {job.state()}')
 
-    def cancel_job(self, job):
+    async def cancel_job(self, job):
         """Cancel job.
 
         Args:
@@ -815,10 +814,10 @@ class DirectManager:
             if job.has_iterations:
                 # possible many iterations
                 for it in job.iteration.iterations_gen():
-                    self.cancel_iteration(job, it)
+                    await self.cancel_iteration(job, it)
             else:
                 # single iteration
-                self.cancel_iteration(job, None)
+                await self.cancel_iteration(job, None)
         except Exception as e:
             _logger.error(f'failed to cancel job: {str(e)}')
             raise
@@ -1282,10 +1281,10 @@ class DirectManagerHandler:
 
                 if job_iteration is not None:
                     _logger.info(f'handling cancel operation on iteration {job_iteration} of job {job.name}')
-                    self._manager.cancel_iteration(job, job_iteration)
+                    await self._manager.cancel_iteration(job, job_iteration)
                 else:
                     _logger.info(f'handling cancel operation on job {job.name}')
-                    self._manager.cancel_job(job)
+                    await self._manager.cancel_job(job)
 
                 canceled += 1
             except Exception as exc:
