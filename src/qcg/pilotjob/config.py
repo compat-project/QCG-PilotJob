@@ -196,6 +196,12 @@ class Config(Enum):
         'default': 'qcg_pj_launch_wrapper'
     }
 
+    NL_INIT_TIMEOUT = {
+        'name': 'launcher.init.timeout',
+        'cmd_opt': '--nl-init-timeout',
+        'default': 600,
+    }
+
     def get(self, config):
         """Return configuration entry value from dictionary
 

@@ -148,6 +148,9 @@ class QCGPMService:
         parser.add_argument(Config.WRAPPER_RT_STATS.value['cmd_opt'],
                             help='exact start & stop information wrapper path',
                             default=Config.WRAPPER_RT_STATS.value['default'])
+        parser.add_argument(Config.NL_INIT_TIMEOUT.value['cmd_opt'],
+                            help='node launcher init timeout (s)',
+                            type=int, default=Config.NL_INIT_TIMEOUT.value['default'])
         self._args = parser.parse_args(args)
 
         if self._args.slurm_partition_nodes:
@@ -222,6 +225,7 @@ class QCGPMService:
             Config.ENABLE_PROC_STATS: self._args.enable_proc_stats,
             Config.ENABLE_RT_STATS: self._args.enable_rt_stats,
             Config.WRAPPER_RT_STATS: self._args.wrapper_rt_stats,
+            Config.NL_INIT_TIMEOUT: self._args.nl_init_timeout,
         }
 
     def __init__(self, args=None):
