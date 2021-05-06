@@ -137,9 +137,6 @@ class QCGPMService:
         parser.add_argument(Config.RESUME.value['cmd_opt'],
                             help='path to the QCG-PilotJob working directory to resume',
                             default=None)
-        parser.add_argument(Config.OPENMPI_MODEL_MODULE.value['cmd_opt'],
-                            help='name of the module to load before launching openmpi model job',
-                            default=Config.OPENMPI_MODEL_MODULE.value['default'])
         parser.add_argument(Config.ENABLE_PROC_STATS.value['cmd_opt'],
                             help='gather information about launched processes from system',
                             default=Config.ENABLE_PROC_STATS.value['default'],
@@ -222,7 +219,6 @@ class QCGPMService:
             Config.SLURM_LIMIT_NODES_RANGE_BEGIN: self._args.slurm_limit_nodes_range_begin,
             Config.SLURM_LIMIT_NODES_RANGE_END: self._args.slurm_limit_nodes_range_end,
             Config.RESUME: self._args.resume,
-            Config.OPENMPI_MODEL_MODULE: self._args.openmpi_module,
             Config.ENABLE_PROC_STATS: self._args.enable_proc_stats,
             Config.ENABLE_RT_STATS: self._args.enable_rt_stats,
             Config.WRAPPER_RT_STATS: self._args.wrapper_rt_stats,

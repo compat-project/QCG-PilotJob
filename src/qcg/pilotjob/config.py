@@ -178,12 +178,6 @@ class Config(Enum):
         'default': None
     }
 
-    OPENMPI_MODEL_MODULE = {
-        'name': 'model.openmpi.module',
-        'cmd_opt': '--openmpi-module',
-        'default': 'openmpi'
-    }
-
     ENABLE_PROC_STATS = {
         'name': 'enable.proc.stats',
         'cmd_opt': '--enable-proc-stats',

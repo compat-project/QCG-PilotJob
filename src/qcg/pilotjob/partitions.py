@@ -181,7 +181,7 @@ class PartitionManager:
                             '--slurm-limit-nodes-range-end', str(self.end_node)]
 
             for arg in [Config.ZMQ_PORT_MIN_RANGE, Config.ZMQ_PORT_MAX_RANGE, Config.REPORT_FORMAT,
-                    Config.LOG_LEVEL, Config.OPENMPI_MODEL_MODULE, Config.WRAPPER_RT_STATS]:
+                    Config.LOG_LEVEL, Config.WRAPPER_RT_STATS]:
                 if self.config.get(arg, None) is not None:
                     manager_args.extend([arg.value['cmd_opt'], str(self.config.get(arg))])
 
