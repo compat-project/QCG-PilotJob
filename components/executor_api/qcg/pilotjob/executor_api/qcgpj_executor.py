@@ -1,8 +1,15 @@
+import ast
 import logging
+import re
+import textwrap
 from concurrent.futures import Executor
 from enum import Enum
+from string import Template
+from typing import Tuple, Any, Dict, Callable, Optional, Union
 
+from qcg.pilotjob.api.job import Jobs
 from qcg.pilotjob.api.manager import LocalManager
+from qcg.pilotjob.executor_api.qcgpj_future import QCGPJFuture
 
 _logger = logging.getLogger(__name__)
 
@@ -50,6 +57,8 @@ class QCGPJExecutor(Executor):
 
         """
 
+        self.finished = False
+
         # ---- QCG PILOT JOB INITIALISATION ---
 
         # Establish logging levels
@@ -88,13 +97,42 @@ class QCGPJExecutor(Executor):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self._qcgpjm.finish()
+        if not self.finished:
+            self._qcgpjm.finish()
+            self.finished = True
+        else:
+            raise ValueError("Already closed")
+
+    def close(self):
+        if not self.finished:
+            self._qcgpjm.finish()
+            self.finished = True
+        else:
+            raise ValueError("Already closed")
+
+    def submit(self, fn: Callable[..., Union[str, Tuple[str, Dict[str, Any]]]], *args, **kwargs):
+        template = fn()
+        if isinstance(template, tuple):
+            template_str = template[0]
+            defaults = template[1]
+        else:
+            template_str = template
+            defaults = {}
+
+        t = Template(textwrap.dedent(template_str))
+        td_str = t.substitute(defaults, **kwargs)
+        td = ast.literal_eval(td_str)
+        jobs = Jobs()
+        jobs.add_std(td)
+        jobs_ids = self._qcgpjm.submit(jobs)
+        return QCGPJFuture(jobs_ids, self._qcgpjm)
 
     @property
     def qcgpj_manager(self):
         return self._qcgpjm
 
-    def _setup_qcgpj_logging(self, log_level):
+    @staticmethod
+    def _setup_qcgpj_logging(log_level):
         log_level = log_level.upper()
 
         try:
