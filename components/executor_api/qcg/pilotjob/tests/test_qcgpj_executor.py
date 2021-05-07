@@ -84,7 +84,7 @@ def test_qcgpj_executor_submit_custom_template_without_defaults(tmpdir):
                  )
 
     with QCGPJExecutor() as e:
-        e.submit(l, name='tj', exec='date')
+        e.submit(l)
 
 
 def test_qcgpj_executor_run_basic_template(tmpdir):
