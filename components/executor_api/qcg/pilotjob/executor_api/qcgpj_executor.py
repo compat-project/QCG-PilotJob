@@ -16,6 +16,7 @@ _logger = logging.getLogger(__name__)
 
 class QCGPJExecutor(Executor):
 
+
     def __init__(self,
                  wd=".",
                  resources=None,
@@ -103,7 +104,7 @@ class QCGPJExecutor(Executor):
         else:
             raise ValueError("Already closed")
 
-    def close(self):
+    def shutdown(self, wait=True):
         if not self.finished:
             self._qcgpjm.finish()
             self.finished = True
