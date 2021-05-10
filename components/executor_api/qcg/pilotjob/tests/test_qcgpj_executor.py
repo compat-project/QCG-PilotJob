@@ -17,14 +17,12 @@ def test_qcgpj_executor_create(tmpdir):
 
 
 def test_qcgpj_template(tmpdir):
-
     template, defaults = BasicTemplate.template()
     assert template is not None
     assert defaults is not None
 
 
 def test_qcgpj_executor_submit_basic_template(tmpdir):
-
     with QCGPJExecutor() as e:
         e.submit(BasicTemplate.template, name='tj', exec='date')
 
@@ -88,9 +86,44 @@ def test_qcgpj_executor_submit_custom_template_without_defaults(tmpdir):
 
 
 def test_qcgpj_executor_run_basic_template(tmpdir):
-
     with QCGPJExecutor() as e:
         f = e.submit(BasicTemplate.template, name='tj', exec='date')
         result = f.result()
         assert result == {'tj': 'SUCCEED'}
 
+
+def test_qcgpj_executor_done(tmpdir):
+    with QCGPJExecutor() as e:
+        f = e.submit(BasicTemplate.template, name='tj', exec='date')
+        result = f.result()
+        assert result == {'tj': 'SUCCEED'}
+        assert f.done()
+
+    with QCGPJExecutor() as e:
+        f = e.submit(BasicTemplate.template, name='tj', exec='sleep', args=['10'])
+        assert not f.done()
+
+
+def test_qcgpj_executor_running(tmpdir):
+    with QCGPJExecutor() as e:
+        f = e.submit(BasicTemplate.template, name='tj', exec='date')
+        result = f.result()
+        assert result == {'tj': 'SUCCEED'}
+        assert not f.running()
+
+    with QCGPJExecutor() as e:
+        f = e.submit(BasicTemplate.template, name='tj', exec='sleep', args=['10'])
+        assert f.running()
+
+
+def test_qcgpj_executor_cancel(tmpdir):
+    with QCGPJExecutor() as e:
+        f = e.submit(BasicTemplate.template, name='tj', exec='date')
+        result = f.result()
+        assert result == {'tj': 'SUCCEED'}
+        assert not f.cancelled()
+
+    with QCGPJExecutor() as e:
+        f = e.submit(BasicTemplate.template, name='tj', exec='sleep', args=['10'])
+        f.cancel()
+        assert f.cancelled()
