@@ -10,6 +10,8 @@ from datetime import datetime
 import zmq
 from zmq.asyncio import Context
 
+from qcg.pilotjob.config import Config
+
 from qcg.pilotjob import logger as top_logger
 
 
@@ -84,6 +86,10 @@ class Launcher:
         self.local_address = None
         self.local_export_address = None
         self.iface_task = None
+
+        self.agents_init_timeout = int(Config.NL_INIT_TIMEOUT.get(self.config))
+
+        _logger.info(f'timeout for node launcher agent start set to {self.agents_init_timeout} secs')
 
         self.connection_sem = asyncio.Semaphore(Launcher.MAXIMUM_CONCURRENT_CONNECTIONS)
 
@@ -373,7 +379,7 @@ class Launcher:
         start_t = datetime.now()
 
         while len(self.nodes) < len(self.agents):
-            if (datetime.now() - start_t).total_seconds() > Launcher.START_TIMEOUT_SECS:
+            if (datetime.now() - start_t).total_seconds() > self.agents_init_timeout:
                 _logger.error('timeout while waiting for agents - currenlty registered %s from launched %s',
                               len(self.nodes), len(self.agents))
                 _logger.error(f'not registered instances: ')

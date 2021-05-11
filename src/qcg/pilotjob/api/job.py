@@ -18,6 +18,7 @@ JOB_TOP_ATTRS = {
     "modules": {'req': False, 'types': [list, str]},
     "venv": {'req': False, 'types': [str]},
     "model": {'req': False, 'types': [str]},
+    "model_opts": {'req': False, 'types': [dict]},
     "numNodes": {'req': False, 'types': [int, dict]},
     "numCores": {'req': False, 'types': [int, dict]},
     "wt": {'req': False, 'types': [str]},
@@ -200,7 +201,7 @@ class Jobs:
         else:
             std_job.setdefault('execution', {})['script'] = smpl_job['script']
 
-        for key in ['args', 'stdin', 'stdout', 'stderr', 'wd', 'modules', 'venv', 'model']:
+        for key in ['args', 'stdin', 'stdout', 'stderr', 'wd', 'modules', 'venv', 'model', 'model_opts']:
             if key in smpl_job:
                 std_job['execution'][key] = smpl_job[key]
 
@@ -238,6 +239,7 @@ class Jobs:
         - ``modules`` (str or list(str), optional): list of modules that should be loaded before job start
         - ``venv`` (str, optional): path to the virtual environment that should be initialized before job start
         - ``model`` (str, optional): model of execution
+        - ``model_opts`` (dict, optional): model options
         - ``numCores`` (int or dict, optional): number of required cores specification
         - ``numNodes`` (int or dict, optional): number of required nodes specification
         - ``wt`` (str, optional): job's maximum wall time

@@ -620,7 +620,7 @@ def test_slurm_partition_resources():
             str(resources_reply)
 
         send_request_valid(governor_address, {'request': 'finish'})
-        governor_process.join(10)
+        governor_process.join(30)
         assert governor_process.exitcode == 0
     finally:
         if governor_process:

@@ -4,7 +4,6 @@ import logging
 from qcg.pilotjob import logger as top_logger
 from qcg.pilotjob.errors import InternalError
 from qcg.pilotjob.resources import ResourcesType
-from qcg.pilotjob.config import Config
 
 
 _logger = logging.getLogger(__name__)
@@ -196,7 +195,6 @@ class SlurmExecution(ExecutionSchema):
                         rank_id = rank_id + 1
 
             mpi_args = [
-                '--mca rmaps_rank_file_physical 1',
                 '--rankfile',
                 str(rank_file),
             ]
@@ -206,11 +204,14 @@ class SlurmExecution(ExecutionSchema):
                 str(ex_job.ncores),
             ]
 
-        ex_job.job_execution.exec = 'bash'
-        ex_job.job_execution.args = ['-c',
-                'source /etc/profile; module purge; module load {}; exec mpirun {} {} {}'.format(
-                    Config.OPENMPI_MODEL_MODULE.get(self.config), ' '.join(mpi_args), job_exec, '' if not job_args else ' '.join(job_args))]
-#        ex_job.job_execution.args.extend([job_exec, *job_args])
+        if ex_job.job_execution.model_opts.get('mpirun_args'):
+            mpi_args.extend(ex_job.job_execution.model_opts['mpirun_args'])
+        mpirun = ex_job.job_execution.model_opts.get('mpirun', 'mpirun')
+
+        ex_job.job_execution.exec = mpirun
+        ex_job.job_execution.args = [*mpi_args, job_exec]
+        if job_args:
+            ex_job.job_execution.args.extend(job_args)
 
     def _preprocess_intelmpi(self, ex_job):
         """Prepare execution description for intelmpi execution model.
@@ -256,7 +257,11 @@ class SlurmExecution(ExecutionSchema):
             ex_job.env.update({'I_MPI_HYDRA_BOOTSTRAP_EXEC_EXTRA_ARGS':
                                    '-v --overcommit --oversubscribe --mem-per-cpu=0'})
 
-        ex_job.job_execution.exec = 'mpirun'
+        if ex_job.job_execution.model_opts.get('mpirun_args'):
+            mpi_args.extend(ex_job.job_execution.model_opts['mpirun_args'])
+        mpirun = ex_job.job_execution.model_opts.get('mpirun', 'mpirun')
+
+        ex_job.job_execution.exec = mpirun
         ex_job.job_execution.args = [*mpi_args]
         if job_args:
             ex_job.job_execution.args.extend(job_args)
@@ -293,6 +298,9 @@ class SlurmExecution(ExecutionSchema):
             "--mem-per-cpu=0",
             "-m", "arbitrary",
             cpu_bind ]
+
+        if ex_job.job_execution.model_opts.get('srun_args'):
+            ex_job.job_execution.args.extend(ex_job.job_execution.model_opts['srun_args'])
 
         ex_job.job_execution.args.append(job_exec)
         if job_args:

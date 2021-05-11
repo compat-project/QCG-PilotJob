@@ -4,15 +4,17 @@ import os
 import time
 import logging
 import queue
+from datetime import datetime
 from os.path import exists, join, dirname, abspath
 
 import multiprocessing as mp
 
 import zmq
-from qcg.pilotjob import logger as top_logger
 from qcg.pilotjob.api import errors
 from qcg.pilotjob.api.jobinfo import JobInfo
 
+
+top_logger = logging.getLogger('qcg.pilotjob.api')
 
 _logger = logging.getLogger(__name__)
 
@@ -52,7 +54,10 @@ class Manager:
 
         self._poll_delay = Manager.DEFAULT_POLL_DELAY
 
-        self._log_handler = None
+        # as the `_setup_logging` method might be called from the `LocalManager` class before this class `__init__`
+        # the `log_handler` field might be already initialized
+        if getattr(self, 'log_handler', None) is None:
+            self.log_handler = None
 
         client_cfg = cfg or {}
         self._setup_logging(client_cfg)
@@ -99,24 +104,25 @@ class Manager:
         Args:
             cfg (dict): see ``__init__``
         """
-        wdir = cfg.get('wdir', '.')
-        _log_file = cfg.get('log_file', join(wdir, '.qcgpjm-client', 'api.log'))
+        if getattr(self, 'log_handler', None) is None:
+            wdir = cfg.get('wdir', '.')
+            _log_file = cfg.get('log_file', join(wdir, '.qcgpjm-client', 'api.log'))
 
-        if not exists(dirname(abspath(_log_file))):
-            os.makedirs(dirname(abspath(_log_file)))
-        elif exists(_log_file):
-            os.remove(_log_file)
+            if not exists(dirname(abspath(_log_file))):
+                os.makedirs(dirname(abspath(_log_file)))
+            elif exists(_log_file):
+                os.remove(_log_file)
 
-        self._log_handler = logging.FileHandler(filename=_log_file, mode='a', delay=False)
-        self._log_handler.setFormatter(logging.Formatter('%(asctime)-15s: %(message)s'))
-        top_logger.addHandler(self._log_handler)
+            self.log_handler = logging.FileHandler(filename=_log_file, mode='a', delay=False)
+            self.log_handler.setFormatter(logging.Formatter('%(asctime)-15s: %(message)s'))
+            top_logger.addHandler(self.log_handler)
 
-        level = logging.INFO
-        if 'log_level' in cfg:
-            if cfg['log_level'].lower() == 'debug':
-                level = logging.DEBUG
+            level = logging.INFO
+            if 'log_level' in cfg:
+                if cfg['log_level'].lower() == 'debug':
+                    level = logging.DEBUG
 
-        top_logger.setLevel(level)
+            top_logger.setLevel(level)
 
     def _disconnect(self):
         """Close connection to the QCG-PJM
@@ -519,9 +525,9 @@ class Manager:
 
         The custom logging handlers are removed from top logger.
         """
-        if self._log_handler:
-            self._log_handler.close()
-            top_logger.removeHandler(self._log_handler)
+        if getattr(self, 'log_handler', None):
+            self.log_handler.close()
+            top_logger.removeHandler(self.log_handler)
 
     def wait4(self, names):
         """Wait for finish of specific jobs.
@@ -670,11 +676,16 @@ class LocalManager(Manager):
                 each command line argument and (optionaly) it's value should be passed as separate entry in the list
 
             cfg (dict) - the configuration; currently the following keys are supported:
+              'init_timeout' - the timeout (in seconds) client should wait for QCG-PilotJob manager start until it raise
+                 error, 300 by default
               'poll_delay' - the delay between following status polls in wait methods
               'log_file' - the location of the log file
               'log_level' - the log level ('DEBUG'); by default the log level is set to INFO
         """
-        _logger.debug('initializing MP start method with "spawn"')
+        client_cfg = cfg or {}
+        self._setup_logging(client_cfg)
+
+        _logger.debug('initializing MP start method with "fork"')
         mp.set_start_method("fork", force=True)
         mp.freeze_support()
                         
@@ -698,24 +709,43 @@ class LocalManager(Manager):
         self.qcgpm_process.start()
         _logger.debug('manager process started')
 
-        for i in range(1, 20):
-            if not self.qcgpm_process.is_alive():
+        try:
+            # timeout of single iteration
+            wait_single_timeout = 2
+            # number of iterations
+            wait_iters = int(client_cfg.get('init_timeout', 300) / wait_single_timeout) + 1
+
+            _logger.debug(f'waiting {wait_iters * wait_single_timeout} secs for service start ...')
+            service_wait_start = datetime.now()
+
+            for i in range(wait_iters):
+                if not self.qcgpm_process.is_alive():
+                    raise errors.ServiceError('Service not started')
+
+                try:
+                    self.qcgpm_conf = self.qcgpm_queue.get(block=True, timeout=wait_single_timeout)
+                    break
+                except queue.Empty:
+                    continue
+    #                raise errors.ServiceError('Service not started - timeout')
+                except Exception as exc:
+                    raise errors.ServiceError('Service not started: {}'.format(str(exc)))
+
+            if not self.qcgpm_conf:
                 raise errors.ServiceError('Service not started')
 
-            try:
-                self.qcgpm_conf = self.qcgpm_queue.get(block=True, timeout=3)
-                break
-            except queue.Empty:
-                continue
-#                raise errors.ServiceError('Service not started - timeout')
-            except Exception as exc:
-                raise errors.ServiceError('Service not started: {}'.format(str(exc)))
+            if self.qcgpm_conf.get('error', None):
+                raise errors.ServiceError(self.qcgpm_conf['error'])
+        except Exception as ex:
+            if self.qcgpm_process:
+                try:
+                    _logger.debug('killing pilotjob service process as not started properly')
+                    self.qcgpm_process.terminate()
+                except:
+                    _logger.exception('failed to kill pilotjob service')
+            raise
 
-        if not self.qcgpm_conf:
-            raise errors.ServiceError('Service not started')
-
-        if self.qcgpm_conf.get('error', None):
-            raise errors.ServiceError(self.qcgpm_conf['error'])
+        _logger.info(f'service started after {(datetime.now() - service_wait_start).total_seconds()} secs')
 
         _logger.debug('got manager configuration: %s', str(self.qcgpm_conf))
         if not self.qcgpm_conf.get('zmq_addresses', None):
