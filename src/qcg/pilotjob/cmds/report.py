@@ -18,7 +18,10 @@ def job_details_desc(job_data):
     lines.append('\t{:>20}: {}'.format('nodes', str(job_data.get('nodes'))))
     lines.append('\t{:>20}: {}'.format('process id', str(job_data.get('pid'))))
     lines.append('\t{:>20}: {}'.format('process name', str(job_data.get('pname'))))
-    lines.append('\t{:>20}: {}'.format('state', str(job_data.get('state'))))
+    if job_data.get('state') != 'SUCCEED':
+        lines.append('\t{:>20}: {} ({})'.format('state', str(job_data.get('state')), job_data.get('runtime', {}).get('exit_code', 'UNKNOWN')))
+    else:
+        lines.append('\t{:>20}: {}'.format('state', str(job_data.get('state'))))
 
     return '\n'.join(lines)
 
@@ -237,15 +240,16 @@ def launch_stats(wdir, details, verbose):
 @reports.command()
 @click.argument('wdir', type=click.Path(exists=True, file_okay=False, dir_okay=True))
 @click.option('--details', is_flag=True, default=False)
+@click.option('--wo-init', is_flag=True, default=False)
 @click.option('--verbose', is_flag=True, default=False)
-def rusage(wdir, details, verbose):
+def rusage(wdir, details, wo_init, verbose):
     stats = JobsReportStats.from_workdir(wdir, verbose=verbose)
 
     if not stats.has_realtime_stats():
         sys.stderr.write(f'error: real time log files not found - cannot generate statistics')
         sys.exit(1)
 
-    report = stats.resource_usage(details=details)
+    report = stats.resource_usage(from_first_job=wo_init, details=details)
 
     if report.get('method') != 'from_service_start':
         print('WARNING: due to not sufficient data, resource usage is measured from first job start, NOT from service start')
