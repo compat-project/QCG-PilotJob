@@ -93,6 +93,8 @@ class Launcher:
 
         self.connection_sem = asyncio.Semaphore(Launcher.MAXIMUM_CONCURRENT_CONNECTIONS)
 
+        self.agents_ready_treshold = min(1.0, max(0.1, float(Config.NL_READY_TRESHOLD.get(self.config))))
+
     def set_job_finish_callback(self, jobs_finish_cb, *jobs_finish_cb_args):
         """Set default function for notifing about finished jobs.
 
@@ -348,15 +350,19 @@ class Launcher:
             instances (list): specification for agents to launch
         """
         for idata in instances:
-            if not all(('agent_id' in idata, 'ssh' in idata or 'slurm' in idata or 'local' in idata)):
+            if not all(('agent_id' in idata, 'node' in idata, 'ssh' in idata or 'slurm' in idata or 'local' in idata)):
                 raise ValueError('insufficient agent instance data: {}'.format(str(idata)))
 
             if idata['agent_id'] in self.agents:
                 raise KeyError('agnet instance {} already defined'.format(idata['agent_id']))
 
-            proto = 'ssh' if 'ssh' in idata else None
-            proto = 'slurm' if 'slurm' in idata else None
-            if not proto:
+            idata['node'].available = False
+
+            if 'ssh' in idata:
+                proto = 'ssh'
+            elif 'slurm' in idata:
+                proto = 'slurm'
+            else:
                 proto = 'local'
 
             _logger.info('running node agent %s via %s', idata['agent_id'], proto)
@@ -378,20 +384,21 @@ class Launcher:
 
         start_t = datetime.now()
 
-        while len(self.nodes) < len(self.agents):
+        while len(self.nodes) < int(len(self.agents) * self.agents_ready_treshold):
             if (datetime.now() - start_t).total_seconds() > self.agents_init_timeout:
-                _logger.error('timeout while waiting for agents - currenlty registered %s from launched %s',
-                              len(self.nodes), len(self.agents))
+                _logger.error(f'timeout while waiting for agents start - currently {len(self.nodes)} registered from '
+                              f'{len(self.agents)} launched')
                 _logger.error(f'not registered instances: ')
                 for agent_id, agent in self.agents.items():
                     if agent_id not in self.nodes:
                         _logger.error(f'{agent_id}: process ({agent["process"]}), data ({agent["data"]})')
-                raise Exception('timeout while waiting for agents')
+                raise Exception(f'Timeout while waiting for agents start {len(self.nodes)}/{len(self.agents)}')
 
             await asyncio.sleep(0.2)
 
-        _logger.debug('all agents %d registered in %d seconds', len(self.nodes),
-                      (datetime.now() - start_t).total_seconds())
+        _logger.debug(f'{len(self.nodes)} from total {len(self.agents)} agents started in '
+                      f'{(datetime.now() - start_t).total_seconds()} seconds')
+
 
     async def __fire_ssh_agent(self, ssh_data, args):
         """Launch node agent instance via ssh.
@@ -517,6 +524,11 @@ class Launcher:
                     await self.in_socket.send_json({'status': 'CONFIRMED'})
 
                 self.nodes[msg['agent_id']] = {'registered_at': datetime.now(), 'address': msg['local_address']}
+
+                agent_node = self.agents.get('agent_id', {}).get('data', {}).get('node', None)
+                if agent_node:
+                    agent_node.available = True
+
                 _logger.debug('registered at (%s) agent (%s) listening at (%s)',
                               self.nodes[msg['agent_id']]['registered_at'],
                               msg['agent_id'], self.nodes[msg['agent_id']]['address'])

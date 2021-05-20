@@ -406,6 +406,7 @@ class LauncherExecutionJob(ExecutionJob):
             raise Exception('launcher agents already ininitialized')
 
         agents = [{'agent_id': node.name,
+                   'node': node,
                    'slurm': {'node': node.name},
                    'options': {'binding': binding,
                                'aux_dir': aux_dir,

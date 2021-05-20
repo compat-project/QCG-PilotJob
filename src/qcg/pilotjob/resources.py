@@ -235,6 +235,8 @@ class Node:
         self._crs = crs
         self.resources = None
 
+        self.available = True
+
     @property
     def name(self):
         """str: node name"""

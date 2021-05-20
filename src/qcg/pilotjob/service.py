@@ -151,6 +151,9 @@ class QCGPMService:
         parser.add_argument(Config.NL_INIT_TIMEOUT.value['cmd_opt'],
                             help='node launcher init timeout (s)',
                             type=int, default=Config.NL_INIT_TIMEOUT.value['default'])
+        parser.add_argument(Config.NL_READY_TRESHOLD.value['cmd_opt'],
+                            help='% (0.0-1.0) of node launchers registered when computations should start',
+                            type=float, default=Config.NL_READY_TRESHOLD.value['default'])
         self._args = parser.parse_args(args)
 
         if self._args.slurm_partition_nodes:
@@ -226,6 +229,7 @@ class QCGPMService:
             Config.ENABLE_RT_STATS: self._args.enable_rt_stats,
             Config.WRAPPER_RT_STATS: self._args.wrapper_rt_stats,
             Config.NL_INIT_TIMEOUT: self._args.nl_init_timeout,
+            Config.NL_READY_TRESHOLD: self._args.nl_ready_treshold,
         }
 
     def __init__(self, args=None):

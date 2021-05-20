@@ -202,6 +202,12 @@ class Config(Enum):
         'default': 600,
     }
 
+    NL_READY_TRESHOLD = {
+        'name': 'launcher.ready.treshold',
+        'cmd_opt': '--nl-ready-treshold',
+        'default': 1.0,
+    }
+
     def get(self, config):
         """Return configuration entry value from dictionary
 
