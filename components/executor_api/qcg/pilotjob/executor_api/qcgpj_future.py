@@ -2,7 +2,7 @@ from concurrent.futures import Future
 from qcg.pilotjob.api.manager import LocalManager
 
 
-class QCGPJFuture(Future):
+class QCGPJFuture():
 
     qcgpjm: LocalManager
 
@@ -41,4 +41,3 @@ class QCGPJFuture(Future):
 
     def cancelled(self):
         return self._cancelled
-

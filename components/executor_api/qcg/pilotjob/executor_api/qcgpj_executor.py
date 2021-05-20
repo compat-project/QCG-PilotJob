@@ -2,6 +2,7 @@ import ast
 import logging
 import re
 import textwrap
+import time
 from concurrent.futures import Executor
 from enum import Enum
 from string import Template
@@ -121,7 +122,16 @@ class QCGPJExecutor(Executor):
             defaults = {}
 
         t = Template(textwrap.dedent(template_str))
-        td_str = t.substitute(defaults, **kwargs)
+
+        substitutions = {}
+
+        for a in args:
+            if a is not None:
+                substitutions.update(a)
+
+        substitutions.update(kwargs)
+
+        td_str = t.substitute(defaults, **substitutions)
         td = ast.literal_eval(td_str)
         jobs = Jobs()
         jobs.add_std(td)
@@ -147,6 +157,7 @@ class QCGPJExecutor(Executor):
             client_log_level = ClientLogLevel.DEBUG.value
 
         return service_log_level, client_log_level
+
 
 
 class ServiceLogLevel(Enum):

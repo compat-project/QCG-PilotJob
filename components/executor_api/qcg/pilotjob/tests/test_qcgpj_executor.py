@@ -127,3 +127,39 @@ def test_qcgpj_executor_cancel(tmpdir):
         f = e.submit(BasicTemplate.template, name='tj', exec='sleep', args=['10'])
         f.cancel()
         assert f.cancelled()
+        
+
+def test_qcgpj_executor_args(tmpdir):
+    with QCGPJExecutor() as e:
+        a = {
+            'exec': 'date',
+            'name': 'tj'
+        }
+        
+        f = e.submit(BasicTemplate.template, a)
+        result = f.result()
+        assert result == {'tj': 'SUCCEED'}
+        
+    with QCGPJExecutor() as e:
+        a = {
+            'exec': 'date'
+        }
+        
+        b = {
+            'name': 'tj'
+        }
+
+        f = e.submit(BasicTemplate.template, a, b)
+        result = f.result()
+        assert result == {'tj': 'SUCCEED'}
+        
+        
+def test_qcgpj_executor_args_kwargs(tmpdir):
+    with QCGPJExecutor() as e:
+        a = {
+            'exec': 'date',
+        }
+
+        f = e.submit(BasicTemplate.template, a, name='tj')
+        result = f.result()
+        assert result == {'tj': 'SUCCEED'}
