@@ -593,7 +593,7 @@ class JobsReportStats:
                 ))
         fig.write_image(output_file)
 
-    def resource_usage(self, details=False):
+    def resource_usage(self, from_first_job=False, details=False):
         resource_nodes = {}
         jobs = {}
         report = {}
@@ -607,7 +607,7 @@ class JobsReportStats:
 
         report['method'] = 'from_service_start'
 
-        if all((self.gstats.get('service_start'), self.gstats.get('service_finish'))):
+        if not from_first_job and all((self.gstats.get('service_start'), self.gstats.get('service_finish'))):
             min_start_moment = self.gstats.get('service_start')
             max_finish_moment = self.gstats.get('service_finish')
         else:
@@ -616,6 +616,8 @@ class JobsReportStats:
             report['method'] = 'from_first_job_start'
 
         total_time = (max_finish_moment - min_start_moment).total_seconds()
+        if self.verbose:
+            print(f'total time seconds: {total_time}')
 
         total_core_utilization = 0
         total_cores = 0 
