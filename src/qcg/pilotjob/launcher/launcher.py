@@ -529,6 +529,9 @@ class Launcher:
                 if agent_node:
                     agent_node.available = True
 
+                _logger.info(f'node\'s {msg.get("agent_id")} agent registered ({len(self.nodes)} out of '
+                             f'{len(self.agents)} currently registered)')
+
                 _logger.debug('registered at (%s) agent (%s) listening at (%s)',
                               self.nodes[msg['agent_id']]['registered_at'],
                               msg['agent_id'], self.nodes[msg['agent_id']]['address'])
