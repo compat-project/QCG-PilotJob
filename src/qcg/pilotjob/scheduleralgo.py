@@ -66,7 +66,9 @@ class SchedulerAlgorithm:
         allocation = Allocation()
         allocated_cores = 0
         for node in self.resources.nodes:
-            if node.available:
+            if not node.available:
+                _logger.info(f'node {node.name} not available')
+            else:
                 node_alloc = node.allocate_max(max_cores - allocated_cores)
 
                 if node_alloc:
