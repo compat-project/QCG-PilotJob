@@ -525,9 +525,12 @@ class Launcher:
 
                 self.nodes[msg['agent_id']] = {'registered_at': datetime.now(), 'address': msg['local_address']}
 
-                agent_node = self.agents.get('agent_id', {}).get('data', {}).get('node', None)
+                agent_node = self.agents.get(msg['agent_id'], {}).get('data', {}).get('node', None)
                 if agent_node:
+                    _logger.info(f'setting node {agent_node.name} available')
                     agent_node.available = True
+                else:
+                    _logger.error(f'cannot find agents {msg["agent_id"]} node')
 
                 _logger.info(f'node\'s {msg.get("agent_id")} agent registered ({len(self.nodes)} out of '
                              f'{len(self.agents)} currently registered)')
