@@ -152,7 +152,7 @@ class QCGPMService:
                             help='node launcher init timeout (s)',
                             type=int, default=Config.NL_INIT_TIMEOUT.value['default'])
         parser.add_argument(Config.NL_READY_TRESHOLD.value['cmd_opt'],
-                            help='% (0.0-1.0) of node launchers registered when computations should start',
+                            help='percent (0.0-1.0) of node launchers registered when computations should start',
                             type=float, default=Config.NL_READY_TRESHOLD.value['default'])
         self._args = parser.parse_args(args)
 
