@@ -95,6 +95,8 @@ class Launcher:
 
         self.agents_ready_treshold = min(1.0, max(0.1, float(Config.NL_READY_TRESHOLD.get(self.config))))
 
+        _logger.info(f'ready treshold for node launchers set to {int(self.agents_ready_treshold * 100.0)}%')
+
     def set_job_finish_callback(self, jobs_finish_cb, *jobs_finish_cb_args):
         """Set default function for notifing about finished jobs.
 
@@ -384,6 +386,9 @@ class Launcher:
 
         start_t = datetime.now()
 
+        _logger.info(f'waiting max {self.agents_init_timeout} secs for at least '
+                     f'{int(len(self.agents) * self.agents_ready_treshold)} ready nodes')
+
         while len(self.nodes) < int(len(self.agents) * self.agents_ready_treshold):
             if (datetime.now() - start_t).total_seconds() > self.agents_init_timeout:
                 _logger.error(f'timeout while waiting for agents start - currently {len(self.nodes)} registered from '
@@ -396,7 +401,7 @@ class Launcher:
 
             await asyncio.sleep(0.2)
 
-        _logger.debug(f'{len(self.nodes)} from total {len(self.agents)} agents started in '
+        _logger.info(f'{len(self.nodes)} from total {len(self.agents)} agents started in '
                       f'{(datetime.now() - start_t).total_seconds()} seconds')
 
 
