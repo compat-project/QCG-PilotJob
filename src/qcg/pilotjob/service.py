@@ -440,6 +440,7 @@ class QCGPMService:
         _logger.info("signal interrupt")
         print(f"{datetime.now()} signal interrupt - stopping service")
         self._manager.stop_processing = True
+        self._manager.call_scheduler()
         self._receiver.finished = True
 
     async def _stop_interfaces(self, receiver):

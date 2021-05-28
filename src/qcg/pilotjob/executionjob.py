@@ -392,7 +392,7 @@ class LauncherExecutionJob(ExecutionJob):
     launcher = None
 
     @classmethod
-    def start_agents(cls, config, wdir, aux_dir, nodes, binding):
+    def start_agents(cls, config, wdir, aux_dir, nodes, binding, manager):
         """Start Launcher service agents on all nodes.
 
         Args:
@@ -401,6 +401,7 @@ class LauncherExecutionJob(ExecutionJob):
             aux_dir (str): launcher agent directory for placing log and temporary files
             nodes (list(str)): list of nodes where to start launcher agents
             binding (bool): does the launcher agents should bind executed job iterations to specific cpus
+            manager (manager): used to call scheduler on certain events
         """
         if cls.launcher:
             raise Exception('launcher agents already ininitialized')
@@ -414,7 +415,7 @@ class LauncherExecutionJob(ExecutionJob):
                                'proc_stats': Config.ENABLE_PROC_STATS.get(config),
                                'rt_stats': Config.ENABLE_RT_STATS.get(config),
                                'rt_wrapper': Config.WRAPPER_RT_STATS.get(config) }} for node in nodes]
-        cls.launcher = Launcher(config, wdir, aux_dir)
+        cls.launcher = Launcher(config, wdir, aux_dir, manager)
 
         asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(cls.launcher.start(agents)))
 

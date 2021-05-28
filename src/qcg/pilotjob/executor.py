@@ -63,7 +63,8 @@ class Executor:
             _logger.info('initializing custom launching method (node launcher)')
             try:
                 LauncherExecutionJob.start_agents(self._config, self.base_wd, self.aux_dir,
-                                                  self._resources.nodes, self._resources.binding)
+                                                  self._resources.nodes, self._resources.binding,
+                                                  self._manager)
                 self._is_node_launcher = True
                 _logger.info('node launcher succesfully initialized')
             except Exception as exc:
