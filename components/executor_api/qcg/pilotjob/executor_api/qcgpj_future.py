@@ -1,4 +1,3 @@
-from concurrent.futures import Future
 from qcg.pilotjob.api.manager import LocalManager
 
 

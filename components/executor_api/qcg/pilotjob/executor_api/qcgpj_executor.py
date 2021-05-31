@@ -4,7 +4,7 @@ import textwrap
 from concurrent.futures import Executor
 from enum import Enum
 from string import Template
-from typing import Tuple, Any, Dict, Callable, Optional, Union
+from typing import Tuple, Any, Dict, Callable, Union
 
 from qcg.pilotjob.api.job import Jobs
 from qcg.pilotjob.api.manager import LocalManager
@@ -14,7 +14,6 @@ _logger = logging.getLogger(__name__)
 
 
 class QCGPJExecutor(Executor):
-
 
     def __init__(self,
                  wd=".",
@@ -158,7 +157,6 @@ class QCGPJExecutor(Executor):
             client_log_level = ClientLogLevel.DEBUG.value
 
         return service_log_level, client_log_level
-
 
 
 class ServiceLogLevel(Enum):
