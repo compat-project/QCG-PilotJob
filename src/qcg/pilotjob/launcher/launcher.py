@@ -47,13 +47,14 @@ class Launcher:
 
     MAXIMUM_CONCURRENT_CONNECTIONS = 1000
 
-    def __init__(self, config, wdir, aux_dir):
+    def __init__(self, config, wdir, aux_dir, manager):
         """Initialize instance.
 
         Args:
             config (dict): configuration dictionary
             wdir (str): path to the working directory (the same on all nodes)
             aux_dir (str): path to the auxilary directory (the same on all nodes)
+            manager (Manager): manager used to call scheduler loop on certain events
         """
         # config
         self.config = config
@@ -79,6 +80,8 @@ class Launcher:
         # application finish callbacks
         self.jobs_cb = {}
 
+        self.manager = manager
+
         self.node_local_agent_cmd = [sys.executable, '-m', 'qcg.pilotjob.launcher.agent']
         self.node_ssh_agent_cmd = ['cd {}; {} -m qcg.pilotjob.launcher.agent'.format(self.work_dir, sys.executable)]
 
@@ -94,6 +97,7 @@ class Launcher:
         self.connection_sem = asyncio.Semaphore(Launcher.MAXIMUM_CONCURRENT_CONNECTIONS)
 
         self.agents_ready_treshold = min(1.0, max(0.1, float(Config.NL_READY_TRESHOLD.get(self.config))))
+        self.agents_ready_treshold_reached = False
 
         _logger.info(f'ready treshold for node launchers set to {int(self.agents_ready_treshold * 100.0)}%')
 
@@ -403,7 +407,7 @@ class Launcher:
 
         _logger.info(f'{len(self.nodes)} from total {len(self.agents)} agents started in '
                       f'{(datetime.now() - start_t).total_seconds()} seconds')
-
+        self.agents_ready_treshold_reached = True
 
     async def __fire_ssh_agent(self, ssh_data, args):
         """Launch node agent instance via ssh.
@@ -534,6 +538,9 @@ class Launcher:
                 if agent_node:
                     _logger.info(f'setting node {agent_node.name} available')
                     agent_node.available = True
+
+                    if self.agents_ready_treshold_reached:
+                        self.manager.call_scheduler()
                 else:
                     _logger.error(f'cannot find agents {msg["agent_id"]} node')
 
