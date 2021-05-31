@@ -593,7 +593,7 @@ class JobsReportStats:
                 ))
         fig.write_image(output_file)
 
-    def resource_usage(self, from_first_job=False, details=False):
+    def resource_usage(self, from_first_job=False, until_last_job=False, details=False):
         resource_nodes = {}
         jobs = {}
         report = {}
@@ -646,8 +646,9 @@ class JobsReportStats:
                     core_unused += core_injobs_wait
 
                     # moment between last job finish and total scenario finish
-                    core_finish_wait = (max_finish_moment - core_jobs[-1]['real_finish']).total_seconds()
-                    core_unused += core_finish_wait
+                    if not until_last_job:
+                        core_finish_wait = (max_finish_moment - core_jobs[-1]['real_finish']).total_seconds()
+                        core_unused += core_finish_wait
 
                 core_utilization = ((total_time - core_unused) / total_time) * 100
                 total_core_utilization += core_utilization
