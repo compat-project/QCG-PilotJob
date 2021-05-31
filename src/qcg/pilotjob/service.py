@@ -260,6 +260,8 @@ class QCGPMService:
         self._manager = None
         self._receiver = None
 
+        self._tasks_to_resume = None
+
         try:
             self._setup_reports()
 
@@ -289,7 +291,7 @@ class QCGPMService:
 
             if Config.RESUME.get(self._conf):
                 # in case of resume, the aux dir is set to given resume path
-                StateTracker.resume(self._aux_dir, self._manager, Config.PROGRESS.get(self._conf))
+                self._tasks_to_resume = StateTracker.resume(self._aux_dir, self._manager, Config.PROGRESS.get(self._conf))
         except Exception:
             if self._log_handler:
                 logging.getLogger('qcg.pilotjob').removeHandler(self._log_handler)
@@ -512,6 +514,12 @@ class QCGPMService:
 
         This task can be treatd as the main processing task.
         """
+        if self._tasks_to_resume:
+            if Config.PROGRESS.get(self._conf):
+                print(f'enqueing {len(jobs_to_enqueue)} jobs to scheduler')
+
+            await self._manager.enqueue(self._tasks_to_resume)
+
         _logger.debug('starting receiver ...')
 
         if Config.PROGRESS.get(self._conf):
@@ -623,11 +631,15 @@ class QCGPMServiceProcess(Process):
             args (str[]) - command line arguments
             queue (Queue) - the communication queue
         """
-        super(QCGPMServiceProcess, self).__init__()
+        try:
+            super(QCGPMServiceProcess, self).__init__()
 
-        self.args = args or []
-        self.queue = queue
-        self.service = None
+            self.args = args or []
+            self.queue = queue
+            self.service = None
+        except Exception as exc:
+            print(f'init error: {str(exc)}')
+            _logger.exception('init error')
 
     def run(self):
         """The main thread function.
