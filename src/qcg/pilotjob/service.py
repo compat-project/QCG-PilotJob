@@ -516,7 +516,7 @@ class QCGPMService:
         """
         if self._tasks_to_resume:
             if Config.PROGRESS.get(self._conf):
-                print(f'enqueing {len(jobs_to_enqueue)} jobs to scheduler')
+                print(f'enqueing {len(self._tasks_to_resume)} jobs to scheduler')
 
             await self._manager.enqueue(self._tasks_to_resume)
 
