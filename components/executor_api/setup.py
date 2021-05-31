@@ -11,7 +11,8 @@ setup(
 	author_email="bbosak@man.poznan.pl",
 
 	packages=[
-		"qcg.pilotjob.executor_api"
+		"qcg.pilotjob.executor_api",
+		"qcg.pilotjob.executor_api.templates"
 	],
 
 	url="http://github.com/vecma-project/QCG-PilotJob",
