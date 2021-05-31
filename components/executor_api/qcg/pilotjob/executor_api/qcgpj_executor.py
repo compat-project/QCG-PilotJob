@@ -133,6 +133,9 @@ class QCGPJExecutor(Executor):
 
         td_str = t.substitute(defaults, **substitutions)
         td = ast.literal_eval(td_str)
+        if 'env' not in td['execution']:
+            td['execution']['env'] = {}
+        td['execution']['env']['QCG_PM_EXEC_API_JOB_ID'] = '${jname}'
         jobs = Jobs()
         jobs.add_std(td)
         jobs_ids = self._qcgpjm.submit(jobs)
