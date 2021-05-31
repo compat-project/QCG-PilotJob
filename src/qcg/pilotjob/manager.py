@@ -483,6 +483,8 @@ class DirectManager:
 
         self.quit_scheduler = False
         self._schedule_event = asyncio.Event()
+
+        _logger.info('starting scheduler loop ...')
         self._schedule_loop_task = asyncio.ensure_future(self._schedule_loop())
 
 
@@ -541,13 +543,13 @@ class DirectManager:
         try to create allocation. The allocated job's are sent to executor.
         """
         while True:
-            _logger.info('scheduler: waiting on scheduler event')
+            _logger.debug('scheduler: waiting on scheduler event')
             await self._schedule_event.wait()
             self._schedule_event.clear()
-            _logger.info('scheduler: scheduler event set')
+            _logger.debug('scheduler: scheduler event set')
 
             if self.quit_scheduler or self.stop_processing:
-                _logger.info('scheduler: scheduler loop quiting')
+                _logger.debug('scheduler: scheduler loop quiting')
                 return
 
             new_schedule_queue = []
