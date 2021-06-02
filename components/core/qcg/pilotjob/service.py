@@ -665,7 +665,7 @@ class QCGPMServiceProcess(Process):
 
             if self.queue:
                 try:
-                    self.queue.put({'error': str(exc)})
+                    self.queue.put({'error': traceback.format_exc()})
                 except Exception:
                     pass
 
