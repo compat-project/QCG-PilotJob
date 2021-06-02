@@ -151,6 +151,9 @@ class QCGPMService:
         parser.add_argument(Config.NL_INIT_TIMEOUT.value['cmd_opt'],
                             help='node launcher init timeout (s)',
                             type=int, default=Config.NL_INIT_TIMEOUT.value['default'])
+        parser.add_argument(Config.NL_READY_TRESHOLD.value['cmd_opt'],
+                            help='percent (0.0-1.0) of node launchers registered when computations should start',
+                            type=float, default=Config.NL_READY_TRESHOLD.value['default'])
         self._args = parser.parse_args(args)
 
         if self._args.slurm_partition_nodes:
@@ -226,6 +229,7 @@ class QCGPMService:
             Config.ENABLE_RT_STATS: self._args.enable_rt_stats,
             Config.WRAPPER_RT_STATS: self._args.wrapper_rt_stats,
             Config.NL_INIT_TIMEOUT: self._args.nl_init_timeout,
+            Config.NL_READY_TRESHOLD: self._args.nl_ready_treshold,
         }
 
     def __init__(self, args=None):
@@ -256,6 +260,8 @@ class QCGPMService:
         self._manager = None
         self._receiver = None
 
+        self._tasks_to_resume = None
+
         try:
             self._setup_reports()
 
@@ -285,7 +291,7 @@ class QCGPMService:
 
             if Config.RESUME.get(self._conf):
                 # in case of resume, the aux dir is set to given resume path
-                StateTracker.resume(self._aux_dir, self._manager, Config.PROGRESS.get(self._conf))
+                self._tasks_to_resume = StateTracker.resume(self._aux_dir, self._manager, Config.PROGRESS.get(self._conf))
         except Exception:
             if self._log_handler:
                 logging.getLogger('qcg.pilotjob').removeHandler(self._log_handler)
@@ -436,6 +442,7 @@ class QCGPMService:
         _logger.info("signal interrupt")
         print(f"{datetime.now()} signal interrupt - stopping service")
         self._manager.stop_processing = True
+        self._manager.call_scheduler()
         self._receiver.finished = True
 
     async def _stop_interfaces(self, receiver):
@@ -507,6 +514,12 @@ class QCGPMService:
 
         This task can be treatd as the main processing task.
         """
+        if self._tasks_to_resume:
+            if Config.PROGRESS.get(self._conf):
+                print(f'enqueing {len(self._tasks_to_resume)} jobs to scheduler')
+
+            await self._manager.enqueue(self._tasks_to_resume)
+
         _logger.debug('starting receiver ...')
 
         if Config.PROGRESS.get(self._conf):
@@ -618,11 +631,15 @@ class QCGPMServiceProcess(Process):
             args (str[]) - command line arguments
             queue (Queue) - the communication queue
         """
-        super(QCGPMServiceProcess, self).__init__()
+        try:
+            super(QCGPMServiceProcess, self).__init__()
 
-        self.args = args or []
-        self.queue = queue
-        self.service = None
+            self.args = args or []
+            self.queue = queue
+            self.service = None
+        except Exception as exc:
+            print(f'init error: {str(exc)}')
+            _logger.exception('init error')
 
     def run(self):
         """The main thread function.

@@ -79,7 +79,7 @@ class SlurmExecution(ExecutionSchema):
         "default": "_preprocess_default"
     }
 
-    def _preprocess_common(self, ex_job):
+    def _preprocess_slurm_common(self, ex_job):
         if ex_job.job_execution.stdin:
             ex_job.job_execution.args.extend(["-i", os.path.join(ex_job.wd_path, ex_job.job_execution.stdin)])
             ex_job.job_execution.stdin = None
@@ -96,6 +96,7 @@ class SlurmExecution(ExecutionSchema):
             ex_job.job_execution.args.extend(["--time", "0:{}".format(
                 int(ex_job.job_iteration.resources.wt.total_seconds()))])
 
+    def _preprocess_common(self, ex_job):
         if self.resources.binding:
             ex_job.env.update({'QCG_PM_CPU_SET': ','.join([str(c) for c in sum(
                 [alloc.cores for alloc in ex_job.allocation.nodes], [])])})
@@ -130,6 +131,7 @@ class SlurmExecution(ExecutionSchema):
             "--mem-per-cpu=0",
             cpu_bind]
 
+        self._preprocess_slurm_common(ex_job)
         self._preprocess_common(ex_job)
 
         ex_job.job_execution.exec = 'srun'
@@ -141,39 +143,7 @@ class SlurmExecution(ExecutionSchema):
         Args:
             ex_job (ExecutionJob): job execution description
         """
-        job_exec = ex_job.job_execution.exec
-        job_args = ex_job.job_execution.args
-
-        run_conf_file = os.path.join(ex_job.wd_path, ".{}.runconfig".format(ex_job.job_iteration.name))
-        with open(run_conf_file, 'w') as conf_f:
-            conf_f.write("0\t%s %s\n" % (
-                job_exec,
-                ' '.join('{0}'.format(str(arg).replace(" ", "\\ ")) for arg in job_args)))
-            if ex_job.ncores > 1:
-                if ex_job.ncores > 2:
-                    conf_f.write("1-%d /bin/true\n" % (ex_job.ncores - 1))
-                else:
-                    conf_f.write("1 /bin/true\n")
-
-        if self.resources.binding:
-            core_ids = []
-            for node in ex_job.allocation.nodes:
-                core_ids.extend([str(core) for core in node.cores])
-            cpu_bind = "--cpu-bind=verbose,map_cpu:{}".format(','.join(core_ids))
-        else:
-            cpu_bind = "--cpu-bind=verbose,cores"
-
-        ex_job.job_execution.args = [
-            "-n", str(ex_job.ncores),
-            "--overcommit",
-            "--mem-per-cpu=0",
-            cpu_bind,
-            "--multi-prog"]
-
         self._preprocess_common(ex_job)
-
-        ex_job.job_execution.exec = 'srun'
-        ex_job.job_execution.args.append(run_conf_file)
 
     def _preprocess_openmpi(self, ex_job):
         """Prepare execution description for openmpi execution model.
@@ -278,7 +248,6 @@ class SlurmExecution(ExecutionSchema):
         mpi_args = []
         first = True
 
-        # create rank file
         if self.resources.binding:
             cpu_masks = []
             for node in ex_job.allocation.nodes:
@@ -298,6 +267,8 @@ class SlurmExecution(ExecutionSchema):
             "--mem-per-cpu=0",
             "-m", "arbitrary",
             cpu_bind ]
+
+        self._preprocess_slurm_common(ex_job)
 
         if ex_job.job_execution.model_opts.get('srun_args'):
             ex_job.job_execution.args.extend(ex_job.job_execution.model_opts['srun_args'])

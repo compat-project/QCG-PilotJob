@@ -235,6 +235,8 @@ class Node:
         self._crs = crs
         self.resources = None
 
+        self._available = True
+
     @property
     def name(self):
         """str: node name"""
@@ -275,6 +277,19 @@ class Node:
         """str: string representation of available consumable resources"""
         return ', '.join(['{} - {} ({} used))'.format(crtype.name, cr.totalCount, cr.used) for crtype, cr in
                           self._crs.items()])
+
+    @property
+    def available(self):
+        return self._available
+
+    @available.setter
+    def available(self, avail_value):
+        if self._available and not avail_value:
+            self.resources.mark_not_available_cores(self.free)
+        elif not self._available and avail_value:
+            self.resources.mark_available_cores(self.free)
+
+        self._available = avail_value
 
     def __str__(self):
         """Return string representation of a node.
@@ -395,7 +410,7 @@ class Node:
         if allocation.ncores > self.used:
             raise InternalError('trying to release more cores than are used on node {}'.format(self._name))
 
-        self._free_cores = sorted(self._free_cores + allocation.cores)
+        self._free_cores = sorted(self._free_cores + allocation.cores, key=lambda c: int(c))
 
         if allocation.crs:
             if not self._crs:
@@ -569,6 +584,14 @@ class Resources:
     def total_crs(self):
         """dict(CRType,int): total number of CRs on all nodes"""
         return self._total_crs
+
+    def mark_not_available_cores(self, not_avail_cores):
+        self._used_cores += not_avail_cores
+        _logger.info(f'marking {not_avail_cores} as non available - current free cores {self.free_cores}/{self.total_cores}')
+
+    def mark_available_cores(self, avail_cores):
+        self._used_cores -= avail_cores
+        _logger.info(f'marking {avail_cores} as available - current free cores {self.free_cores}/{self.total_cores}')
 
     def allocate_for_system(self):
         """Allocate single core for QCG-PilotJob, excluding this core from those available for jobs."""

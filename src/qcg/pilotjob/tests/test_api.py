@@ -401,6 +401,7 @@ def test_api_submit_slurm_resources():
     set_pythonpath_to_qcg_module()
     tmpdir = str(tempfile.mkdtemp(dir=SHARED_PATH))
 
+    m = None
     try:
         m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
 
@@ -419,8 +420,9 @@ def test_api_submit_slurm_resources():
         assert all(len(node_cores) == cores for node, node_cores in jinfos[jid].nodes.items())
 
     finally:
-        m.finish()
-        m.cleanup()
+        if m:
+            m.finish()
+            m.cleanup()
 
     rmtree(tmpdir)
 
@@ -455,8 +457,9 @@ def test_api_simple_cancel(tmpdir):
         assert all((len(jinfos) == 1, jid in jinfos, jinfos[jid].status  == 'CANCELED'))
 
     finally:
-        m.finish()
-        m.cleanup()
+        if m:
+            m.finish()
+            m.cleanup()
 
     rmtree(tmpdir)
 
@@ -497,8 +500,9 @@ def test_api_simple_cancel_kill(tmpdir):
         jinfos = m.info_parsed(ids)
         assert all((len(jinfos) == 1, jid in jinfos, jinfos[jid].status  == 'CANCELED'))
     finally:
-        m.finish()
-        m.cleanup()
+        if m:
+            m.finish()
+            m.cleanup()
 
 #    rmtree(tmpdir)
 
@@ -551,8 +555,9 @@ def test_api_iter_cancel_queued(tmpdir):
         m.remove(jid)
 
     finally:
-        m.finish()
-        m.cleanup()
+        if m:
+            m.finish()
+            m.cleanup()
 
     rmtree(tmpdir)
 
@@ -605,8 +610,9 @@ def test_api_iter_cancel_executed(tmpdir):
         m.remove(jid)
 
     finally:
-        m.finish()
-        m.cleanup()
+        if m:
+            m.finish()
+            m.cleanup()
 
     rmtree(tmpdir)
 
@@ -653,8 +659,9 @@ def test_api_iter_cancel_whole(tmpdir):
         m.remove(jid)
 
     finally:
-        m.finish()
-        m.cleanup()
+        if m:
+            m.finish()
+            m.cleanup()
 
     rmtree(tmpdir)
 
@@ -701,8 +708,9 @@ def test_api_iter_cancel_whole_part(tmpdir):
         m.remove(jid)
 
     finally:
-        m.finish()
-        m.cleanup()
+        if m:
+            m.finish()
+            m.cleanup()
 
     rmtree(tmpdir)
 
@@ -750,8 +758,9 @@ def test_api_iter_cancel_whole_part_it_start(tmpdir):
         m.remove(jid)
 
     finally:
-        m.finish()
-        m.cleanup()
+        if m:
+            m.finish()
+            m.cleanup()
 
 #    rmtree(tmpdir)
 
@@ -789,8 +798,9 @@ def test_api_iter_cancel_dependant_job(tmpdir):
         m.remove(ids)
 
     finally:
-        m.finish()
-        m.cleanup()
+        if m:
+            m.finish()
+            m.cleanup()
 
     rmtree(tmpdir)
 
@@ -866,8 +876,9 @@ def test_api_iter_cancel_dependant_job_it(tmpdir):
         m.remove(ids)
 
     finally:
-        m.finish()
-        m.cleanup()
+        if m:
+            m.finish()
+            m.cleanup()
 
     rmtree(tmpdir)
 
@@ -933,8 +944,9 @@ def test_api_iter_cancel_dependant_job_whole(tmpdir):
         m.remove(ids)
 
     finally:
-        m.finish()
-        m.cleanup()
+        if m:
+            m.finish()
+            m.cleanup()
 
     rmtree(tmpdir)
 
@@ -948,6 +960,7 @@ def test_api_slurm_cancel_simple():
     set_pythonpath_to_qcg_module()
     tmpdir = str(tempfile.mkdtemp(dir=SHARED_PATH))
 
+    m = None
     try:
         m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
 
@@ -970,8 +983,9 @@ def test_api_slurm_cancel_simple():
         assert all((len(jinfos) == 1, jid in jinfos, jinfos[jid].status  == 'CANCELED',
                     jinfos[jid].total_cores == cores)), str(jinfos)
     finally:
-        m.finish()
-        m.cleanup()
+        if m:
+            m.finish()
+            m.cleanup()
 
     rmtree(tmpdir)
 
@@ -985,6 +999,7 @@ def test_api_slurm_cancel_queued():
     set_pythonpath_to_qcg_module()
     tmpdir = str(tempfile.mkdtemp(dir=SHARED_PATH))
 
+    m = None
     try:
         m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
 
@@ -1029,8 +1044,9 @@ def test_api_slurm_cancel_queued():
         m.remove(jid)
 
     finally:
-        m.finish()
-        m.cleanup()
+        if m:
+            m.finish()
+            m.cleanup()
 
     rmtree(tmpdir)
 
@@ -1045,6 +1061,7 @@ def test_api_slurm_cancel_executed():
     tmpdir = str(tempfile.mkdtemp(dir=SHARED_PATH))
     print(f'tmpdir: {tmpdir}')
 
+    m = None
     try:
         m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
 
@@ -1092,8 +1109,9 @@ def test_api_slurm_cancel_executed():
         m.remove(jid)
 
     finally:
-        m.finish()
-        m.cleanup()
+        if m:
+            m.finish()
+            m.cleanup()
 
     rmtree(tmpdir)
 
@@ -1108,6 +1126,7 @@ def test_api_slurm_cancel_whole():
     tmpdir = str(tempfile.mkdtemp(dir=SHARED_PATH))
     print(f'tmpdir: {tmpdir}')
 
+    m = None
     try:
         m = LocalManager(['--log', 'debug', '--wd', tmpdir, '--report-format', 'json'], {'wdir': str(tmpdir)})
 
@@ -1148,8 +1167,9 @@ def test_api_slurm_cancel_whole():
         m.remove(jid)
 
     finally:
-        m.finish()
-        m.cleanup()
+        if m:
+            m.finish()
+            m.cleanup()
 
     rmtree(tmpdir)
 
@@ -1194,8 +1214,9 @@ def test_api_wait4all(tmpdir):
         assert all(exists(tmpdir.join('sleep_{}.out'.format(i))) for i in range(iters))
         m.remove(jid)
     finally:
-        m.finish()
-        m.cleanup()
+        if m:
+            m.finish()
+            m.cleanup()
 
     rmtree(tmpdir)
 

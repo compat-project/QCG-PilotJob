@@ -115,12 +115,11 @@ class StateTracker():
         for job in job_requests.values():
             manager.job_list.add(job)
 
-        if progress:
-            print(f'enqueing {len(jobs_to_enqueue)} jobs to scheduler')
-
-        manager.enqueue(jobs_to_enqueue.values())
-
         _logger.info(f'tracker - found {len(job_requests)} total jobs with {len(jobs_to_enqueue)} unfinished')
+
+        return jobs_to_enqueue.values()
+#        manager.enqueue(jobs_to_enqueue.values())
+
 
     def new_submited_jobs(self, jobs):
         """Register new submit job request.

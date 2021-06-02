@@ -66,15 +66,18 @@ class SchedulerAlgorithm:
         allocation = Allocation()
         allocated_cores = 0
         for node in self.resources.nodes:
-            node_alloc = node.allocate_max(max_cores - allocated_cores)
+            if not node.available:
+                _logger.info(f'node {node.name} not available')
+            else:
+                node_alloc = node.allocate_max(max_cores - allocated_cores)
 
-            if node_alloc:
-                allocation.add_node(node_alloc)
+                if node_alloc:
+                    allocation.add_node(node_alloc)
 
-                allocated_cores += node_alloc.ncores
+                    allocated_cores += node_alloc.ncores
 
-                if allocated_cores == max_cores:
-                    break
+                    if allocated_cores == max_cores:
+                        break
 
         # this should never happen
         if allocated_cores < min_cores or allocated_cores > max_cores:
@@ -97,15 +100,16 @@ class SchedulerAlgorithm:
         allocation = Allocation()
 
         for node in self.resources.nodes:
-            if node.used == 0:
-                node_alloc = node.allocate_exact(node.total, crs)
-                if node_alloc.ncores == node.total:
-                    allocation.add_node(node_alloc)
+            if node.available:
+                if node.used == 0:
+                    node_alloc = node.allocate_exact(node.total, crs)
+                    if node_alloc.ncores == node.total:
+                        allocation.add_node(node_alloc)
 
-                    if len(allocation.nodes) == max_nodes:
-                        break
-                else:
-                    node_alloc.release()
+                        if len(allocation.nodes) == max_nodes:
+                            break
+                    else:
+                        node_alloc.release()
 
         if len(allocation.nodes) >= min_nodes:
             return allocation
@@ -133,7 +137,7 @@ class SchedulerAlgorithm:
 #        _logger.info("allocating ({},{}) nodes with ({},{}) cores".format(min_nodes, max_nodes, min_cores, max_cores))
 
         for node in self.resources.nodes:
-            if node.free >= min_cores:
+            if node.available and node.free >= min_cores:
                 node_alloc = node.allocate_max(max_cores, crs)
 
 #                _logger.info("allocated {} cores on a single node".format(node_alloc.ncores if node_alloc else 0))

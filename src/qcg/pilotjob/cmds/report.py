@@ -241,18 +241,22 @@ def launch_stats(wdir, details, verbose):
 @click.argument('wdir', type=click.Path(exists=True, file_okay=False, dir_okay=True))
 @click.option('--details', is_flag=True, default=False)
 @click.option('--wo-init', is_flag=True, default=False)
+@click.option('--until-last-job', is_flag=True, default=False)
 @click.option('--verbose', is_flag=True, default=False)
-def rusage(wdir, details, wo_init, verbose):
+def rusage(wdir, details, wo_init, until_last_job, verbose):
     stats = JobsReportStats.from_workdir(wdir, verbose=verbose)
 
     if not stats.has_realtime_stats():
         sys.stderr.write(f'error: real time log files not found - cannot generate statistics')
         sys.exit(1)
 
-    report = stats.resource_usage(from_first_job=wo_init, details=details)
+    report = stats.resource_usage(from_first_job=wo_init, until_last_job=until_last_job, details=details)
 
     if report.get('method') != 'from_service_start':
         print('WARNING: due to not sufficient data, resource usage is measured from first job start, NOT from service start')
+
+    if until_last_job:
+        print('WARNING: resource usage is counted until last job on given core finished, NOT when allocation finished')
 
     print('\t{:>40}: {}'.format('used cores', report.get('total_cores', 0)))
     print('\t{:>40}: {:.1f}%'.format('average core utilization (%)', report.get('avg_core_utilization', 0)))
