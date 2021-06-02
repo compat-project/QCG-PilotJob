@@ -56,6 +56,7 @@ class RunTimeStats:
                             _logger.debug(f'child {pid} started: {started}, finished: {finished}')
                             self.rt_stats[pid] = {'s': started, 'f': finished}
         except Exception:
+            _logger.error(f'error to gather rt metrics')
             _logger.exception(f'error to gather rt metrics')
             raise
         finally:

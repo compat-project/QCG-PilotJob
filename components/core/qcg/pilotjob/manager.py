@@ -16,7 +16,6 @@ from qcg.pilotjob.errors import GovernorConnectionError, JobAlreadyExist
 from qcg.pilotjob.executor import Executor
 from qcg.pilotjob.joblist import JobList, JobState, JobResources
 from qcg.pilotjob.scheduler import Scheduler
-import qcg.pilotjob.profile
 from qcg.pilotjob.config import Config
 from qcg.pilotjob.parseres import get_resources
 from qcg.pilotjob.request import ControlReq
@@ -464,6 +463,7 @@ class DirectManager:
         self._scheduler = Scheduler(self.resources)
         self.job_list = JobList()
 
+        self._schedule_queue_lock = asyncio.Lock()
         self._schedule_queue = []
 
         self._job_states_cbs = {}
@@ -480,6 +480,12 @@ class DirectManager:
         # used to track jobs that has been removed from schedule_queue but not
         # started (registered in executor._not_finished dict)
         self.queued_to_execute = 0
+
+        self.quit_scheduler = False
+        self._schedule_event = asyncio.Event()
+
+        _logger.info('starting scheduler loop ...')
+        self._schedule_loop_task = asyncio.ensure_future(self._schedule_loop())
 
 
     async def setup_interfaces(self):
@@ -511,10 +517,18 @@ class DirectManager:
         """
         return DirectManagerHandler(self)
 
+    def call_scheduler(self):
+        self._schedule_event.set()
+
     async def stop(self):
         """Stop all services.
         The executor is stoped.
         """
+        self.quit_scheduler = True
+        self.call_scheduler()
+
+        await self._schedule_loop_task
+
         if self._executor:
             await self._executor.stop()
 
@@ -523,83 +537,90 @@ class DirectManager:
         """bool: returns True if there are no jobs in scheduling queue and no jobs are executing"""
         return len(self._schedule_queue) == 0 and self._executor.is_all_jobs_finished() and self.queued_to_execute == 0
 
-    @profile
-    def _schedule_loop(self):
+    async def _schedule_loop(self):
         """Do schedule loop.
         Get jobs from schedule queue, check if they have workflow dependency meet and if yes,
         try to create allocation. The allocated job's are sent to executor.
         """
-        new_schedule_queue = []
+        while True:
+            _logger.debug('scheduler: waiting on scheduler event')
+            await self._schedule_event.wait()
+            self._schedule_event.clear()
+            _logger.debug('scheduler: scheduler event set')
 
-        if self.stop_processing:
-            return
+            if self.quit_scheduler or self.stop_processing:
+                _logger.debug('scheduler: scheduler loop quiting')
+                return
 
-        _logger.debug(f"scheduling loop with {len(self._schedule_queue)} jobs in queue")
+            new_schedule_queue = []
 
-        for idx, sched_job in enumerate(self._schedule_queue):
-            if not self.resources.free_cores:
-                new_schedule_queue.extend(self._schedule_queue[idx:])
-                break
+            _logger.debug(f"scheduling loop with {len(self._schedule_queue)} jobs in queue")
 
-            min_res_cores = sched_job.get_minimum_require_cores()
-            if min_res_cores is not None and min_res_cores > self.resources.free_cores:
-                _logger.debug('minimum # of cores %d for job %s exceeds # of free cores %s', min_res_cores,
-                              sched_job.job.name, self.resources.free_cores)
-                DirectManager._append_to_schedule_queue(new_schedule_queue, sched_job)
-                continue
+            async with self._schedule_queue_lock:
+                for idx, sched_job in enumerate(self._schedule_queue):
+                    if not self.resources.free_cores:
+                        new_schedule_queue.extend(self._schedule_queue[idx:])
+                        break
 
-            sched_job.check_dependencies()
-
-            if not sched_job.is_feasible:
-                # job will never be ready
-                _logger.debug("job %s not feasible - omitting", sched_job.job.name)
-                self.change_job_state(sched_job.job, iteration=None, state=JobState.OMITTED)
-                sched_job.job.clear_queue_pos()
-            else:
-                prev_iteration = None
-                while self.resources.free_cores:
+                    min_res_cores = sched_job.get_minimum_require_cores()
                     if min_res_cores is not None and min_res_cores > self.resources.free_cores:
-                        _logger.debug('minimum # of cores %d for job %s exceeds # of free cores %d', min_res_cores,
+                        _logger.debug('minimum # of cores %d for job %s exceeds # of free cores %s', min_res_cores,
                                       sched_job.job.name, self.resources.free_cores)
-                        break
+                        DirectManager._append_to_schedule_queue(new_schedule_queue, sched_job)
+                        continue
 
-                    job_iteration = sched_job.get_ready_iteration(prev_iteration)
-                    if job_iteration:
-                        # job is ready - try to find resources
-                        _logger.debug("job %s is ready", job_iteration.name)
-                        try:
-                            allocation = self._scheduler.allocate_job(job_iteration.resources)
-                            if allocation:
-                                sched_job.remove_iteration_job(job_iteration)
-                                prev_iteration = None
+                    sched_job.check_dependencies()
 
-                                _logger.debug("found resources for job %s", job_iteration.name)
-
-                                # allocation has been created - execute job
-                                self.change_job_state(sched_job.job, iteration=job_iteration.iteration,
-                                                      state=JobState.SCHEDULED)
-
-                                self.queued_to_execute += 1
-                                asyncio.ensure_future(self._executor.execute(allocation, job_iteration))
-                            else:
-                                # missing resources
-                                _logger.debug("missing resources for job %s", job_iteration.name)
-                                prev_iteration = job_iteration
-                        except (NotSufficientResources, InvalidResourceSpec) as exc:
-                            # jobs will never schedule
-                            _logger.warning("Job %s scheduling failed - %s", job_iteration.name, str(exc))
-                            sched_job.remove_iteration_job(job_iteration)
-                            prev_iteration = None
-                            self.change_job_state(sched_job.job, iteration=job_iteration.iteration,
-                                                  state=JobState.FAILED, error_msg=str(exc))
+                    if not sched_job.is_feasible:
+                        # job will never be ready
+                        _logger.debug("job %s not feasible - omitting", sched_job.job.name)
+                        self.change_job_state(sched_job.job, iteration=None, state=JobState.OMITTED)
+                        sched_job.job.clear_queue_pos()
                     else:
-                        break
+                        prev_iteration = None
+                        while self.resources.free_cores:
+                            if min_res_cores is not None and min_res_cores > self.resources.free_cores:
+                                _logger.debug('minimum # of cores %d for job %s exceeds # of free cores %d', min_res_cores,
+                                              sched_job.job.name, self.resources.free_cores)
+                                break
 
-                if sched_job.has_more_iterations:
-                    _logger.warning("Job %s preserved in scheduling queue", sched_job.job.name)
-                    DirectManager._append_to_schedule_queue(new_schedule_queue, sched_job)
+                            job_iteration = sched_job.get_ready_iteration(prev_iteration)
+                            if job_iteration:
+                                # job is ready - try to find resources
+                                _logger.debug("job %s is ready", job_iteration.name)
+                                try:
+                                    allocation = self._scheduler.allocate_job(job_iteration.resources)
+                                    if allocation:
+                                        sched_job.remove_iteration_job(job_iteration)
+                                        prev_iteration = None
 
-        self._schedule_queue = new_schedule_queue
+                                        _logger.debug("found resources for job %s", job_iteration.name)
+
+                                        # allocation has been created - execute job
+                                        self.change_job_state(sched_job.job, iteration=job_iteration.iteration,
+                                                              state=JobState.SCHEDULED)
+
+                                        self.queued_to_execute += 1
+                                        asyncio.ensure_future(self._executor.execute(allocation, job_iteration))
+                                    else:
+                                        # missing resources
+                                        _logger.debug("missing resources for job %s", job_iteration.name)
+                                        prev_iteration = job_iteration
+                                except (NotSufficientResources, InvalidResourceSpec) as exc:
+                                    # jobs will never schedule
+                                    _logger.warning("Job %s scheduling failed - %s", job_iteration.name, str(exc))
+                                    sched_job.remove_iteration_job(job_iteration)
+                                    prev_iteration = None
+                                    self.change_job_state(sched_job.job, iteration=job_iteration.iteration,
+                                                          state=JobState.FAILED, error_msg=str(exc))
+                            else:
+                                break
+
+                        if sched_job.has_more_iterations:
+                            _logger.warning("Job %s preserved in scheduling queue", sched_job.job.name)
+                            DirectManager._append_to_schedule_queue(new_schedule_queue, sched_job)
+
+                self._schedule_queue = new_schedule_queue
 
     def change_job_state(self, job, iteration, state, error_msg=None):
         """Invoked to change job status.
@@ -657,7 +678,7 @@ class DirectManager:
 
         self.change_job_state(job_iteration.job, iteration=job_iteration.iteration, state=state, error_msg=error_msg)
         self._scheduler.release_allocation(allocation)
-        self._schedule_loop()
+        self.call_scheduler()
 
     def _fire_job_state_notifies(self, job_id, iteration, state):
         """Create task with callback functions call registered for job state changes.
@@ -736,19 +757,20 @@ class DirectManager:
             for job in jobs:
                 self.job_list.add(job)
 
-    def enqueue(self, jobs):
+    async def enqueue(self, jobs):
         """Enqueue job to execution.
 
         Args:
             jobs (list(Job)): job descriptions to add to the scheduler
         """
         if jobs is not None:
-            for job in jobs:
-                DirectManager._append_to_schedule_queue(self._schedule_queue, SchedulingJob(self, job))
+            async with self._schedule_queue_lock:
+                for job in jobs:
+                    DirectManager._append_to_schedule_queue(self._schedule_queue, SchedulingJob(self, job))
 
-            self._schedule_loop()
+            self.call_scheduler()
 
-    def _remove_job_from_schedule_queue(self, job):
+    async def _remove_job_from_schedule_queue(self, job):
         """Remove job from schedule queue.
 
         Args:
@@ -758,13 +780,14 @@ class DirectManager:
         """
         try:
             # remove whole job from scheduling queue
-            job_pos = next(i for i, sched_job in enumerate(self._schedule_queue) if sched_job.job == job)
-            self._schedule_queue.pop(job_pos)
+            async with self._schedule_queue_lock:
+                job_pos = next(i for i, sched_job in enumerate(self._schedule_queue) if sched_job.job == job)
+                self._schedule_queue.pop(job_pos)
         except StopIteration:
             # ignore as the job could already be removed from scheduling queue (all iterations has been scheduled)
             _logger.info(f"job {job.name} doesn't exist in scheduling queue")
 
-    def _remove_iteration_from_schedule_queue(self, job, iteration):
+    async def _remove_iteration_from_schedule_queue(self, job, iteration):
         """Remove iteration from schedule queue.
 
         Args:
@@ -775,12 +798,13 @@ class DirectManager:
         """
         try:
             # remove iteration (if generated) from scheduling job
-            sched_job = next(sched_job for sched_job in self._schedule_queue if sched_job.job == job)
-            sched_job.remove_iteration_index(iteration)
+            async with self._schedule_queue_lock:
+                sched_job = next(sched_job for sched_job in self._schedule_queue if sched_job.job == job)
+                sched_job.remove_iteration_index(iteration)
         except StopIteration:
             _logger.warning(f"job {job.name} doesn't exist in scheduling queue")
 
-    def cancel_iteration(self, job, iteration):
+    async def cancel_iteration(self, job, iteration):
         """Cancel single iteration.
 
         Args:
@@ -790,15 +814,15 @@ class DirectManager:
         if job.state(iteration) == JobState.QUEUED:
             _logger.info(f'canceling iteration {iteration} of job {job.name} in queued state')
             # job is in scheduling queue, but don't have assigned allocation
-            self._remove_iteration_from_schedule_queue(job, iteration)
+            await self._remove_iteration_from_schedule_queue(job, iteration)
             self.change_job_state(job, iteration=iteration, state=JobState.CANCELED)
         elif job.state(iteration) in [JobState.SCHEDULED, JobState.EXECUTING]:
             _logger.info(f'canceling iteration {iteration} of job {job.name} in scheduled state')
-            self._executor.cancel_iteration(job, iteration)
+            await self._executor.cancel_iteration(job, iteration)
         else:
             _logger.info(f'can\'t cancel iteration {iteration} of job {job.name} in state {job.state()}')
 
-    def cancel_job(self, job):
+    async def cancel_job(self, job):
         """Cancel job.
 
         Args:
@@ -811,15 +835,15 @@ class DirectManager:
             job.canceled = True
 
             if job.state() == JobState.QUEUED:
-                self._remove_job_from_schedule_queue(job)
+                await self._remove_job_from_schedule_queue(job)
 
             if job.has_iterations:
                 # possible many iterations
                 for it in job.iteration.iterations_gen():
-                    self.cancel_iteration(job, it)
+                    await self.cancel_iteration(job, it)
             else:
                 # single iteration
-                self.cancel_iteration(job, None)
+                await self.cancel_iteration(job, None)
         except Exception as e:
             _logger.error(f'failed to cancel job: {str(e)}')
             raise
@@ -1047,7 +1071,7 @@ class DirectManagerHandler:
             self._manager.tracer.new_submited_jobs(jobs)
 
             self._manager.register_jobs(jobs)
-            self._manager.enqueue(jobs)
+            await self._manager.enqueue(jobs)
 
             data = {
                 'submitted': len(jobs),
@@ -1276,17 +1300,17 @@ class DirectManagerHandler:
 
                 if job_iteration is not None:
                     if not job.iteration.in_range(job_iteration):
-                        raise Exception(f'Unknown iteration {job_iteration} for job {jreal_job_name}')
+                        raise Exception(f'Unknown iteration {job_iteration} for job {real_job_name}')
 
                 if job.state(iteration=job_iteration).is_finished():
                     raise InvalidRequest('Job/iteration {job_name} already finished - can not be removed'.format(job_name))
 
                 if job_iteration is not None:
                     _logger.info(f'handling cancel operation on iteration {job_iteration} of job {job.name}')
-                    self._manager.cancel_iteration(job, job_iteration)
+                    await self._manager.cancel_iteration(job, job_iteration)
                 else:
                     _logger.info(f'handling cancel operation on job {job.name}')
-                    self._manager.cancel_job(job)
+                    await self._manager.cancel_job(job)
 
                 canceled += 1
             except Exception as exc:

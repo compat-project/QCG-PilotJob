@@ -178,12 +178,6 @@ class Config(Enum):
         'default': None
     }
 
-    OPENMPI_MODEL_MODULE = {
-        'name': 'model.openmpi.module',
-        'cmd_opt': '--openmpi-module',
-        'default': 'openmpi'
-    }
-
     ENABLE_PROC_STATS = {
         'name': 'enable.proc.stats',
         'cmd_opt': '--enable-proc-stats',
@@ -200,6 +194,18 @@ class Config(Enum):
         'name': 'wrapper.rt.stats',
         'cmd_opt': '--wrapper-rt-stats',
         'default': 'qcg_pj_launch_wrapper'
+    }
+
+    NL_INIT_TIMEOUT = {
+        'name': 'launcher.init.timeout',
+        'cmd_opt': '--nl-init-timeout',
+        'default': 600,
+    }
+
+    NL_READY_TRESHOLD = {
+        'name': 'launcher.ready.treshold',
+        'cmd_opt': '--nl-ready-treshold',
+        'default': 1.0,
     }
 
     def get(self, config):

@@ -116,7 +116,10 @@ class JobsReportStats:
 
                     rtime = None
                     if 'rtime' in job_entry['runtime']:
-                        rtime_t = datetime.strptime(job_entry['runtime']['rtime'], "%H:%M:%S.%f")
+                        if '.' in job_entry['runtime']['rtime']:
+                            rtime_t = datetime.strptime(job_entry['runtime']['rtime'], "%H:%M:%S.%f")
+                        else:
+                            rtime_t = datetime.strptime(job_entry['runtime']['rtime'], "%H:%M:%S")
                         rtime = timedelta(hours=rtime_t.hour, minutes=rtime_t.minute, seconds=rtime_t.second, microseconds=rtime_t.microsecond)
 
                     # find queued time
@@ -590,7 +593,7 @@ class JobsReportStats:
                 ))
         fig.write_image(output_file)
 
-    def resource_usage(self, details=False):
+    def resource_usage(self, from_first_job=False, until_last_job=False, details=False):
         resource_nodes = {}
         jobs = {}
         report = {}
@@ -604,7 +607,7 @@ class JobsReportStats:
 
         report['method'] = 'from_service_start'
 
-        if all((self.gstats.get('service_start'), self.gstats.get('service_finish'))):
+        if not from_first_job and all((self.gstats.get('service_start'), self.gstats.get('service_finish'))):
             min_start_moment = self.gstats.get('service_start')
             max_finish_moment = self.gstats.get('service_finish')
         else:
@@ -613,6 +616,8 @@ class JobsReportStats:
             report['method'] = 'from_first_job_start'
 
         total_time = (max_finish_moment - min_start_moment).total_seconds()
+        if self.verbose:
+            print(f'total time seconds: {total_time}')
 
         total_core_utilization = 0
         total_cores = 0 
@@ -641,8 +646,9 @@ class JobsReportStats:
                     core_unused += core_injobs_wait
 
                     # moment between last job finish and total scenario finish
-                    core_finish_wait = (max_finish_moment - core_jobs[-1]['real_finish']).total_seconds()
-                    core_unused += core_finish_wait
+                    if not until_last_job:
+                        core_finish_wait = (max_finish_moment - core_jobs[-1]['real_finish']).total_seconds()
+                        core_unused += core_finish_wait
 
                 core_utilization = ((total_time - core_unused) / total_time) * 100
                 total_core_utilization += core_utilization

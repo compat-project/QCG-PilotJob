@@ -46,7 +46,6 @@ class ExecutionJob:
 
     SIG_KILL_TIMEOUT = 10 # in seconds
 
-    @profile
     def __init__(self, executor, envs, allocation, job_iteration):
         """Initialize instance.
 
@@ -194,7 +193,6 @@ class ExecutionJob:
         self._executor.job_iteration_started(self)
         self.job_iteration.job.append_runtime({'wd': self.wd_path}, iteration=self.job_iteration.iteration)
 
-    @profile
     async def launch(self):
         """The function for launching process of job iteration"""
         raise NotImplementedError('This method must be implemened in subclass')
@@ -248,7 +246,6 @@ class LocalSchemaExecutionJob(ExecutionJob):
         _schema (ExecutionSchmea): execution schema instance
     """
 
-    @profile
     def __init__(self, executor, envs, allocation, job_iteration, schema):
         """Initialize instance.
 
@@ -339,7 +336,6 @@ class LocalSchemaExecutionJob(ExecutionJob):
             except Exception as exc:
                 _logger.error(f"cleanup failed: {str(exc)}")
 
-    @profile
     async def launch(self):
         """Create asynchronous task to launch job iteration"""
         asyncio.ensure_future(self._execute_local_process())
@@ -396,7 +392,7 @@ class LauncherExecutionJob(ExecutionJob):
     launcher = None
 
     @classmethod
-    def start_agents(cls, config, wdir, aux_dir, nodes, binding):
+    def start_agents(cls, config, wdir, aux_dir, nodes, binding, manager):
         """Start Launcher service agents on all nodes.
 
         Args:
@@ -405,11 +401,13 @@ class LauncherExecutionJob(ExecutionJob):
             aux_dir (str): launcher agent directory for placing log and temporary files
             nodes (list(str)): list of nodes where to start launcher agents
             binding (bool): does the launcher agents should bind executed job iterations to specific cpus
+            manager (manager): used to call scheduler on certain events
         """
         if cls.launcher:
             raise Exception('launcher agents already ininitialized')
 
         agents = [{'agent_id': node.name,
+                   'node': node,
                    'slurm': {'node': node.name},
                    'options': {'binding': binding,
                                'aux_dir': aux_dir,
@@ -417,7 +415,7 @@ class LauncherExecutionJob(ExecutionJob):
                                'proc_stats': Config.ENABLE_PROC_STATS.get(config),
                                'rt_stats': Config.ENABLE_RT_STATS.get(config),
                                'rt_wrapper': Config.WRAPPER_RT_STATS.get(config) }} for node in nodes]
-        cls.launcher = Launcher(config, wdir, aux_dir)
+        cls.launcher = Launcher(config, wdir, aux_dir, manager)
 
         asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(cls.launcher.start(agents)))
 
@@ -428,7 +426,6 @@ class LauncherExecutionJob(ExecutionJob):
             await cls.launcher.stop()
             cls.launcher = None
 
-    @profile
     def __init__(self, executor, envs, allocation, job_iteration, schema):
         """Initialize instance.
 
@@ -452,7 +449,6 @@ class LauncherExecutionJob(ExecutionJob):
         self._schema.preprocess(self)
         super().preprocess()
 
-    @profile
     async def launch(self):
         """Submit job to the specific launcher agent."""
         jexec = self.job_execution

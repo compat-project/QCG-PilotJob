@@ -9,7 +9,6 @@ from qcg.pilotjob.environment import get_environment
 from qcg.pilotjob.executionjob import LocalSchemaExecutionJob, LauncherExecutionJob
 from qcg.pilotjob.resources import ResourcesType
 from qcg.pilotjob.errors import InternalError
-import qcg.pilotjob.profile
 
 
 _logger = logging.getLogger(__name__)
@@ -64,7 +63,8 @@ class Executor:
             _logger.info('initializing custom launching method (node launcher)')
             try:
                 LauncherExecutionJob.start_agents(self._config, self.base_wd, self.aux_dir,
-                                                  self._resources.nodes, self._resources.binding)
+                                                  self._resources.nodes, self._resources.binding,
+                                                  self._manager)
                 self._is_node_launcher = True
                 _logger.info('node launcher succesfully initialized')
             except Exception as exc:
@@ -89,7 +89,6 @@ class Executor:
             except Exception as exc:
                 _logger.error('failed to stop node launcher agents: %s', str(exc))
 
-    @profile
     async def execute(self, allocation, job_iteration):
         """Asynchronusly execute job iteration inside allocation.
         After successfull prepared environment, a new execution job will be created
@@ -99,9 +98,9 @@ class Executor:
             allocation (Allocation): allocation of resources for job iteration
             job_iteration (SchedulingIteration): job iteration execution details
         """
-        job_iteration.job.append_runtime({'allocation': allocation.description()}, job_iteration.iteration)
-
         try:
+            job_iteration.job.append_runtime({'allocation': allocation.description()}, job_iteration.iteration)
+
             try:
                 if self._is_node_launcher:
                     execution_job = LauncherExecutionJob(self, self.job_envs, allocation, job_iteration, self.schema)
@@ -155,7 +154,7 @@ class Executor:
             self._manager.job_finished(execution_job.job_iteration, execution_job.allocation, execution_job.exit_code,
                                        execution_job.error_message, execution_job.canceled)
 
-    def cancel_iteration(self, job, iteration):
+    async def cancel_iteration(self, job, iteration):
         """Cancel already running job.
 
         Args:
@@ -163,11 +162,19 @@ class Executor:
             iteration (int, optional): an iteraiton index
         """
         # find iteration to cancel
-        try:
-            exec_job = next(exec_job for exec_job in self._not_finished.values() if exec_job.job_iteration.job == job and exec_job.job_iteration.iteration == iteration)
-            _logger.info(f'found execution job to cancel')
-        except StopIteration:
-            _logger.error(f'iteration to cancel {job_iteration.name} not found in executor')
-            raise InternalError('iteration to cancel not found')
+        attempt = 0
+        while True:
+            try:
+                exec_job = next(exec_job for exec_job in self._not_finished.values() if exec_job.job_iteration.job == job and exec_job.job_iteration.iteration == iteration)
+                _logger.info(f'found execution job to cancel')
+                break
+            except StopIteration:
+                if self._manager.queued_to_execute > 0 and attempt < 3:
+                    _logger.info(f'not found iteration to cancel but there are queued jobs for executing - waiting a moment')
+                    attempt += 1
+                    await asyncio.sleep(0.5)
+                else:
+                    _logger.error(f'iteration to cancel {job.name}:{iteration} not found in executor')
+                    raise InternalError('iteration to cancel not found')
 
         asyncio.ensure_future(exec_job.cancel())

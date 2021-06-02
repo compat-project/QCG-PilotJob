@@ -138,9 +138,6 @@ class QCGPMService:
         parser.add_argument(Config.RESUME.value['cmd_opt'],
                             help='path to the QCG-PilotJob working directory to resume',
                             default=None)
-        parser.add_argument(Config.OPENMPI_MODEL_MODULE.value['cmd_opt'],
-                            help='name of the module to load before launching openmpi model job',
-                            default=Config.OPENMPI_MODEL_MODULE.value['default'])
         parser.add_argument(Config.ENABLE_PROC_STATS.value['cmd_opt'],
                             help='gather information about launched processes from system',
                             default=Config.ENABLE_PROC_STATS.value['default'],
@@ -152,6 +149,12 @@ class QCGPMService:
         parser.add_argument(Config.WRAPPER_RT_STATS.value['cmd_opt'],
                             help='exact start & stop information wrapper path',
                             default=Config.WRAPPER_RT_STATS.value['default'])
+        parser.add_argument(Config.NL_INIT_TIMEOUT.value['cmd_opt'],
+                            help='node launcher init timeout (s)',
+                            type=int, default=Config.NL_INIT_TIMEOUT.value['default'])
+        parser.add_argument(Config.NL_READY_TRESHOLD.value['cmd_opt'],
+                            help='percent (0.0-1.0) of node launchers registered when computations should start',
+                            type=float, default=Config.NL_READY_TRESHOLD.value['default'])
         self._args = parser.parse_args(args)
 
         if self._args.slurm_partition_nodes:
@@ -223,10 +226,11 @@ class QCGPMService:
             Config.SLURM_LIMIT_NODES_RANGE_BEGIN: self._args.slurm_limit_nodes_range_begin,
             Config.SLURM_LIMIT_NODES_RANGE_END: self._args.slurm_limit_nodes_range_end,
             Config.RESUME: self._args.resume,
-            Config.OPENMPI_MODEL_MODULE: self._args.openmpi_module,
             Config.ENABLE_PROC_STATS: self._args.enable_proc_stats,
             Config.ENABLE_RT_STATS: self._args.enable_rt_stats,
             Config.WRAPPER_RT_STATS: self._args.wrapper_rt_stats,
+            Config.NL_INIT_TIMEOUT: self._args.nl_init_timeout,
+            Config.NL_READY_TRESHOLD: self._args.nl_ready_treshold,
         }
 
     def __init__(self, args=None):
@@ -257,6 +261,8 @@ class QCGPMService:
         self._manager = None
         self._receiver = None
 
+        self._tasks_to_resume = None
+
         try:
             self._setup_reports()
 
@@ -286,7 +292,7 @@ class QCGPMService:
 
             if Config.RESUME.get(self._conf):
                 # in case of resume, the aux dir is set to given resume path
-                StateTracker.resume(self._aux_dir, self._manager, Config.PROGRESS.get(self._conf))
+                self._tasks_to_resume = StateTracker.resume(self._aux_dir, self._manager, Config.PROGRESS.get(self._conf))
         except Exception:
             if self._log_handler:
                 logging.getLogger('qcg.pilotjob').removeHandler(self._log_handler)
@@ -437,9 +443,9 @@ class QCGPMService:
         _logger.info("signal interrupt")
         print(f"{datetime.now()} signal interrupt - stopping service")
         self._manager.stop_processing = True
+        self._manager.call_scheduler()
         self._receiver.finished = True
 
-    @profile
     async def _stop_interfaces(self, receiver):
         """Asynchronous task working in background waiting for receiver finish flag to finish receiver.
         Before receiver will be stopped, the final status of QCG-PilotJob will be written to the file.
@@ -456,7 +462,6 @@ class QCGPMService:
         _logger.info('stopping receiver ...')
         await receiver.stop()
 
-    @profile
     def _job_status_change_notify(self, job_id, iteration, state, manager):
         """Callback function called when any job's iteration change it's state.
         The job reporter is called for finished jobs.
@@ -510,6 +515,12 @@ class QCGPMService:
 
         This task can be treatd as the main processing task.
         """
+        if self._tasks_to_resume:
+            if Config.PROGRESS.get(self._conf):
+                print(f'enqueing {len(self._tasks_to_resume)} jobs to scheduler')
+
+            await self._manager.enqueue(self._tasks_to_resume)
+
         _logger.debug('starting receiver ...')
 
         if Config.PROGRESS.get(self._conf):
@@ -564,7 +575,6 @@ class QCGPMService:
             _logger.info('service resource usage: %s', str(usage.get('service', {})))
             _logger.info('jobs resource usage: %s', str(usage.get('jobs', {})))
 
-    @profile
     def start(self):
         """Start QCG-JobManager service.
 
@@ -622,11 +632,15 @@ class QCGPMServiceProcess(Process):
             args (str[]) - command line arguments
             queue (Queue) - the communication queue
         """
-        super(QCGPMServiceProcess, self).__init__()
+        try:
+            super(QCGPMServiceProcess, self).__init__()
 
-        self.args = args or []
-        self.queue = queue
-        self.service = None
+            self.args = args or []
+            self.queue = queue
+            self.service = None
+        except Exception as exc:
+            print(f'init error: {str(exc)}')
+            _logger.exception('init error')
 
     def run(self):
         """The main thread function.

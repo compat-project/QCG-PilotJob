@@ -4,7 +4,6 @@ import logging
 from qcg.pilotjob.logger import top_logger
 from qcg.pilotjob.errors import InternalError
 from qcg.pilotjob.resources import ResourcesType
-from qcg.pilotjob.config import Config
 
 
 _logger = logging.getLogger(__name__)
@@ -80,8 +79,7 @@ class SlurmExecution(ExecutionSchema):
         "default": "_preprocess_default"
     }
 
-    def _preprocess_common(self, ex_job):
-
+    def _preprocess_slurm_common(self, ex_job):
         if ex_job.job_execution.stdin:
             ex_job.job_execution.args.extend(["-i", os.path.join(ex_job.wd_path, ex_job.job_execution.stdin)])
             ex_job.job_execution.stdin = None
@@ -98,10 +96,10 @@ class SlurmExecution(ExecutionSchema):
             ex_job.job_execution.args.extend(["--time", "0:{}".format(
                 int(ex_job.job_iteration.resources.wt.total_seconds()))])
 
+    def _preprocess_common(self, ex_job):
         if self.resources.binding:
             ex_job.env.update({'QCG_PM_CPU_SET': ','.join([str(c) for c in sum(
                 [alloc.cores for alloc in ex_job.allocation.nodes], [])])})
-
 
     def _preprocess_threads(self, ex_job):
         """Prepare execution description for threads execution model.
@@ -133,6 +131,7 @@ class SlurmExecution(ExecutionSchema):
             "--mem-per-cpu=0",
             cpu_bind]
 
+        self._preprocess_slurm_common(ex_job)
         self._preprocess_common(ex_job)
 
         ex_job.job_execution.exec = 'srun'
@@ -144,39 +143,7 @@ class SlurmExecution(ExecutionSchema):
         Args:
             ex_job (ExecutionJob): job execution description
         """
-        job_exec = ex_job.job_execution.exec
-        job_args = ex_job.job_execution.args
-
-        run_conf_file = os.path.join(ex_job.wd_path, ".{}.runconfig".format(ex_job.job_iteration.name))
-        with open(run_conf_file, 'w') as conf_f:
-            conf_f.write("0\t%s %s\n" % (
-                job_exec,
-                ' '.join('{0}'.format(str(arg).replace(" ", "\\ ")) for arg in job_args)))
-            if ex_job.ncores > 1:
-                if ex_job.ncores > 2:
-                    conf_f.write("1-%d /bin/true\n" % (ex_job.ncores - 1))
-                else:
-                    conf_f.write("1 /bin/true\n")
-
-        if self.resources.binding:
-            core_ids = []
-            for node in ex_job.allocation.nodes:
-                core_ids.extend([str(core) for core in node.cores])
-            cpu_bind = "--cpu-bind=verbose,map_cpu:{}".format(','.join(core_ids))
-        else:
-            cpu_bind = "--cpu-bind=verbose,cores"
-
-        ex_job.job_execution.args = [
-            "-n", str(ex_job.ncores),
-            "--overcommit",
-            "--mem-per-cpu=0",
-            cpu_bind,
-            "--multi-prog"]
-
         self._preprocess_common(ex_job)
-
-        ex_job.job_execution.exec = 'srun'
-        ex_job.job_execution.args.append(run_conf_file)
 
     def _preprocess_openmpi(self, ex_job):
         """Prepare execution description for openmpi execution model.
@@ -207,11 +174,14 @@ class SlurmExecution(ExecutionSchema):
                 str(ex_job.ncores),
             ]
 
-        ex_job.job_execution.exec = 'bash'
-        ex_job.job_execution.args = ['-c',
-                'source /etc/profile; module purge; module load {}; exec mpirun {} {} {}'.format(
-                    Config.OPENMPI_MODEL_MODULE.get(self.config), ' '.join(mpi_args), job_exec, '' if not job_args else ' '.join(job_args))]
-#        ex_job.job_execution.args.extend([job_exec, *job_args])
+        if ex_job.job_execution.model_opts.get('mpirun_args'):
+            mpi_args.extend(ex_job.job_execution.model_opts['mpirun_args'])
+        mpirun = ex_job.job_execution.model_opts.get('mpirun', 'mpirun')
+
+        ex_job.job_execution.exec = mpirun
+        ex_job.job_execution.args = [*mpi_args, job_exec]
+        if job_args:
+            ex_job.job_execution.args.extend(job_args)
 
     def _preprocess_intelmpi(self, ex_job):
         """Prepare execution description for intelmpi execution model.
@@ -257,7 +227,11 @@ class SlurmExecution(ExecutionSchema):
             ex_job.env.update({'I_MPI_HYDRA_BOOTSTRAP_EXEC_EXTRA_ARGS':
                                    '-v --overcommit --oversubscribe --mem-per-cpu=0'})
 
-        ex_job.job_execution.exec = 'mpirun'
+        if ex_job.job_execution.model_opts.get('mpirun_args'):
+            mpi_args.extend(ex_job.job_execution.model_opts['mpirun_args'])
+        mpirun = ex_job.job_execution.model_opts.get('mpirun', 'mpirun')
+
+        ex_job.job_execution.exec = mpirun
         ex_job.job_execution.args = [*mpi_args]
         if job_args:
             ex_job.job_execution.args.extend(job_args)
@@ -274,7 +248,6 @@ class SlurmExecution(ExecutionSchema):
         mpi_args = []
         first = True
 
-        # create rank file
         if self.resources.binding:
             cpu_masks = []
             for node in ex_job.allocation.nodes:
@@ -295,6 +268,11 @@ class SlurmExecution(ExecutionSchema):
             "-m", "arbitrary",
             cpu_bind ]
 
+        self._preprocess_slurm_common(ex_job)
+
+        if ex_job.job_execution.model_opts.get('srun_args'):
+            ex_job.job_execution.args.extend(ex_job.job_execution.model_opts['srun_args'])
+
         ex_job.job_execution.args.append(job_exec)
         if job_args:
             ex_job.job_execution.args.extend(job_args)
@@ -306,15 +284,19 @@ class SlurmExecution(ExecutionSchema):
         Args
             ex_job (ExecutionJob): execution job iteration data
         """
-        job_model = ex_job.job_execution.model or 'default'
+        # as the single core jobs are launched directly by the agent or locally without slurm interaction
+        # this preprocess should be executed only for parallel jobs
+        if len(ex_job.allocation.nodes) != 1 or ex_job.allocation.nodes[0].ncores != 1:
+            job_model = ex_job.job_execution.model or 'default'
 
-        _logger.debug(f'looking for job model {job_model}')
-        preprocess_method = SlurmExecution.JOB_MODELS.get(job_model)
-        if not preprocess_method:
-            raise InternalError(f"unknown job execution model '{job_model}'")
+            _logger.debug(f'looking for job model {job_model}')
 
-        method = getattr(self, preprocess_method)
-        method(ex_job)
+            preprocess_method = SlurmExecution.JOB_MODELS.get(job_model)
+            if not preprocess_method:
+                raise InternalError(f"unknown job execution model '{job_model}'")
+
+            method = getattr(self, preprocess_method)
+            method(ex_job)
 
 
 class DirectExecution(ExecutionSchema):
