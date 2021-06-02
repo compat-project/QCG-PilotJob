@@ -1,7 +1,6 @@
 import pytest
 import sys
 import json
-import cProfile
 
 from os.path import abspath, join, isdir, exists
 from os import stat
