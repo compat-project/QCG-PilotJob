@@ -169,7 +169,7 @@ def get_allocation_data():
 
 def set_pythonpath_to_qcg_module():
     # set PYTHONPATH to test sources
-    qcg_module_path = dirname(dirname(qcg.__file__))
+    qcg_module_path = dirname((str(qcg.__path__._path[0])))
     print("path to the qcg.pilotjob module: {}".format(qcg_module_path))
 
     # in case where qcg.pilotjob are not installed in library, we must set PYTHONPATH to run a
