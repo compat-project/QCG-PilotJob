@@ -12,7 +12,7 @@ from datetime import datetime
 
 import zmq
 
-from qcg.pilotjob import logger as top_logger
+from qcg.pilotjob.logger import top_logger
 from qcg.pilotjob.config import Config
 from qcg.pilotjob.errors import InvalidRequest, JobAlreadyExist, InternalError
 from qcg.pilotjob.joblist import JobState
