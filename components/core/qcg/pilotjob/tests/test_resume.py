@@ -89,10 +89,8 @@ def test_resume_simple(tmpdir):
             job_it = jinfo.childs[iteration]
 
             exp_status = ['SUCCEED']
-            if iteration > 3 and iteration < 8:
-                exp_status = ['EXECUTING', 'SCHEDULED']
-            elif iteration > 7:
-                exp_status = ['QUEUED']
+            if iteration > 3:
+                exp_status = ['EXECUTING', 'SCHEDULED', 'QUEUED']
             assert all((job_it.iteration == iteration,
                         job_it.name == '{}:{}'.format('sleep', iteration),
                         job_it.status in exp_status)),\
@@ -178,10 +176,8 @@ def test_resume_wflow(tmpdir):
             job_it = jinfo.childs[iteration]
 
             exp_status = ['SUCCEED']
-            if iteration > 3 and iteration < 8:
-                exp_status = ['EXECUTING', 'SCHEDULED']
-            elif iteration > 7:
-                exp_status = ['QUEUED']
+            if iteration > 3:
+                exp_status = ['EXECUTING', 'SCHEDULED', 'QUEUED']
             assert all((job_it.iteration == iteration,
                         job_it.name == '{}:{}'.format('first', iteration),
                         job_it.status in exp_status)), \
