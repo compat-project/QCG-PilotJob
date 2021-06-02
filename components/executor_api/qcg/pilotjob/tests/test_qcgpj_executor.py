@@ -36,13 +36,6 @@ def test_qcgpj_executor_submit_basic_template(tmpdir):
     e = QCGPJExecutor()
     e.submit(BasicTemplate.template, name='tj', exec='date')
     e.shutdown()
-    with pytest.raises(ValueError, match=r".*Already closed.*"):
-        e.shutdown()
-
-    with pytest.raises(ValueError, match=r".*Already closed.*"):
-        with QCGPJExecutor() as e:
-            e.submit(BasicTemplate.template, name='tj', exec='date')
-            e.shutdown()
 
 
 def test_qcgpj_executor_submit_custom_template_with_defaults(tmpdir):
