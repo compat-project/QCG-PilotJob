@@ -24,7 +24,7 @@ setup(
                 "qcg-pilotjob",
                 "termcolor",
                 "prompt_toolkit",
-                "plotly.express>=4.14.3",
+                "plotly.express>=0.4.1",
                 "pandas",
                 "kaleido"
           ],
