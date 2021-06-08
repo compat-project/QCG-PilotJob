@@ -41,7 +41,7 @@ and it plays a role of a proxy to its methods.
 
 Once created, ``QCGPJExecutor`` allows us to submit tasks for the execution within a QCG-PilotJob.
 An example invocation of the ``submit`` method is shown on the 5th line. The first and the most interesting argument
-to this method is template. The template is actually a callback that returns a tuple consisting of
+to this method is template. The template is actually a `Callable` that returns a tuple consisting of
 string and dictionary. The string need to be a QCG-PilotJob submit request description written
 in a JSON format with optional placeholders for substitution of specific parameters,
 while the dictionary may used to set default values for placeholders.
@@ -147,7 +147,7 @@ Let's see how example invocations of the ``submit`` method for this template can
 
 QCGPJFuture
 ~~~~~~~~~~~
-The ``submit`` method returns ``QCGPJFuture` object, which plays a role of a handler for the submission.
+The ``submit`` method returns ``QCGPJFuture`` object, which plays a role of a handler for the submission.
 Thus, using the returned ``QCGPJFuture`` object it is possible to make queries to check if
 the submitted task has been finished, with the ``done`` method,
 or request the cancellation of an execution with the ``cancel`` method. As it was presented in the
