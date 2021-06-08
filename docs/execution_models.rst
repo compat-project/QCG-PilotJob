@@ -17,8 +17,12 @@ All jobs are launched from node launcher agent. The binding of single core tasks
 - ``--cpu-bind`` option of the ``srun`` command.
 
 Currenlty, the parallel tasks that requires more than one core are launched
-only by the ``srun`` or ``mpirun`` commands. The `mask_cpu` flag of the ``srun``'s ```--cpu-bind`` parameter
-will contain the CPU masks for all allocated nodes separated with the comma.
+only by the ``srun`` or ``mpirun`` commands. The `mask_cpu` flag of the
+``srun``'s ```--cpu-bind`` parameter will contain the CPU masks for all
+allocated nodes separated with the comma. When ``mpirun`` command is used to
+launch parallel task, either the ``--rankfile`` parameter is used for OpenMPI
+model or ``I_MPI_PIN_PROCESSOR_LIST`` environment variable for Intel MPI
+model.
 
 Additionally, for all tasks launched by the Slurm with binding supported, the
 *QCG_PM_CPU_SET* environment variable will be available and set with core
