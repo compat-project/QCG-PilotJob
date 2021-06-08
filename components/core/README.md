@@ -1,13 +1,9 @@
-# QCG-PilotJob
-The QCG-PilotJob service for execution of many computing tasks inside one allocation
-=======
-# QCG-PilotJob v 0.11.1
+# QCG-PilotJob v 0.12.0RC1
+QCG-PilotJob is a lightweight service for execution of many computing tasks inside one allocation
 
+**Author**: Piotr Kopta <pkopta@man.poznan.pl>, Tomasz Piontek <piontek@man.poznan.pl>, Bartosz Bosak <bbosak@man.poznan.pl>
 
-Author: Piotr Kopta <pkopta@man.poznan.pl>, Tomasz Piontek <piontek@man.poznan.pl>, Bartosz Bosak <bbosak@man.poznan.pl>
-
-Copyright (C) 2017-2021 Poznan Supercomputing and Networking Center
-
+*Copyright (C) 2017-2021 Poznan Supercomputing and Networking Center*
 
 ## Overview
 The QCG-PilotJob system is designed to schedule and execute many small jobs inside one scheduling system allocation. 
