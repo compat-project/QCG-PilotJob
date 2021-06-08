@@ -4,8 +4,8 @@ with open("README.md", "r") as fh:
      long_description = fh.read()
 
 setup(
-     name="qcg-pilotjob-cmds",
-     version="0.11.2",
+	 name="qcg-pilotjob-cmds",
+	 version="0.12.0RC1",
 
      author="Piotr Kopta",
      author_email="pkopta@man.poznan.pl",

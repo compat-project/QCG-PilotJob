@@ -34,6 +34,7 @@ A python service for easy execution of many tasks inside a single allocation.
    execution_environments
    execution_models
    fileinterface
+   executor_api
    resourceschedulers
    resume
    performance_tools

@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
 	name="qcg-pilotjob-executor-api",
-	version="0.11.2",
+	version="0.12.0RC1",
 
 	author="Bartosz Bosak",
 	author_email="bbosak@man.poznan.pl",

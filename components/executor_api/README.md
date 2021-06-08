@@ -1,4 +1,4 @@
-QCG-PilotJob Executor API v 0.0.1
+QCG-PilotJob Executor API v 0.12.0RC1
 =======
 QCG-PilotJob Executor API, by imitation of the Python Executor API, 
 provides a relatively easy way of usage of QCG-PilotJob. It is targeted to
