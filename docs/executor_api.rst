@@ -39,12 +39,12 @@ The interesting part starts on the 4th line. Here we create ``QCGPJExecutor``, w
 QCG-PilotJob. Actually, behind the scenes ``QCGPJExecutor`` initialises the QCG-PilotJob manager service
 and it plays a role of a proxy to its methods.
 
-Once created, ``QCGPJExecutor`` allows us to submit tasks for the execution within a QCG-PilotJob.
+Once created, ``QCGPJExecutor`` allows us to submit tasks for the execution within QCG-PilotJob.
 An example invocation of the ``submit`` method is shown on the 5th line. The first and the most interesting argument
 to this method is template. The template is actually a `Callable` that returns a tuple consisting of
 string and dictionary. The string need to be a QCG-PilotJob submit request description written
 in a JSON format with optional placeholders for substitution of specific parameters,
-while the dictionary may used to set default values for placeholders.
+while the dictionary may be used to set default values for placeholders.
 The next parameters of the method are optional and dependent on the selected template -
 their role is to provide values for the actual substitution of placeholders.
 
