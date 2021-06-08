@@ -51,7 +51,7 @@ their role is to provide values for the actual substitution of placeholders.
 In the example above we use a predefined template called ``BasicTemplate.template``, which requires
 only two parameters to be provided, namely ``name`` and ``exec``.
 
-The ``submit`` method returns a``QCGPJFuture`` object, which provides methods associated with the execution
+The ``submit`` method returns a ``QCGPJFuture`` object, which provides methods associated with the execution
 of submission. For instance, the invocation ``f.result()`` in the example above, blocks processing until the task
 is not completed and then returns the status of its execution.
 
@@ -78,7 +78,7 @@ using the ``shutdown`` method.
 For the full reference of the ``QCGPJExecutor`` module see :py:mod:`qcg.pilotjob.executor_api.qcgpj_executor`.
 
 Submission of tasks
-^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~
 The key method offered by QCGPJExecutor is ``submit``. The call of this method adds a new task (or tasks, depending on
 the usage scenario) to the QCG-PilotJob's queue to be executed once resources are available and dependencies satisfied.
 The method takes the following arguments:
@@ -99,8 +99,7 @@ The method takes the following arguments:
 **Note**: In the process of substitution ``**kwargs`` overwrite ``*args`` and ``*args`` overwrite defaults
 
 Example template
-^^^^^^^^^^^^^^^^
-
+~~~~~~~~~~~~~~~~
 In order to understand how to use or create templates, possibly the best option is to look at the example.
 ``BasicTemplate`` class, which is delivered with the QCG-PilotJob Executor API, provides a predefined
 template method that was already used in the example above. It is a simple example, but can give a good overview.
@@ -147,7 +146,7 @@ Let's see how example invocations of the ``submit`` method for this template can
     e.submit(BasicTemplate.template, name='tj', exec='sleep', args=['10'])
 
 QCGPJFuture
-^^^^^^^^^^^
+~~~~~~~~~~~
 The ``submit`` method returns ``QCGPJFuture` object, which plays a role of a handler for the submission.
 Thus, using the returned ``QCGPJFuture`` object it is possible to make queries to check if
 the submitted task has been finished, with the ``done`` method,
