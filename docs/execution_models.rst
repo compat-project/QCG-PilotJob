@@ -52,7 +52,7 @@ execute MPI codes.
 .. note::
 
     It is important to define for the ``intelmpi``, ``srunmpi`` and ``openmpi`` models
-    appropriate IntelMPI/OpenMPI modules in `executable\modules` element of the job description
+    appropriate IntelMPI/OpenMPI modules in `executable/modules` element of the job description
     or to load them before staring QCG-PJM.
 
 Examples
@@ -76,9 +76,9 @@ Examples
               },
               "modules": [ "impi" ]
             },
-			"resources": {
-			  "numCores": {
-			    "exact": 8
+            "resources": {
+              "numCores": {
+                "exact": 8
               }
             }
           },
@@ -93,9 +93,9 @@ Examples
               },
               "modules": [ "openmpi/4.1.0_gcc620" ]
             },
-			"resources": {
-			  "numCores": {
-			    "exact": 8
+            "resources": {
+              "numCores": {
+                "exact": 8
               }
             }
           }
@@ -135,9 +135,9 @@ The description for the API looks similar:
               "args": [ "-l", "./app_script.sh" ],
               "model": "openmpi",
             },
-			"resources": {
-			  "numCores": {
-			    "exact": 8
+            "resources": {
+              "numCores": {
+                "exact": 8
               }
             }
           }
