@@ -1,3 +1,5 @@
+import versioneer
+
 from setuptools import setup
 
 with open("README.md", "r") as fh:
@@ -5,7 +7,8 @@ with open("README.md", "r") as fh:
 
 setup(
 	name="qcg-pilotjob",
-	version="0.12.0RC1",
+	version=versioneer.get_version(),
+	cmdclass=versioneer.get_cmdclass(),
 
 	author="Piotr Kopta",
 	author_email="pkopta@man.poznan.pl",
