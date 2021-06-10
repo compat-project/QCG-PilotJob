@@ -11,6 +11,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        component: [core, cmds, executor_api]
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python
@@ -26,5 +29,6 @@ jobs:
         TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
         TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
       run: |
-        python setup.py sdist bdist_wheel
+        cd ${{ matrix.component }} ; python setup.py sdist bdist_wheel
         twine upload dist/*
+        cd -
