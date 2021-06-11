@@ -39,14 +39,15 @@ are executed on local machine and doesn't require any scheduling system allocati
 
 ## Components
 QCG-PilotJob consists of three components:
-* *QCG-PilotJob Core* - the essential part of the software, provides all basic mechanism needed to use QCG-PilotJob
-* *QCG-PilotJob Command Line Tools* - a set of command line tools for reporting and analysis of QCG-PilotJob execution
-* *QCG-PilotJob Executor API* - an alternative, simplified API for QCG-PilotJob
+* **QCG-PilotJob Core** - the essential part of the software, provides all basic mechanism needed to use QCG-PilotJob
+* **QCG-PilotJob Command Line Tools** - a set of command line tools for reporting and analysis of QCG-PilotJob execution
+* **QCG-PilotJob Executor API** - an alternative, simplified API for QCG-PilotJob
 
 ## Documentation
 The documentation of the QCG-PilotJob system is available at https://qcg-pilotjob.readthedocs.org
 
-## Installation
+## Installation with pip
+
 The latest stable version of QCG-PilotJob Core can be installed with pip
 
 ```bash
@@ -60,3 +61,11 @@ $ pip install qcg-pilotjob-cmds
 $ pip install qcg-pilotjob-executor-api
 ```
 
+## Installation from sources
+
+The individual QCG-PilotJob components are located in separate directories. In 
+ order to install particular component, you need to `cd` to respective component's directory and then call `python setup.py install`, e.g.:
+```bash
+$ cd components/core
+$ python setup.py install
+```

@@ -11,14 +11,14 @@ A python service for easy execution of many tasks inside a single allocation.
    :members:
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Basics
 
    overview
    installation
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Usage
 
    examples
@@ -27,7 +27,7 @@ A python service for easy execution of many tasks inside a single allocation.
    options
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Further reading
 
    concepts
@@ -42,7 +42,7 @@ A python service for easy execution of many tasks inside a single allocation.
    processes
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Miscellaneous
 
    logs
