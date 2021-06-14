@@ -503,17 +503,6 @@ def test_slurmenv_launcher_agents():
             asyncio.get_event_loop().run_until_complete(asyncio.ensure_future(LauncherExecutionJob.stop_agents()))
             time.sleep(1)
 
-            tasks = asyncio.Task.all_tasks(asyncio.get_event_loop())
-            print('#{} all tasks in event loop before closing'.format(len(tasks)))
-            for idx, task in enumerate(tasks):
-                print('\ttask {}: {}'.format(idx, str(task)))
-
-            tasks = asyncio.Task.current_task(asyncio.get_event_loop())
-            if tasks:
-                logging.info('#{} current tasks in event loop before closing after waiting'.format(len(tasks)))
-                for idx, task in enumerate(tasks):
-                    logging.info('\ttask {}: {}'.format(idx, str(task)))
-
             asyncio.get_event_loop().close()
     finally:
         rmtree(tmpdir)

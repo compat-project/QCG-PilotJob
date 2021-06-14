@@ -410,34 +410,10 @@ class QCGPMService:
     @staticmethod
     def _setup_event_loop():
         """Setup event loop."""
-#        tasks = asyncio.Task.all_tasks(asyncio.get_event_loop())
-#        _logger.info('#{} all tasks in event loop before checking for open'.format(len(tasks)))
-#        for idx, task in enumerate(tasks):
-#            _logger.info('\ttask {}: {}'.format(idx, str(task)))
-#                asyncio.get_event_loop().run_until_complete(task)
-
-#        tasks = asyncio.Task.current_task(asyncio.get_event_loop())
-#        if tasks:
-#            _logger.info('#{} current tasks in event loop before checking for open'.format(len(tasks)))
-#            for idx, task in enumerate(tasks):
-#                _logger.info('\ttask {}: {}'.format(idx, str(task)))
-
         _logger.debug('checking event loop')
         if asyncio.get_event_loop() and asyncio.get_event_loop().is_closed():
             _logger.debug('setting new event loop')
             asyncio.set_event_loop(asyncio.new_event_loop())
-
-#        try:
-#            import nest_asyncio
-#            nest_asyncio.apply()
-#        except ImportError:
-#            _logger.debug('not found nest_asyncio')
-#        except Exception as exc:
-#            _logger.info(f'not applying nest_asyncio: {str(exc)}')
-
-#        asyncio.get_event_loop().set_debug(True)
-#        different child watchers - available in Python >=3.8
-#        asyncio.set_child_watcher(asyncio.ThreadedChildWatcher())
 
     def _handle_sig_int(self, sig, frame):
         _logger.info("signal interrupt")
@@ -585,20 +561,6 @@ class QCGPMService:
         finally:
             _logger.info('closing event loop')
 
-            tasks = asyncio.Task.all_tasks(asyncio.get_event_loop())
-            _logger.info('#%d all tasks in event loop before closing', len(tasks))
-            for idx, task in enumerate(tasks):
-                _logger.info('\ttask %d: %s', idx, str(task))
-#                asyncio.get_event_loop().run_until_complete(task)
-
-            tasks = asyncio.Task.current_task(asyncio.get_event_loop())
-            if tasks:
-                _logger.info('#%d current tasks in event loop before closing after waiting', len(tasks))
-                for idx, task in enumerate(tasks):
-                    _logger.info('\ttask %d: %s', idx, str(task))
-
-#           asyncio.get_event_loop()._default_executor.shutdown(wait=True)
-#           asyncio.get_event_loop().shutdown_asyncgens()
             asyncio.get_event_loop().run_until_complete(asyncio.sleep(1))
             asyncio.get_event_loop().close()
             _logger.info('event loop closed')
