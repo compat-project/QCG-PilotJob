@@ -51,10 +51,11 @@ The above code should print a list with just one element: the submitted job iden
 job, the automatically generated name was returned. The job name can passed as keyword argument ``name`` to ``Jobs.add``
 method.
 
-.. note::  In the example above we have used the simplified API to submit a Job. In case of more complicated
-    job description we can use the full JSON description of submited job by using ``Jobs.add_std`` method where
-    all JSON attributes are passed as keyword parameters. The full list of accepted parameters can be found in
-    ``submit`` command documententation described in :ref:`File based interface` document.
+.. note::  In the example above we presented the simplified API to submit a job. In case of more complicated
+    scenarios we can use the full JSON description to define a submitted job by using ``Jobs.add_std``
+    method where all JSON attributes are passed as keyword parameters.
+    The full list of accepted parameters can be found in the ``submit`` command documentation described
+    in the :ref:`File based interface` document.
 
 
 Now we can check the status of our submitted job:
