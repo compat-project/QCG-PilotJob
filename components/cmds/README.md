@@ -1,4 +1,4 @@
-QCG-PilotJob Command Line Tools (cmds) v 0.12.0RC1
+QCG-PilotJob Command Line Tools (cmds)
 =======
 The package provides a set of command line tools for reporting and analysis of QCG-PilotJob execution. 
 
