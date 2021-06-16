@@ -64,8 +64,8 @@ $ pip install qcg-pilotjob-executor-api
 ## Installation from sources
 
 The individual QCG-PilotJob components are located in separate directories. In 
- order to install particular component, you need to `cd` to respective component's directory and then call `python setup.py install`, e.g.:
+ order to install particular component, you need to `cd` to respective component's directory and then call `pip install .`, e.g.:
 ```bash
 $ cd components/core
-$ python setup.py install
+$ pip install .
 ```
