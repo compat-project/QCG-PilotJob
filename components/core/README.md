@@ -1,4 +1,4 @@
-# QCG-PilotJob v 0.12.0RC1
+# QCG-PilotJob
 QCG-PilotJob is a lightweight service for execution of many computing tasks inside one allocation
 
 **Author**: Piotr Kopta <pkopta@man.poznan.pl>, Tomasz Piontek <piontek@man.poznan.pl>, Bartosz Bosak <bbosak@man.poznan.pl>

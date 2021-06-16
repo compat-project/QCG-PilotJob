@@ -86,7 +86,7 @@ Examples
             "name": "openmpi_task",
             "execution": {
               "exec": "/home/user/my_openmpi_application",
-              "model": "intelmpi",
+              "model": "openmpi",
               "model_opts": {
                   "mpirun": "/opt/exp_soft/local/skylake/openmpi/4.1.0_gcc620/bin/mpirun",
                   "mpirun_args": [ "--mca", "rmaps_rank_file_physical", "1" ]
