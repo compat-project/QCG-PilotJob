@@ -666,6 +666,12 @@ class JobsReportStats:
         report['total_cores'] = total_cores
         report['avg_core_utilization'] = total_core_utilization/total_cores if total_cores else 0
 
+        if self.gstats.get('total_cores') and total_cores != self.gstats['total_cores']:
+            global_cores = self.gstats['total_cores']
+
+            report['not_used_cores'] = global_cores - total_cores
+            report['avg_all_cores_utilization'] = total_core_utilization/global_cores if global_cores else 0
+
         return report
 
     def _find_previous_latest_job_finish_on_resources(self, resource_nodes, job_data):
