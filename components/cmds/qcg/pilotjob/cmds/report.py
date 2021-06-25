@@ -259,7 +259,14 @@ def rusage(wdir, details, wo_init, until_last_job, verbose):
         print('WARNING: resource usage is counted until last job on given core finished, NOT when allocation finished')
 
     print('\t{:>40}: {}'.format('used cores', report.get('total_cores', 0)))
-    print('\t{:>40}: {:.1f}%'.format('average core utilization (%)', report.get('avg_core_utilization', 0)))
+
+    if report.get('not_used_cores', None):
+        print(f'WARNING: {report.get("not_used_cores")} has not been used by any job')
+        print('\t{:>40}: {:.1f}%'.format('average USED core utilization (%)', report.get('avg_core_utilization', 0)))
+        print('\t{:>40}: {:.1f}%'.format('average ALL cores utilization (%)', report.get('avg_all_cores_utilization', 0)))
+    else:
+        print('\t{:>40}: {:.1f}%'.format('average core utilization (%)', report.get('avg_core_utilization', 0)))
+
 
     if details:
         if report.get('nodes'):
@@ -267,7 +274,7 @@ def rusage(wdir, details, wo_init, until_last_job, verbose):
          for node_name in sorted_node_list:
              cores = report['nodes'][node_name]
              print(f'\t{node_name}')
-             sorted_core_list = sorted([int(core_id) for core_id in cores.keys()])
+             sorted_core_list = sorted(cores.keys(), key=lambda c: int(c.split('&')[0]) if '&' in str(c) else int(c))
              for core_id in sorted_core_list:
                  core_name = str(core_id)
                  core_spec = cores[core_name]
@@ -334,7 +341,7 @@ def efficiency(wdir, details, verbose):
          for node_name in sorted_node_list:
              cores = report['nodes'][node_name]
              print(f'\t{node_name}')
-             sorted_core_list = sorted([int(core_id) for core_id in cores.keys()])
+             sorted_core_list = sorted(cores.keys(), key=lambda c: int(c.split('&')[0]) if '&' in str(c) else int(c))
              for core_id in sorted_core_list:
                  core_name = str(core_id)
                  core_spec = cores[core_name]

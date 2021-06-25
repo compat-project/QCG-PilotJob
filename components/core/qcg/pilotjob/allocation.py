@@ -157,5 +157,5 @@ class Allocation:
         Returns:
             str: a single line description of allocation
         """
-        return ','.join(["{}[{}]".format(node.node.name, ':'.join(str(e) for e in list(node.cores)))
+        return ','.join(["{}[{}]".format(node.node.name, ':'.join(str(e).replace(',','&') for e in list(node.cores)))
                          for node in self._nodes])

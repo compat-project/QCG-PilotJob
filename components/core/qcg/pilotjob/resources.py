@@ -410,7 +410,7 @@ class Node:
         if allocation.ncores > self.used:
             raise InternalError('trying to release more cores than are used on node {}'.format(self._name))
 
-        self._free_cores = sorted(self._free_cores + allocation.cores, key=lambda c: int(c))
+        self._free_cores = sorted(self._free_cores + allocation.cores, key=lambda c: int(c.split(',')[0]) if ',' in str(c) else int(c))
 
         if allocation.crs:
             if not self._crs:

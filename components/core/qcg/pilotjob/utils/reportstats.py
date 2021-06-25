@@ -451,7 +451,7 @@ class JobsReportStats:
                     max_finish = job_data.get(finish_metric_name)
 
                 for node_name, cores in job_data.get('nodes', {}).items():
-                    avail_nodes.setdefault(node_name, set()).update(int(core) for core in cores)
+                    avail_nodes.setdefault(node_name, set()).update(cores)
 
                     jobs_chart.extend([{'Job': job_name,
                                         'Start': str(job_data.get(start_metric_name)),
@@ -464,7 +464,7 @@ class JobsReportStats:
         node_order = []
         while len(avail_nodes) > 0:
             node_name, cores = avail_nodes.popitem(last=False)
-            node_order.extend([f'{node_name}:{core}' for core in sorted(cores)])
+            node_order.extend([f'{node_name}:{core}' for core in sorted(cores, key=lambda c: int(c.split('&')[0]) if '&' in str(c) else int(c))])
 
         return {'chart_data': jobs_chart,
                 'total_jobs': total_jobs,
@@ -495,7 +495,7 @@ class JobsReportStats:
                     max_finish = job_data.get(finish_metric_name)
 
                 for node_name, cores in job_data.get('nodes', {}).items():
-                    avail_nodes.setdefault(node_name, set()).update(int(core) for core in cores)
+                    avail_nodes.setdefault(node_name, set()).update(cores)
 
                     for core in cores:
                         resource_nodes.setdefault(node_name, {}).setdefault(core, []).append(job_data)
@@ -539,7 +539,7 @@ class JobsReportStats:
         node_order = []
         while len(avail_nodes) > 0:
             node_name, cores = avail_nodes.popitem(last=False)
-            node_order.extend([f'{node_name}:{core}' for core in sorted(cores)])
+            node_order.extend([f'{node_name}:{core}' for core in sorted(cores, key=lambda c: int(c.split('&')[0]) if '&' in str(c) else int(c))])
 
         return {'chart_data': gaps_chart,
                 'total_jobs': total_jobs,
@@ -665,6 +665,12 @@ class JobsReportStats:
 
         report['total_cores'] = total_cores
         report['avg_core_utilization'] = total_core_utilization/total_cores if total_cores else 0
+
+        if self.gstats.get('total_cores') and total_cores != self.gstats['total_cores']:
+            global_cores = self.gstats['total_cores']
+
+            report['not_used_cores'] = global_cores - total_cores
+            report['avg_all_cores_utilization'] = total_core_utilization/global_cores if global_cores else 0
 
         return report
 
