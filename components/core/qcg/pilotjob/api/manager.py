@@ -689,6 +689,11 @@ class LocalManager(Manager):
         _logger.debug('initializing MP start method with "fork"')
         mp.set_start_method("fork", force=True)
         mp.freeze_support()
+
+        if LocalManager.is_notebook():
+            _logger.debug('Creating a new event loop due to run in an interactive environment')
+            import asyncio
+            asyncio.set_event_loop(asyncio.new_event_loop())
                         
         try:
             from qcg.pilotjob.service import QCGPMServiceProcess
@@ -783,3 +788,15 @@ class LocalManager(Manager):
         In normal conditions the ``finish`` method should be called.
         """
         self.qcgpm_process.terminate()
+
+    @staticmethod
+    def is_notebook():
+        try:
+            shell = get_ipython().__class__.__name__
+            if shell == 'ZMQInteractiveShell':
+                return True  # Jupyter notebook or qtconsole
+            else:
+                return False  # Other type (?)
+        except NameError:
+            return False  # Probably standard Python interpreter
+
