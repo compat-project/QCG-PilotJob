@@ -79,6 +79,8 @@ def test_api_jobs_smpl_errors():
         jobs.add(name='j1', exec='/bin/date', iteration={'start': 2, 'stop': MAX_ITERATIONS + 3})
     with pytest.raises(InvalidJobDescriptionError, match=r".*Required attribute stop of element iteration not defined.*"):
         jobs.add(name='j1', exec='/bin/date', iteration={'start': 2})
+    with pytest.raises(InvalidJobDescriptionError, match=r".*Stop and values iteration attribute are excluding.*"):
+        jobs.add(name='j1', exec='/bin/date', iteration={'stop': 2, 'values': ['first', 'second']})
 
     jobs.add(name='j1', exec='/bin/date')
     with pytest.raises(InvalidJobDescriptionError, match=r".*Job j1 already in list.*"):
@@ -358,6 +360,46 @@ def test_api_submit_iterate(tmpdir):
                         job_it.total_cores == 1, len(job_it.nodes) == 1)), str(job_it)
 
         assert all(exists(tmpdir.join('date_{}.out'.format(i))) for i in range(iters))
+        m.remove(jid)
+    finally:
+        m.finish()
+        m.cleanup()
+
+    rmtree(tmpdir)
+
+
+def test_api_submit_iterate_values(tmpdir):
+    cores = 4
+
+    m = LocalManager(['--wd', str(tmpdir), '--nodes', str(cores), '--log', 'debug'], {'wdir': str(tmpdir)})
+
+    try:
+        res = m.resources()
+        assert all(('total_nodes' in res, 'total_cores' in res, res['total_nodes'] == 1, res['total_cores'] == cores))
+
+        iters = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
+        ids = m.submit(Jobs().
+                       add(iteration=iters, exec='/bin/date', stdout='date_${itval}.out')
+                       )
+        jid = ids[0]
+        assert len(m.list()) == 1
+
+        m.wait4(m.list())
+
+        jinfos = m.info_parsed(ids, withChilds=True)
+        assert all((len(jinfos) == 1, jid in jinfos, jinfos[jid].status  == 'SUCCEED'))
+        assert all((jinfos[jid].iterations, jinfos[jid].iterations.get('start', -1) == 0,
+                    jinfos[jid].iterations.get('stop', 0) == len(iters),
+                    jinfos[jid].iterations.get('total', 0) == len(iters),
+                    jinfos[jid].iterations.get('finished', 0) == len(iters),
+                    jinfos[jid].iterations.get('failed', -1) == 0))
+        assert len(jinfos[jid].childs) == len(iters)
+        for iteration_idx, iteration_val in enumerate(iters):
+            job_it = jinfos[jid].childs[iteration_idx]
+            assert all((job_it.iteration == iteration_idx, job_it.name == '{}:{}'.format(jid, iteration_idx),
+                        job_it.total_cores == 1, len(job_it.nodes) == 1)), str(job_it)
+
+        assert all(exists(tmpdir.join('date_{}.out'.format(i))) for i in iters)
         m.remove(jid)
     finally:
         m.finish()

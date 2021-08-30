@@ -109,6 +109,7 @@ class ExecutionJob:
 
         if self.job_iteration.iteration is not None:
             job_vars['it'] = self.job_iteration.iteration
+            job_vars['itval'] = self.job_iteration.iteration_value
 
         replaced_job_execution = JobExecution(
             **json.loads(Template(job_execution.to_json()).safe_substitute(job_vars)))

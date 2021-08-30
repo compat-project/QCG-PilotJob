@@ -177,6 +177,9 @@ class SchedulingJob:
         for iteration in range(self._current_solved_iterations, self._current_solved_iterations + niters):
             # prepare resources, dependencies
             subjob_iteration = iteration + self.job.iteration.start if self._has_iterations else None
+            subjob_iteration_value = self.job.iteration.iteration_value(subjob_iteration)\
+                if self._has_iterations else None
+
             if self.job.state(subjob_iteration) != JobState.CANCELED:
                 subjob_resources = self.job.resources
 
@@ -197,7 +200,8 @@ class SchedulingJob:
                     for job_name in self._after_iteration_jobs:
                         subjob_after.add(job_name.replace('${it}', str(subjob_iteration)))
 
-                sched_iter = SchedulingIteration(self, subjob_iteration, subjob_resources, subjob_after)
+                sched_iter = SchedulingIteration(self, subjob_iteration, subjob_iteration_value, subjob_resources,
+                                                 subjob_after)
                 self._iteration_sub_jobs.append(sched_iter)
 
         self._current_solved_iterations += niters
@@ -299,13 +303,14 @@ class SchedulingIteration:
     Attributes:
         _scheduling_job (SchedulingJob): parent job
         _iteration (int): iteration index
+        _iteration_value (str): text value related to the iteration index
         _resources (JobResources): resource requirements
         _after_subjobs (list): subjob dependencies
         _name (str): iteration name, if it's main job iteration the name is the same as job's name
         _is_feasible (bool): does the subjob has chance to execute
     """
 
-    def __init__(self, scheduling_job, iteration, resources, after_subjobs):
+    def __init__(self, scheduling_job, iteration, iteration_value, resources, after_subjobs):
         """Initialize instance.
 
         Args:
@@ -317,8 +322,9 @@ class SchedulingIteration:
         # link to the parent job
         self._scheduling_job = scheduling_job
 
-        # iteration identifier
+        # iteration identifier and value
         self._iteration = iteration
+        self._iteration_value = iteration_value
 
         # resource requirements
         self._resources = resources
@@ -395,6 +401,11 @@ class SchedulingIteration:
     def iteration(self):
         """int: iteration index"""
         return self._iteration
+
+    @property
+    def iteration_value(self):
+        """int: iteration index"""
+        return self._iteration_value
 
     @property
     def resources(self):
