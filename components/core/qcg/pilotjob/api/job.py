@@ -22,7 +22,7 @@ JOB_TOP_ATTRS = {
     "numNodes": {'req': False, 'types': [int, dict]},
     "numCores": {'req': False, 'types': [int, dict]},
     "wt": {'req': False, 'types': [str]},
-    "iteration": {'req': False, 'types': [int, dict]},
+    "iteration": {'req': False, 'types': [int, list, dict]},
     "after": {'req': False, 'types': [list, str]}
 }
 
@@ -37,7 +37,8 @@ JOB_RES_ATTRS = {
 # iterations attributes of job description
 ITERATE_ATTRS = {
     "start": {'req': False, 'types': [int]},
-    "stop": {'req': True, 'types': [int]}
+    "stop": {'req': False, 'types': [int]},
+    "values": {'req': False, 'types': [list]}
 }
 
 # maximum number of iterations
@@ -123,11 +124,22 @@ class Jobs:
         if 'iteration' in attrs:
             if isinstance(attrs['iteration'], int):
                 attrs['iteration'] = {'start': 0, 'stop': attrs['iteration']}
+            elif isinstance(attrs['iteration'], list):
+                attrs['iteration'] = {'values': attrs['iteration']}
 
             Jobs._validate_smpl_element_definition(['iteration'], attrs, ITERATE_ATTRS)
 
-            iter_start = attrs['iteration']['start'] if 'start' in attrs['iteration'] else 0
-            niters = attrs['iteration']['stop'] - iter_start
+            if 'stop' not in attrs['iteration'] and 'values' not in attrs['iteration']:
+                raise InvalidJobDescriptionError("Required attribute stop of element iteration not defined")
+
+            if 'stop' in attrs['iteration'] and 'values' in attrs['iteration']:
+                raise InvalidJobDescriptionError("Stop and values iteration attribute are excluding")
+
+            if 'values' in attrs['iteration']:
+                niters = len(attrs['iteration']['values'])
+            else:
+                iter_start = attrs['iteration']['start'] if 'start' in attrs['iteration'] else 0
+                niters = attrs['iteration']['stop'] - iter_start
 
             if niters < 0 or niters > MAX_ITERATIONS:
                 raise InvalidJobDescriptionError("Wrong number of iterations - outside range (0, {})".format(

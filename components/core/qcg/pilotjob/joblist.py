@@ -545,31 +545,42 @@ class JobDependencies:
 class JobIteration:
     """The ``iteration`` element of job description."""
 
-    def __init__(self, start=None, stop=None):
+    def __init__(self, start=None, stop=None, values=None):
         """Initialize ``iteration`` element of job description.
 
-        If ``start`` is not defined, the value 0 is assumed.
+        The iteration can be defined as a range with ``start` and `stop`` parameters, or as an ``values`` set.
+        If ``start`` is not defined but ``stop`` is, the value 0 is assumed as a ``start``.
 
         Args:
             start (int): starting index of an iteration
             stop (int): stop index of an iteration - the last value of job's iteration will be ``stop`` - 1
+            values (list(str)): the enumerated list of iteration values
 
         Raises:
             IllegalJobDescription: raised when:
-                * ``stop`` is not defined
+                * ``stop`` and ``values`` is not defined
+                * ``stop`` and ``values`` is both defined
                 * ``start`` is greater or equal ``stop``
         """
-        if stop is None:
-            raise IllegalJobDescription("Missing stop iteration value")
+        if stop is None and values is None:
+            raise IllegalJobDescription("Missing stop or values iteration value")
 
-        if start is None:
+        if stop is not None and values is not None:
+            raise IllegalJobDescription("Stop and values iteration are excluding")
+
+        if values is not None:
             start = 0
+            stop = len(values)
+        else:
+            if start is None:
+                start = 0
 
-        if start >= stop:
-            raise IllegalJobDescription("Job iteration stop greater or equal than start")
+            if start >= stop:
+                raise IllegalJobDescription("Job iteration stop greater or equal than start")
 
         self.start = start
         self.stop = stop
+        self.values = values
 
     def in_range(self, index):
         """Check if given index is in range of job's iterations.
@@ -598,6 +609,18 @@ class JobIteration:
         """
         return self.stop - self.start
 
+    def iteration_value(self, index):
+        """Return value related with the iteration index.
+
+        Returns:
+            str: if iteration has been defined with ``values`` argument the value on position according to the iteration
+                index will be returned, oterwise the string representation of index will be returned
+        """
+        if self.values:
+            return self.values[index]
+        else:
+            return str(index)
+
     def to_dict(self):
         """Serialize ``iteration`` element of job description
 
@@ -620,7 +643,10 @@ class JobIteration:
         Returns:
             str: string representation of ``iteration`` element of job description
         """
-        return "{}-{}".format(self.start, self.stop)
+        if self.values:
+            return ','.join(self.values)
+        else:
+            return "{}-{}".format(self.start, self.stop)
 
 
 class SubJobState:

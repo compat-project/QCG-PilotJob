@@ -194,13 +194,15 @@ class SubmitReq(Request):
 
             # look for 'iterate' directive
             if 'iteration' in job_desc:
-                if not isinstance(job_desc['iteration'], dict) or 'stop' not in job_desc['iteration']:
+                if not isinstance(job_desc['iteration'], dict) or \
+                        all(attr not in job_desc['iteration'] for attr in ['stop', 'values']):
                     raise InvalidRequest('Wrong format of iteration directive: not a dictionary')
 
-                start = job_desc['iteration'].get('start', 0)
-                end = job_desc['iteration']['stop']
-                if start > end:
-                    raise InvalidRequest('Wrong format of iteration directive: start index larger then stop one')
+                if 'stop' in job_desc['iteration']:
+                    start = job_desc['iteration'].get('start', 0)
+                    end = job_desc['iteration']['stop']
+                    if start > end:
+                        raise InvalidRequest('Wrong format of iteration directive: start index larger then stop one')
 
             # default value for missing 'resources' definition
             if 'resources' not in job_desc:
