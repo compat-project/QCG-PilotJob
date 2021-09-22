@@ -40,12 +40,13 @@ A python service for easy execution of many tasks inside a single allocation.
    performance_tools
    performance_tuning
    processes
+   logs
 
 .. toctree::
    :maxdepth: 1
    :caption: Miscellaneous
 
-   logs
+   faq
    dictionary
 
 .. toctree::

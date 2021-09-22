@@ -10,7 +10,7 @@ jobs can be restricted or even forbidden by administrative policies
 defined on clusters. One can argue that there are available job array
 mechanisms in many systems, however the traditional job array mechanism
 allows to run only bunch of jobs having the same resource requirements
-while jobs being parts of a multiscale simulation by nature vary in
+while jobs being parts of larger workflows by nature vary in
 requirements and therefore need more flexible solutions.
 
 The core component of QCG-PilotJob system is QCG-PilotJob Manager.
