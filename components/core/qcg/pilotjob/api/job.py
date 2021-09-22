@@ -255,7 +255,7 @@ class Jobs:
         - ``numCores`` (int or dict, optional): number of required cores specification
         - ``numNodes`` (int or dict, optional): number of required nodes specification
         - ``wt`` (str, optional): job's maximum wall time
-        - ``iteration`` (int or dict, optional): number of job's iterations
+        - ``iteration`` (int, dict or list, optional): iterations definition
         - ``after`` (str or list(str), optional): name of the job's that must finish successfully before current one start
 
         The attributes ``exec`` (with optional ``args``) are mutually exclusive with ``script``.
@@ -270,12 +270,19 @@ class Jobs:
         The ``min``, ``max`` attributes are mutually exclusive with ``exact``. The description of iteration resource
         schedulers can be found in documentation.
 
-        The ``iteration`` argument may contain dictionary with following keys:
+        The ``iteration`` argument may contain either:
 
-        - ``start`` (int, optional): iterations start index
-        - ``stop`` (int, optional): iterations stop index
+        - dictionary with following keys:
 
-        The total number of iterations will be ``stop - start`` (the last iteration index will be ``stop - 1``).
+          - ``start`` (int, optional): iterations start index
+          - ``stop`` (int, optional): iterations stop index
+
+        - ``values`` list with following iteration names
+
+        The total number of iterations will be:
+
+        - ``stop - start`` (the last iteration index will be ``stop - 1``) for boundary definition
+        - length of ``values`` list
 
         Args:
             job_attrs (dict): job description attributes in a simple format
