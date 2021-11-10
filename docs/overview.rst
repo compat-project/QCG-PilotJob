@@ -33,6 +33,8 @@ To allow user's to test their scenarios, QCG-PilotJob Manager
 supports *local* execution mode, in which all job's are executed on
 local machine and doesn't require any scheduling system allocation.
 
+QCG-PilotJob's source code is publicly available at: https://github.com/vecma-project/QCG-PilotJob
+
 Components
 ----------
 QCG-PilotJob consists of three components:
@@ -43,3 +45,4 @@ QCG-PilotJob Command Line Tools
     a set of command line tools for reporting and analysis of QCG-PilotJob execution
 QCG-PilotJob Executor API
     an alternative, simplified API for QCG-PilotJob
+

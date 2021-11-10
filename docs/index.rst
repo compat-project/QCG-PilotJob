@@ -48,6 +48,7 @@ A python service for easy execution of many tasks inside a single allocation.
 
    faq
    dictionary
+   license
 
 .. toctree::
    :maxdepth: 1
@@ -55,7 +56,6 @@ A python service for easy execution of many tasks inside a single allocation.
 
    api/qcg.pilotjob.api
    api/qcg.pilotjob.executor_api
-
 
 
 Indices and tables
