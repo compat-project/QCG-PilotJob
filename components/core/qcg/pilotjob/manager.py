@@ -727,8 +727,6 @@ class DirectManager:
                           job_id if iteration is None else '{}:{}'.format(job_id, iteration), state)
             asyncio.ensure_future(self._call_callbacks(job_id, iteration, state, self._job_states_cbs.values()))
 
-        asyncio.ensure_future(self._call_callbacks(job_id, iteration, state, self._job_states_cbs.values()))
-
         if self.status_publisher:
             self._publish_status_events(job_id, iteration, state)
 
