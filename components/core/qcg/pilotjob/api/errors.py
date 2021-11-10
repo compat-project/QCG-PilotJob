@@ -28,3 +28,7 @@ class FileError(QCGPJMAError):
 
 class ServiceError(QCGPJMAError):
     pass
+
+
+class TimeoutElapsed(Exception):
+    pass

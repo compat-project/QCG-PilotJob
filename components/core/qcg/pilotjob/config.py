@@ -61,6 +61,12 @@ class Config(Enum):
         'default': None
     }
 
+    ZMQ_PUB_PORT = {
+        'name': 'zmq.pub.port',
+        'cmd_opt': '--net-pub-port',
+        'default': None
+    }
+
     ZMQ_PORT_MIN_RANGE = {
         'name': 'zmq.port.min',
         'cmd_opt': '--net-port-min',
@@ -80,6 +86,15 @@ class Config(Enum):
                'tcp://{}:{}'.format(str(Config.ZMQ_IP_ADDRESS.get(conf)), str(Config.ZMQ_PORT.get(conf)))
                if Config.ZMQ_PORT.get(conf) else
                'tcp://{}'.format(str(Config.ZMQ_IP_ADDRESS.get(conf)))
+    }
+
+    ZMQ_PUB_ADDRESS = {
+        'name': 'zmq.pub.address',
+        'cmd_opt': None,
+        'get': lambda conf:
+        'tcp://{}:{}'.format(str(Config.ZMQ_IP_ADDRESS.get(conf)), str(Config.ZMQ_PUB_PORT.get(conf)))
+        if Config.ZMQ_PUB_PORT.get(conf) else
+        'tcp://{}'.format(str(Config.ZMQ_IP_ADDRESS.get(conf)))
     }
 
     REPORT_FORMAT = {
@@ -206,6 +221,12 @@ class Config(Enum):
         'name': 'launcher.ready.treshold',
         'cmd_opt': '--nl-ready-treshold',
         'default': 1.0,
+    }
+
+    DISABLE_PUBLISHER = {
+        'name': 'zmq.pub.disable',
+        'cmd_opt': '--disable-pub',
+        'default': False
     }
 
     def get(self, config):

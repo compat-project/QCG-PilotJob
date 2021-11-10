@@ -52,3 +52,12 @@ class GovernorConnectionError(AppSchedulerError):
 
 class ResumeError(AppSchedulerError):
     pass
+
+
+class UnknownEventTopic(AppSchedulerError):
+    pass
+
+
+class WrongEventFormat(AppSchedulerError):
+    pass
+
