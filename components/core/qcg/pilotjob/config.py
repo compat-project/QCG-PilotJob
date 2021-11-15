@@ -193,6 +193,12 @@ class Config(Enum):
         'default': None
     }
 
+    SLURM_RESOURCES_FILE = {
+        'name': 'slurm.resources.file',
+        'cmd_opt': '--slurm-resources-file',
+        'default': None
+    }
+
     ENABLE_PROC_STATS = {
         'name': 'enable.proc.stats',
         'cmd_opt': '--enable-proc-stats',

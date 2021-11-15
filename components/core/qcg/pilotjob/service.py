@@ -138,6 +138,9 @@ class QCGPMService:
         parser.add_argument(Config.SLURM_LIMIT_NODES_RANGE_END.value['cmd_opt'],
                             help='limit Slurm allocation to specified range of nodes (ending node)',
                             type=int, default=None)
+        parser.add_argument(Config.SLURM_RESOURCES_FILE.value['cmd_opt'],
+                            help='path to the file with slurm resources description',
+                            default=Config.SLURM_RESOURCES_FILE.value['default'])
         parser.add_argument(Config.RESUME.value['cmd_opt'],
                             help='path to the QCG-PilotJob working directory to resume',
                             default=None)
@@ -231,6 +234,7 @@ class QCGPMService:
             Config.SLURM_PARTITION_NODES: self._args.slurm_partition_nodes,
             Config.SLURM_LIMIT_NODES_RANGE_BEGIN: self._args.slurm_limit_nodes_range_begin,
             Config.SLURM_LIMIT_NODES_RANGE_END: self._args.slurm_limit_nodes_range_end,
+            Config.SLURM_RESOURCES_FILE: self._args.slurm_resources_file,
             Config.RESUME: self._args.resume,
             Config.ENABLE_PROC_STATS: self._args.enable_proc_stats,
             Config.ENABLE_RT_STATS: self._args.enable_rt_stats,

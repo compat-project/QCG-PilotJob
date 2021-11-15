@@ -1,12 +1,20 @@
 import logging
+import json
 
 from qcg.pilotjob.config import Config
 from qcg.pilotjob.localres import parse_local_resources
 from qcg.pilotjob.slurmres import parse_slurm_resources, in_slurm_allocation
+from qcg.pilotjob.resources import Resources
 
 
 _logger = logging.getLogger(__name__)
 
+
+def parse_resources_file(config):
+    path = Config.SLURM_RESOURCES_FILE.get(config)
+    _logger.info(f'reading resource file {path} ...')
+    with open(path, 'rt') as resource_f:
+        return Resources.from_dict(json.loads(resource_f.read()))
 
 def _detect_resources(config):
     """Return resource parse function according to actual environment.
@@ -24,6 +32,10 @@ def _detect_resources(config):
     """
     _logger.info('determining source of information about available resources ...')
 
+    if Config.SLURM_RESOURCES_FILE.get(config):
+        _logger.info('selected resources file information')
+        return parse_resources_file(config)
+
     if Config.EXECUTION_NODES.get(config):
         _logger.info('selected local resources information')
         return parse_local_resources(config)
@@ -40,6 +52,7 @@ __RESOURCES_HANDLING__ = {
     'auto': _detect_resources,
     'local': parse_local_resources,
     'slurm': parse_slurm_resources,
+    'file': parse_resources_file,
 }
 
 
