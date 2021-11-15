@@ -64,11 +64,22 @@ class ZMQInterface:
 
         # the real address might contain the 0.0.0.0 IP address which means that it listens on all
         # interfaces, sadly this address is not valid for external services to communicate, so we
+        local_hostname = socket.gethostname()
+        if os.getenv('SLURM_CLUSTER_NAME', 'unknown') == 'supermucng':
+            _logger.info(f'modifing agent export address for supermucng')
+            local_opa_hostname='.'.join(elem + '-opa' if it == 0 else elem for it,elem in enumerate(local_hostname.split('.')))
+            _logger.info(f'local hostname: {local_hostname}')
+            _logger.info(f'local modified hostname: {local_opa_hostname}')
+
+            _logger.info(f'local hostname ip address: {socket.gethostbyname(local_hostname)}')
+            _logger.info(f'local modified hostname ip address: {socket.gethostbyname(local_opa_hostname)}')
+            local_hostname = local_opa_hostname
+
         # need to replace 0.0.0.0 with the real address IP
         self.external_address = self.real_address
         if '//0.0.0.0:' in self.real_address:
             self.external_address = self.real_address.replace('//0.0.0.0:', '//{}:'.format(
-                socket.gethostbyname(socket.gethostname())))
+                socket.gethostbyname(local_hostname)))
 
         _logger.info('ZMQ interface configured (address %s) @ %s, external address @ %s', self.address,
                      self.real_address, self.external_address)
