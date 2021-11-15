@@ -182,6 +182,7 @@ class Launcher:
                     socket_open_attempts += 1
 
             out_socket.connect(agent['address'])
+            _logger.info(f'connected to agent {agent["address"]} after {socket_open_attempts} attemtps')
 
             await out_socket.send_json({
                 'cmd': 'RUN',
@@ -194,6 +195,7 @@ class Launcher:
                 'env': env,
                 'wdir': wdir,
                 'cores': cores})
+            _logger.info(f'sent RUN request to agent {agent["address"]}')
             msg = await out_socket.recv_json()
 
             if not msg.get('status', None) == 'OK':
