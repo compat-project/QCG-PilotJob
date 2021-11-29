@@ -24,6 +24,7 @@ from qcg.pilotjob.errors import InvalidRequest
 from qcg.pilotjob.iterscheduler import IterScheduler
 from qcg.pilotjob.joblist import Job
 from qcg.pilotjob.resume import StateTracker
+from qcg.pilotjob.publisher import EventTopic, StatusPublisher
 
 
 _logger = logging.getLogger(__name__)
@@ -468,7 +469,21 @@ class DirectManager:
         if Config.SYSTEM_CORE.get(conf):
             self.resources.allocate_for_system()
 
-        _logger.info('available resources: %s', self.resources)
+        _logger.info(f'available resources: {self.resources}')
+
+        self.status_publisher = None
+
+        if Config.DISABLE_PUBLISHER.get(conf):
+            _logger.info(f'status publisher disabled')
+        else:
+            self.status_publisher = StatusPublisher()
+
+            try:
+                self.status_publisher.setup(conf)
+            except Exception as exc:
+                _logger.exception(f'failed to initialize status publisher: {str(exc)}')
+                self.status_publisher.stop()
+                self.status_publisher = None
 
         self._executor = Executor(self, conf, self.resources)
         self._scheduler = Scheduler(self.resources)
@@ -543,6 +558,9 @@ class DirectManager:
         if self._executor:
             await self._executor.stop()
 
+        if self.status_publisher:
+            self.status_publisher.stop()
+
     @property
     def is_all_jobs_finished(self):
         """bool: returns True if there are no jobs in scheduling queue and no jobs are executing"""
@@ -608,6 +626,7 @@ class DirectManager:
                                         _logger.debug("found resources for job %s", job_iteration.name)
 
                                         # allocation has been created - execute job
+                                        _logger.info(f'scheduled {job_iteration.name} on {allocation.nodes[0].node.name}')
                                         self.change_job_state(sched_job.job, iteration=job_iteration.iteration,
                                                               state=JobState.SCHEDULED)
 
@@ -689,6 +708,10 @@ class DirectManager:
 
         self.change_job_state(job_iteration.job, iteration=job_iteration.iteration, state=state, error_msg=error_msg)
         self._scheduler.release_allocation(allocation)
+
+        if self.is_all_jobs_finished:
+            self._publish_no_jobs_event()
+
         self.call_scheduler()
 
     def _fire_job_state_notifies(self, job_id, iteration, state):
@@ -704,6 +727,35 @@ class DirectManager:
             _logger.debug("notifies callbacks about %s job status change %s",
                           job_id if iteration is None else '{}:{}'.format(job_id, iteration), state)
             asyncio.ensure_future(self._call_callbacks(job_id, iteration, state, self._job_states_cbs.values()))
+
+        if self.status_publisher:
+            self._publish_status_events(job_id, iteration, state)
+
+    def _publish_status_events(self, job_id, iteration, state):
+        """Publish events via StatePublisher (push method) about job/iteration status change.
+
+        Args:
+            job_id (str): job identifier
+            iteration (int, optional): iteration index
+            state (JobState): new job status
+        """
+        if self.status_publisher:
+            event = { 'manager': self.manager_id, 'job': job_id, 'state': state.name }
+
+            if iteration is None:
+                self.status_publisher.publish(EventTopic.JOB_STATUS, event)
+                if state.is_finished():
+                    self.status_publisher.publish(EventTopic.JOB_FINISHED, event)
+            else:
+                event['it'] = iteration
+                self.status_publisher.publish(EventTopic.ITERATION_STATUS, event)
+                if state.is_finished():
+                    self.status_publisher.publish(EventTopic.ITERATION_FINISHED, event)
+
+    def _publish_no_jobs_event(self):
+        if self.status_publisher:
+            event = { 'manager': self.manager_id }
+            self.status_publisher.publish(EventTopic.NO_JOBS, event)
 
     async def _call_callbacks(self, job_id, iteration, state, cbs):
         """Call job state change callback function with given arguments.
@@ -1487,12 +1539,15 @@ class DirectManagerHandler:
         resources = self._manager.resources
         return Response.ok(data={
             'System': {
+                'InstanceId': self._manager.manager_id,
                 'Started': str(self._manager.start_time),
                 'Generated': str(datetime.now()),
                 'Uptime': str(datetime.now() - self._manager.start_time),
                 'Zmqaddress': self._receiver.zmq_address,
                 'Ifaces': [iface.name() for iface in self._receiver.interfaces] \
                     if self._receiver and self._receiver.interfaces else [],
+                'StatusPublisher': self._manager.status_publisher.external_address \
+                    if self._manager.status_publisher else None,
                 'Host': socket.gethostname(),
                 'Account': getpass.getuser(),
                 'Wd': os.getcwd(),

@@ -137,7 +137,7 @@ class PartitionManager:
         _default_partition_manager_args (list(str)): additional arguments to launch instance of partition manager
      """
 
-    def __init__(self, mid, node_name, start_node, end_node, work_dir, governor_address, aux_dir, config):
+    def __init__(self, mid, node_name, start_node, end_node, slurm_resources, work_dir, governor_address, aux_dir, config):
         """Initialize partition manager.
 
         Args:
@@ -145,6 +145,7 @@ class PartitionManager:
             node_name (str): the node where partition manager should be launched
             start_node (int): the start node of the allocation the manager should control
             end_node (int): the end node of the allocation the manager should control
+            slurm_resources (Resources): the total resources in global allocation
             work_dir (str): the working directory of partition manager
             governor_address (str): the address of the governor manager where partition manager should register
             aux_dir (str): the auxiliary directory for partition manager
@@ -154,6 +155,7 @@ class PartitionManager:
         self.node_name = node_name
         self.start_node = start_node
         self.end_node = end_node
+        self.slurm_resources = slurm_resources
         self.work_dir = work_dir
         self.governor_address = governor_address
         self.aux_dir = aux_dir
@@ -173,12 +175,22 @@ class PartitionManager:
                      self.mid, self.node_name, self.start_node, self.end_node)
 
         try:
+            # create resources description for partition
+            part_resources = Resources(
+                    self.slurm_resources.rtype,
+                    self.slurm_resources.nodes[self.start_node:self.end_node],
+                    self.slurm_resources.binding)
+            part_resources_path = os.path.join(os.path.abspath(self.aux_dir), f'part-manager-{self.mid}-resources.json')
+            with open(part_resources_path, 'wt') as resources_f:
+                resources_f.write(part_resources.to_json())
+
             slurm_args = ['-J', str(self.mid), '-w', self.node_name, '--oversubscribe', '--overcommit',
                           '-N', '1', '-n', '1', '-D', self.work_dir]
 
             manager_args = ['--id', self.mid, '--parent', self.governor_address,
                             '--slurm-limit-nodes-range-begin', str(self.start_node),
-                            '--slurm-limit-nodes-range-end', str(self.end_node)]
+                            '--slurm-limit-nodes-range-end', str(self.end_node),
+                            '--slurm-resources-file', str(part_resources_path)]
 
             for arg in [Config.ZMQ_PORT_MIN_RANGE, Config.ZMQ_PORT_MAX_RANGE, Config.REPORT_FORMAT,
                     Config.LOG_LEVEL, Config.WRAPPER_RT_STATS, Config.NL_READY_TRESHOLD, Config.NL_INIT_TIMEOUT]:
@@ -514,7 +526,8 @@ class GovernorManager:
             self._partition_managers.append(
                 PartitionManager('partition-{}'.format(part_idx), part_node.name, part_idx * nodes_in_partition,
                                  min(part_idx * nodes_in_partition + nodes_in_partition, slurm_resources.total_nodes),
-                                 partition_manager_wdir, self.zmq_address, partition_manager_auxdir, self._config))
+                                 slurm_resources, partition_manager_wdir, self.zmq_address, partition_manager_auxdir,
+                                 self._config))
 
             _logger.debug('partition manager %s configuration created', part_idx)
 

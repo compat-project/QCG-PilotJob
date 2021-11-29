@@ -64,6 +64,9 @@ class QCGPMService:
         parser.add_argument(Config.ZMQ_PORT.value['cmd_opt'],
                             help='port to listen for network interface (implies --net)',
                             type=int, default=None)
+        parser.add_argument(Config.ZMQ_PUB_PORT.value['cmd_opt'],
+                            help='port to publish events (implies --net)',
+                            type=int, default=None)
         parser.add_argument(Config.ZMQ_PORT_MIN_RANGE.value['cmd_opt'],
                             help='minimum port range to listen for network interface if exact port number is not '
                                  'defined (implies --net)',
@@ -135,6 +138,9 @@ class QCGPMService:
         parser.add_argument(Config.SLURM_LIMIT_NODES_RANGE_END.value['cmd_opt'],
                             help='limit Slurm allocation to specified range of nodes (ending node)',
                             type=int, default=None)
+        parser.add_argument(Config.SLURM_RESOURCES_FILE.value['cmd_opt'],
+                            help='path to the file with slurm resources description',
+                            default=Config.SLURM_RESOURCES_FILE.value['default'])
         parser.add_argument(Config.RESUME.value['cmd_opt'],
                             help='path to the QCG-PilotJob working directory to resume',
                             default=None)
@@ -155,6 +161,10 @@ class QCGPMService:
         parser.add_argument(Config.NL_READY_TRESHOLD.value['cmd_opt'],
                             help='percent (0.0-1.0) of node launchers registered when computations should start',
                             type=float, default=Config.NL_READY_TRESHOLD.value['default'])
+        parser.add_argument(Config.DISABLE_PUBLISHER.value['cmd_opt'],
+                            help='disable status publisher interface',
+                            default=Config.DISABLE_PUBLISHER.value['default'],
+                            action='store_true')
         self._args = parser.parse_args(args)
 
         if self._args.slurm_partition_nodes:
@@ -175,13 +185,12 @@ class QCGPMService:
             if not self._args.net_port_max:
                 self._args.net_port_max = int(Config.ZMQ_PORT_MAX_RANGE.value['default'])
 
-        if self._args.net:
-            # set default values for port min & max if '--net' has been defined
-            if not self._args.net_port_min:
-                self._args.net_port_min = int(Config.ZMQ_PORT_MIN_RANGE.value['default'])
+        # set default values for port min & max
+        if not self._args.net_port_min:
+            self._args.net_port_min = int(Config.ZMQ_PORT_MIN_RANGE.value['default'])
 
-            if not self._args.net_port_max:
-                self._args.net_port_max = int(Config.ZMQ_PORT_MAX_RANGE.value['default'])
+        if not self._args.net_port_max:
+            self._args.net_port_max = int(Config.ZMQ_PORT_MAX_RANGE.value['default'])
 
         if self._args.file and not self._args.file_path:
             # set default file path if interface has been enabled but path not defined
@@ -225,12 +234,14 @@ class QCGPMService:
             Config.SLURM_PARTITION_NODES: self._args.slurm_partition_nodes,
             Config.SLURM_LIMIT_NODES_RANGE_BEGIN: self._args.slurm_limit_nodes_range_begin,
             Config.SLURM_LIMIT_NODES_RANGE_END: self._args.slurm_limit_nodes_range_end,
+            Config.SLURM_RESOURCES_FILE: self._args.slurm_resources_file,
             Config.RESUME: self._args.resume,
             Config.ENABLE_PROC_STATS: self._args.enable_proc_stats,
             Config.ENABLE_RT_STATS: self._args.enable_rt_stats,
             Config.WRAPPER_RT_STATS: self._args.wrapper_rt_stats,
             Config.NL_INIT_TIMEOUT: self._args.nl_init_timeout,
             Config.NL_READY_TRESHOLD: self._args.nl_ready_treshold,
+            Config.DISABLE_PUBLISHER: self._args.disable_pub,
         }
 
     def __init__(self, args=None):

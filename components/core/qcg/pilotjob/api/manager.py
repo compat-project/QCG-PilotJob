@@ -11,6 +11,7 @@ import multiprocessing as mp
 
 import zmq
 from qcg.pilotjob.logger import top_logger
+from qcg.pilotjob.publisher import EventTopic, StatusPublisher
 from qcg.pilotjob.api import errors
 from qcg.pilotjob.api.jobinfo import JobInfo
 
@@ -18,6 +19,77 @@ from qcg.pilotjob.api.jobinfo import JobInfo
 top_logger = logging.getLogger('qcg.pilotjob.api')
 
 _logger = logging.getLogger(__name__)
+
+
+class TimeStamp:
+    """Timestamp utility to trace timeouts and compute the poll times that do not exceed defined timeouts."""
+
+    def __init__(self, manager, timeout_secs=None):
+        """
+        Create timestamp.
+        During initialization the timestamp start moment is set to current time.
+
+        :param manager (Manager): the manager instance with defined default poll and publisher timeout setting
+        :param timeout (int|float): the timeout in seconds for operation related with this timestamp, the default value
+          `None` means the timeout is not defined (infinity)
+        """
+        self.started = datetime.now()
+        self.manager = manager
+        self.timeout_secs = timeout_secs
+
+    @property
+    def secs_from_start(self):
+        """
+        Return number of seconds elapsed since start
+        """
+        return (datetime.now() - self.started).total_seconds()
+
+    def check_timeout(self):
+        """
+        Check if timeout has been reached.
+        If `timeout_secs` has been defined check if `timeout_secs` have elapsed from `started` datetime.
+        If `timeout_secs` is not defined always return False
+
+
+        :return: True if timeout reached, False otherwise
+        """
+        if self.timeout_secs is not None:
+            if self.secs_from_start >= self.timeout_secs:
+                raise errors.TimeoutElapsed()
+
+    def get_poll_time(self):
+        """
+        Return the poll time that do not exceed timeout.
+        If timeout already reached, the 0 will be returned.
+
+        :return: poll time in seconds
+        """
+        if self.timeout_secs is not None:
+            rest_secs = self.timeout_secs - self.secs_from_start
+            if rest_secs < 0:
+                raise errors.TimeoutElapsed()
+        else:
+            rest_secs = self.manager.default_poll_delay
+
+        _logger.info(f'poll time set to: min({self.manager.default_poll_delay}, {rest_secs})')
+        return min(self.manager.default_poll_delay, rest_secs)
+
+    def get_events_timeout(self):
+        """
+        Return the subscribe timeout that do not exceed total operation timeout.
+        If timeout already reached, the 0 will be returned.
+
+        :return: the timeout time in seconds
+        """
+        if self.timeout_secs is not None:
+            rest_secs = self.timeout_secs - self.secs_from_start
+            if rest_secs < 0:
+                raise errors.TimeoutElapsed()
+        else:
+            rest_secs = self.manager.default_pub_timeout
+
+        _logger.info(f'events timeout set to: min({self.manager.default_pub_timeout}, {rest_secs})')
+        return min(self.manager.default_pub_timeout, rest_secs)
 
 
 class Manager:
@@ -32,7 +104,10 @@ class Manager:
     DEFAULT_PROTO = "tcp"
     DEFAULT_PORT = "5555"
 
-    DEFAULT_POLL_DELAY = 2
+#    DEFAULT_POLL_DELAY = 30
+    DEFAULT_POLL_DELAY = 5
+    DEFAULT_PUB_TIMEOUT = 5 * 60
+
 
     def __init__(self, address=None, cfg=None):
         """Initialize instance.
@@ -45,15 +120,20 @@ class Manager:
                   else
                 b) the tcp://127.0.0.1:5555 default address will be used
             cfg (dict) - the configuration; currently the following keys are supported:
-              'poll_delay' - the delay between following status polls in wait methods
+              'default_poll_delay' - the default delay between following status polls in wait methods
+              'default_pub_timeout' - the default timeout for waiting on published events
               'log_file' - the location of the log file
               'log_level' - the log level ('DEBUG'); by default the log level is set to INFO
         """
         self._zmq_ctx = zmq.Context()
         self._zmq_socket = None
+        self._zmq_status_socket = None
+        self._zmq_status_poller = None
         self._connected = False
 
-        self._poll_delay = Manager.DEFAULT_POLL_DELAY
+        self._publisher_address = None
+        self.default_poll_delay = Manager.DEFAULT_POLL_DELAY
+        self.default_pub_timeout = Manager.DEFAULT_PUB_TIMEOUT
 
         # as the `_setup_logging` method might be called from the `LocalManager` class before this class `__init__`
         # the `log_handler` field might be already initialized
@@ -71,7 +151,10 @@ class Manager:
                 address = Manager.DEFAULT_ADDRESS
 
         if 'poll_delay' in client_cfg:
-            self._poll_delay = client_cfg['poll_delay']
+            self.default_poll_delay = client_cfg['poll_delay']
+
+        if 'pub_timeout' in client_cfg:
+            self.default_pub_timeout = client_cfg['pub_timeout']
 
         self._address = Manager._parse_address(address)
         self._connect()
@@ -152,10 +235,30 @@ class Manager:
 
         _logger.info("connecting to the PJM @ %s", self._address)
         try:
-            self._zmq_socket = self._zmq_ctx.socket(zmq.REQ)  # pylint: disable=maybe-no-member
+            self._zmq_socket = self._zmq_ctx.socket(zmq.REQ) # pylint: disable=maybe-no-member
             self._zmq_socket.connect(self._address)
             self._connected = True
-            _logger.info("connection established")
+            _logger.info("connection created")
+
+            _logger.info("checking system status")
+            system_status = self.system_status().get('System', {})
+
+            _logger.info(f"successfully connected to the instance {system_status.get('InstanceId')} @ "
+                         f"{system_status.get('Host')}")
+
+            self._publisher_address = system_status.get('StatusPublisher')
+            if self._publisher_address:
+                self._zmq_status_socket = self._zmq_ctx.socket(zmq.SUB) # pylint: disable=maybe-no-member
+                self._zmq_status_socket.connect(self._publisher_address)
+
+                _logger.info(f"created subscription socket for job status changed @ {self._publisher_address}")
+                self._zmq_status_socket.setsockopt_string(zmq.SUBSCRIBE, EventTopic.ITERATION_FINISHED.value) # pylint: disable=maybe-no-member
+                self._zmq_status_socket.setsockopt_string(zmq.SUBSCRIBE, EventTopic.JOB_FINISHED.value) # pylint: disable=maybe-no-member
+                self._zmq_status_socket.setsockopt_string(zmq.SUBSCRIBE, EventTopic.NO_JOBS.value) # pylint: disable=maybe-no-member
+
+                self._zmq_status_poller = zmq.Poller()
+                self._zmq_status_poller.register(self._zmq_status_socket, zmq.POLLIN) # pylint: disable=maybe-no-member
+
         except Exception as exc:
             raise errors.ConnectionError('Failed to connect to {} - {}'.format(self._address, exc.args[0]))
 
@@ -530,7 +633,13 @@ class Manager:
             self.log_handler.close()
             top_logger.removeHandler(self.log_handler)
 
-    def wait4(self, names):
+    def system_status(self):
+        return self._send_and_validate_result({
+            "request": "status"
+        })
+
+
+    def wait4(self, names, timeout=None):
         """Wait for finish of specific jobs.
 
         This method waits until all specified jobs finish its execution (successfully or not).
@@ -540,11 +649,13 @@ class Manager:
 
         Args:
             names (str|list(str)): list of job names to get detailed information about
+            timeout (int|float): maximum number of seconds to wait
 
         Returns:
             dict - a map with job names and their terminal status
 
         Raises:
+            TimeoutElapsed: in case of timeout elapsed
             InternalError: in case the response format is invalid
             ConnectionError: in case of non zero exit code, or if connection has not been established yet
         """
@@ -556,47 +667,142 @@ class Manager:
         _logger.info("waiting for finish of %d jobs", len(job_names))
 
         result = {}
-        not_finished = job_names
-        while len(not_finished) > 0:
-            try:
-                jobs_status = self.status(not_finished)
+        not_finished = set(job_names)
 
-                not_finished = []
+        started_ts = TimeStamp(self, timeout)
+
+        while len(not_finished) > 0:
+            started_ts.check_timeout()
+
+            try:
+                jobs_status = self.status(list(not_finished))
+
                 for job_name, job_data in jobs_status['jobs'].items():
                     if 'status' not in job_data['data'] or job_data['status'] != 0 or 'data' not in job_data:
-                        raise errors.InternalError("Missing job's {} data".format(job_name))
+                        raise errors.InternalError(f"Missing job's {job_name} data")
 
-                    if not Manager.is_status_finished(job_data['data']['status']):
-                        not_finished.append(job_name)
-                    else:
+                    if Manager.is_status_finished(job_data['data']['status']):
+                        not_finished.remove(job_name)
                         result[job_name] = job_data['data']['status']
 
                 if len(not_finished) > 0:
-                    _logger.info("still %d jobs not finished", len(not_finished))
-                    time.sleep(self._poll_delay)
+                    _logger.info(f"still {len(not_finished)} jobs not finished")
 
+                    if self._zmq_status_poller:
+                        while len(not_finished):
+                            started_ts.check_timeout()
+
+                            _logger.info('waiting for new events ...')
+                            events = self._zmq_status_poller.poll(started_ts.get_events_timeout() * 1000)
+                            if events:
+                                for _ in events:
+                                    try:
+                                        status_event = self._zmq_status_socket.recv_string()
+                                        _logger.info(f'got status event {status_event}')
+                                        topic, event_data = StatusPublisher.decode_published_data(status_event)
+                                        if topic in [EventTopic.JOB_FINISHED, EventTopic.ITERATION_FINISHED]:
+                                            if event_data.get('it') is not None:
+                                                job_name = f'{event_data.get("job")}:{event_data.get("it")}'
+                                            else:
+                                                job_name = event_data.get('job')
+
+                                            if job_name in not_finished:
+                                                not_finished.remove(job_name)
+                                                result[job_name] = event_data.get("state")
+                                    except Exception:
+                                        _logger.exception('error during processing status event')
+                    else:
+                        time.sleep(started_ts.get_poll_time())
+            except errors.TimeoutElapsed:
+                raise
             except Exception as exc:
                 raise errors.ConnectionError(exc.args[0])
 
         _logger.info("all jobs finished")
         return result
 
-    def wait4all(self):
+
+    def wait4all(self, timeout_secs=None):
         """Wait for finish of all submitted jobs.
+
+        :arg timeout_secs (int|float): optional timeout setting in seconds
+
+        :raise TimeoutElapsed when timeout elapsed (if defined as argument)
 
         This method waits until all jobs submitted to service finish its execution (successfully or not).
         """
         not_finished = True
+        started_ts = TimeStamp(self, timeout_secs)
+
         while not_finished:
+            started_ts.check_timeout()
+
             status = self._send_and_validate_result({
                 "request": "status",
                 "options": { "allJobsFinished": True }
             })
             not_finished = status.get("AllJobsFinished", False) is False
-            if not_finished:
-                time.sleep(self._poll_delay)
+            _logger.info(f'allJobsFinished status: {status.get("AllJobsFinished", False)}')
+            if not not_finished:
+                break
+
+            if self._zmq_status_poller:
+                while True:
+                    started_ts.check_timeout()
+
+                    _logger.info('waiting for new events ...')
+                    events = self._zmq_status_poller.poll(started_ts.get_events_timeout() * 1000)
+                    if events:
+                        for _ in events:
+                            try:
+                                status_event = self._zmq_status_socket.recv_string()
+                                _logger.info(f'got status event {status_event}')
+                                topic, _ = StatusPublisher.decode_published_data(status_event)
+                                if topic == EventTopic.NO_JOBS:
+                                    # we've got NO_JOBS event
+                                    return
+                            except Exception:
+                                _logger.exception('error during processing status event')
+            else:
+                time.sleep(started_ts.get_poll_time())
 
         _logger.info("all jobs finished in manager")
+
+    def wait4_any_job_finish(self, timeout_secs=None):
+        """Wait for finish one of any submitted job.
+
+        This method waits until one of any jobs submitted to service finish its execution (successfully or not).
+
+        :arg timeout_secs (float|int) - timeout in milliseconds, endlessly (None) by default
+
+        :raise TimeoutElapsed when timeout elapsed (if defined as argument)
+
+        :return (str, str) identifier of finished job and it's status or None, None if timeout has been reached.
+        """
+        if not self._zmq_status_poller:
+            raise errors.ServiceError('Service not support publishing status events')
+
+        started_ts = TimeStamp(self, timeout_secs)
+
+        while True:
+            started_ts.check_timeout()
+
+            events = self._zmq_status_poller.poll(started_ts.get_events_timeout() * 1000)
+            if events:
+                try:
+                    status_event = self._zmq_status_socket.recv_string()
+                    _logger.info(f'got status event {status_event}')
+                    topic, data = StatusPublisher.decode_published_data(status_event)
+                    if topic in [EventTopic.JOB_FINISHED, EventTopic.ITERATION_FINISHED]:
+                        if data.get('it') is not None:
+                            jobid = f'{data.get("job")}:{data.get("it")}'
+                        else:
+                            jobid = data.get('job')
+
+                        return jobid, data.get('state')
+                except Exception as exc:
+                    _logger.exception('Error in event processing')
+                    raise errors.ServiceError(f'Error in event processing: {str(exc)}')
 
     @staticmethod
     def is_status_finished(status):
