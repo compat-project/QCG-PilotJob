@@ -358,7 +358,11 @@ def parse_slurm_allocation_cpu_ids(allocation_data_list, node_names, cores_num):
 
                 for curr_node in curr_nodes:
                     if curr_node in node_names:
-                        nodes[curr_node] = core_ids
+                        # in some HT cases the number in SLURM_TASKS_PER_NODE, SLURM_JOB_CPUS_PER_NODE is lower than length of CPU_IDs, so we trim the number of available cpu ids
+                        if cores_num[len(nodes)] < len(core_ids):
+                            nodes[curr_node] = core_ids[:cores_num[len(nodes)]]
+                        else:
+                            nodes[curr_node] = core_ids
 
                 curr_nodes = []
     except Exception as exc:
@@ -373,7 +377,7 @@ def parse_slurm_allocation_cpu_ids(allocation_data_list, node_names, cores_num):
                             'ncores per node list ({})'.format(len(nodes), len(cores_num)))
 
     for idx, node in enumerate(nodes.keys()):
-        if len(nodes[node]) != cores_num[idx]:
+        if len(nodes[node]) < cores_num[idx]:
             raise SlurmEnvError('failed to parse cpu binding: the node binding for node ({}) ({}) differs from cores '
                                 'per node {}'.format(node, len(nodes[node]), cores_num[idx]))
 
