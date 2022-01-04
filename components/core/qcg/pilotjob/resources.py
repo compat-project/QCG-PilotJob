@@ -275,7 +275,7 @@ class Node:
     @property
     def str_crs(self):
         """str: string representation of available consumable resources"""
-        return ', '.join(['{} - {} ({} used))'.format(crtype.name, cr.totalCount, cr.used) for crtype, cr in
+        return ', '.join(['{} - {} ({} used))'.format(crtype.name, cr.total_count, cr.used) for crtype, cr in
                           self._crs.items()])
 
     @property
