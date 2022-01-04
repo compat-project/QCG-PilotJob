@@ -482,7 +482,6 @@ class DirectManager:
                 self.status_publisher.setup(conf)
             except Exception as exc:
                 _logger.exception(f'failed to initialize status publisher: {str(exc)}')
-                self.status_publisher.stop()
                 self.status_publisher = None
 
         self._executor = Executor(self, conf, self.resources)
@@ -559,7 +558,7 @@ class DirectManager:
             await self._executor.stop()
 
         if self.status_publisher:
-            self.status_publisher.stop()
+            await self.status_publisher.stop()
 
     @property
     def is_all_jobs_finished(self):

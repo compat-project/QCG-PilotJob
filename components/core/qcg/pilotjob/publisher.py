@@ -150,14 +150,14 @@ class StatusPublisher:
         else:
             raise InternalError('Publishing task not initialized')
 
-    def stop(self):
+    async def stop(self):
         """
         Cleanup.
         """
         if self.publisher_task:
             self.publisher_task.cancel()
             try:
-                asyncio.wait_for(self.publisher_task, 5)
+                await asyncio.wait_for(self.publisher_task, 5)
             except asyncio.TimeoutError:
                 _logger.error('failed to stop publisher send task')
             except asyncio.CancelledError:
