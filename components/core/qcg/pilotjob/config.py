@@ -235,6 +235,12 @@ class Config(Enum):
         'default': False
     }
 
+    NL_START_METHOD = {
+        'name': 'launcher.start.method',
+        'cmd_opt': '--nl-start-method',
+        'default': 'slurm'
+    }
+
     def get(self, config):
         """Return configuration entry value from dictionary
 
