@@ -41,6 +41,7 @@ A python service for easy execution of many tasks inside a single allocation.
    performance_tuning
    processes
    logs
+   slurm_performance
 
 .. toctree::
    :maxdepth: 1
