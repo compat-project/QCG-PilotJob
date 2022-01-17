@@ -924,27 +924,27 @@ class LocalManager(Manager):
         try:
             # timeout of single iteration
             wait_single_timeout = 2
-            # number of iterations
-            wait_iters = int(client_cfg.get('init_timeout', 300) / wait_single_timeout) + 1
 
-            _logger.debug(f'waiting {wait_iters * wait_single_timeout} secs for service start ...')
+            # number of seconds
+            wait_seconds = int(client_cfg.get('init_timeout', 300))
+
             service_wait_start = datetime.now()
+            _logger.info(f'{service_wait_start} waiting {wait_seconds} secs for service start ...')
 
-            for i in range(wait_iters):
+            while (datetime.now() - service_wait_start).total_seconds() < wait_seconds:
                 if not self.qcgpm_process.is_alive():
-                    raise errors.ServiceError('Service not started')
+                    raise errors.ServiceError('Service process killed')
 
                 try:
                     self.qcgpm_conf = self.qcgpm_queue.get(block=True, timeout=wait_single_timeout)
                     break
                 except queue.Empty:
                     continue
-    #                raise errors.ServiceError('Service not started - timeout')
                 except Exception as exc:
                     raise errors.ServiceError('Service not started: {}'.format(str(exc)))
 
             if not self.qcgpm_conf:
-                raise errors.ServiceError('Service not started')
+                raise errors.ServiceError(f'Service not started in {(datetime.now() - service_wait_start).total_seconds():.1f}')
 
             if self.qcgpm_conf.get('error', None):
                 raise errors.ServiceError(self.qcgpm_conf['error'])
