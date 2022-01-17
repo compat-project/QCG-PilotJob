@@ -414,13 +414,13 @@ class Launcher:
         """Launch node agent instance via ssh.
 
         Args:
-            ssh_data (dict) - must contain 'host' attribute, optional attributes: 'account' (str), 'args' (str[])
+            ssh_data (dict) - must contain 'node' attribute, optional attributes: 'account' (str), 'args' (str[])
             args - aguments for node agent application
         """
-        if 'host' not in ssh_data:
-            raise ValueError('missing ssh host definition')
+        if 'node' not in ssh_data:
+            raise ValueError('missing ssh node definition')
 
-        ssh_address = ssh_data['host']
+        ssh_address = ssh_data['node']
         if 'account' in ssh_data:
             ssh_address = '{}@{}'.format(ssh_data['account'], ssh_address)
 
