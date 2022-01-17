@@ -137,7 +137,10 @@ def job(wdir, jobids, verbose):
     stats = JobsReportStats.from_workdir(wdir, verbose)
     info = stats.job_info(*jobids)
     for job_name, job_data in info.items():
-        print(job_details_desc(job_data))
+        if not job_data:
+            print(f'{job_name}: missing job data')
+        else:
+            print(job_details_desc(job_data))
 
 
 @reports.command()
