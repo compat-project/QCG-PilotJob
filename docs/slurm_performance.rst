@@ -4,25 +4,28 @@ Slurm performance
 srun command
 ------------
 
-The Slurm's ``srun`` client is used to run applications within a created
-allocation. Thanks to its tight integration with the queue system, it is able
-to run an application on the specified node of our allocation using, for
-example, cpu binding mechanisms. Particularly convenient seems to be running
-parallel applications using MPI library due to the fact of unification of the
-way of running, regardless of the vendor and version of MPI library (note that
-the native applications to run applications compiled with different MPI
-libraries such as *OpenMPI*/*IntelMPI*/*MPICH* have a different name, syntax and way
-of running the target application). Unfortunately, when running an application,
-the ``srun`` client communicates with the queue system controller and creates a
-step for each running application. It turns out that with too much use of this
-client, the queue system controller struggles with quite a heavy load which
-affects the performance of the whole queue system.
+QCG-Pilot job uses the Slurm's ``srun`` client to run applications within a
+created allocation. Thanks to the tight integration with the queueing system,
+``srun`` is able to properly run an application on the specified node of our
+allocation using, for example, cpu binding mechanisms. The usage of `srun`
+seems to be particularly convenient for running parallel applications using the
+MPI library. It provides a unified way of running such applications, regardless
+of the vendor and version of MPI library (note that the commands used to run
+MPI-based applications provided by  different MPI libraries such as
+*OpenMPI*/*IntelMPI*/*MPICH* have a different name, syntax and way of running
+the target application). Unfortunately, when starting an application, the
+``srun`` client communicates with the queueing system controller and creates a
+step for each running application. It turns out that with too frequent use of
+this client, the queue system controller struggles with quite a heavy load
+which affects the performance of the whole queueing system.
 
 The QCG-PilotJob service uses the ``srun`` client by default in two cases:
 
-- during service initialization to launch agents running on each allocation node
+- during service initialization to launch agents* running on each allocation node
 
-- in the ``srunmpi`` model when launching user applications.
+- in the ``srunmpi`` model when launching user applications with the ``srunmpi`` model.
+
+It is possible to replace ``srun`` with alternatives for both these cases as presented below.
 
 
 Recommendations
@@ -40,23 +43,23 @@ started on the allocation nodes using the *ssh* protocol.
 public key without requiring a password. Information on how to configure the
 ``ssh`` service in this way should be available in the documentation of the
 computing system, and usually boils down to generating an ssh key and adding
-its public signature to the ``~/.ssh/authorized_keys`` file
+its public signature to the ``~/.ssh/authorized_keys`` file.
 
 
-Parallel applications
+User parallel applications
 ^^^^^^^^^^^^^^^^^^^^^
 
 For scenarios containing a significant number of parallel user jobs, we
-recommend that you use the QCG-PilotJob service startup models such as:
+recommend that you resign from the ``srunmpi`` tasks startup model and use one
+of the following:
 
 - intelmpi
 
 - openmpi
 
-
 These are models that use native *IntelMPI* and *OpenMPI* library commands to
 run parallel applications. Additionally, they allow to configure call
-paremeters using ``model_opts/mpirun`` and ``model_opts/mpirun_args`` elements. An
+parameters using ``model_opts/mpirun`` and ``model_opts/mpirun_args`` elements. An
 example syntax of such commands is as follows:
 
 1) example of running a LAMMPS application compiled with the *IntelMPI* library
