@@ -31,7 +31,7 @@ class Launcher:
         jobs_def_cb (def): application finish default callback
         jobs_cb (dict): application finish callbacks
         node_local_agent_cmd (list): list of command arguments to start agent on local node
-        node_ssh_agent_cmd (list): list of command arguments to start agent on remote node via ssh
+        node_ssh_agent_cmd (str): list of command arguments to start agent on remote node via ssh
         in_socket (zmq.Socket):
         local_address (str):
         local_export_address (str):
@@ -82,7 +82,7 @@ class Launcher:
         self.manager = manager
 
         self.node_local_agent_cmd = [sys.executable, '-m', 'qcg.pilotjob.launcher.agent']
-        self.node_ssh_agent_cmd = ['cd {}; {} -m qcg.pilotjob.launcher.agent'.format(self.work_dir, sys.executable)]
+        self.node_ssh_agent_cmd = f'cd {self.work_dir} && {sys.executable} -m qcg.pilotjob.launcher.agent'
 
         self.in_socket = None
         self.local_address = None
@@ -414,20 +414,23 @@ class Launcher:
         """Launch node agent instance via ssh.
 
         Args:
-            ssh_data (dict) - must contain 'host' attribute, optional attributes: 'account' (str), 'args' (str[])
+            ssh_data (dict) - must contain 'node' attribute, optional attributes: 'account' (str), 'args' (str[])
             args - aguments for node agent application
         """
-        if 'host' not in ssh_data:
-            raise ValueError('missing ssh host definition')
+        if 'node' not in ssh_data:
+            raise ValueError('missing ssh node definition')
 
-        ssh_address = ssh_data['host']
+        ssh_address = ssh_data['node']
         if 'account' in ssh_data:
             ssh_address = '{}@{}'.format(ssh_data['account'], ssh_address)
 
         ssh_args = ssh_data.get('args', [])
 
+        agent_cmd = self.node_ssh_agent_cmd + ' ' + ' '.join([f"'{arg}'" for arg in args])
+        _logger.info(f'launching ssh agent with command: {shutil.which("ssh")} {ssh_address} {" ".join(ssh_args)} {agent_cmd}')
+
         return await asyncio.create_subprocess_exec(shutil.which('ssh'), ssh_address, *ssh_args,
-                                                    *self.node_ssh_agent_cmd, *args)
+                                                    agent_cmd)
 
     async def _fire_slurm_agent(self, slurm_data, args):
         """Launch node agent instance via slurm (inside allocation).

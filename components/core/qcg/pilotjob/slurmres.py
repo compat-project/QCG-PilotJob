@@ -235,7 +235,7 @@ def parse_slurm_resources(config):
             #  a) user want's execute less tasks than available cpu's
             #  b) hyper-threading (many cpus for single core)
             # in both situations we should execute only as much jobs as requested tasks
-            # with hyper-threading we should also bind many cpus to a single job
+            # with hyper-threading we bind ONLY single virtual cpu identifier - NOT ALL
             # to be able to assign system cpu's to physical cores we need information about cpu - for example from
             # execution of 'lscpu' - which need to be execute on each node - but currently we assume that all nodes
             # in allocation are homogenous
@@ -256,7 +256,7 @@ def parse_slurm_resources(config):
 
                 if len(local_core_info) ==  node_tasks:
                     # number of tasks on a node is the same as number of cores
-                    core_ids[node_name] = [','.join(local_core_info[core_id]) for core_id in local_core_info]
+                    core_ids[node_name] = [local_core_info[core_id][0] for core_id in local_core_info]
                 else:
                     # partition available cpu's on given number of tasks
                     if node_tasks < len(local_core_info):
@@ -270,7 +270,7 @@ def parse_slurm_resources(config):
 
 #                            _logger.debug('assigning #{} ({} - {}) cores for task {}'.format(node_cores, first_core, first_core + node_cores, task_nr))
                             cores_cpu_list = []
-                            for core_id in range(first_core, first_core + node_cores):
+                            for core_id in range(first_core, first_core + 1):
                                 cores_cpu_list.extend(local_core_info[str(core_id)])
                             node_task_cpu_ids.append(','.join(cores_cpu_list))
 #                            _logger.debug('assinged ({}) cpus for task {}'.format(node_task_cpu_ids[-1], task_nr))

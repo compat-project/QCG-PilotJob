@@ -165,6 +165,9 @@ class QCGPMService:
                             help='disable status publisher interface',
                             default=Config.DISABLE_PUBLISHER.value['default'],
                             action='store_true')
+        parser.add_argument(Config.NL_START_METHOD.value['cmd_opt'],
+                            help='method to start node launchers (ssh,slurm - default)',
+                            default=Config.NL_START_METHOD.value['default'])
         self._args = parser.parse_args(args)
 
         if self._args.slurm_partition_nodes:
@@ -199,6 +202,9 @@ class QCGPMService:
         if self._args.file_path:
             # enable file interface if path has been defined
             self._args.file = True
+
+        if self._args.nl_start_method.lower() not in ['slurm', 'ssh']:
+            raise ValueError('wrong value of --nl-start-method argument - must be one of (slurm,ssh)')
 
     def _create_config(self):
         """Based on arguments create QCG-PilotJob configuration.
@@ -242,6 +248,7 @@ class QCGPMService:
             Config.NL_INIT_TIMEOUT: self._args.nl_init_timeout,
             Config.NL_READY_TRESHOLD: self._args.nl_ready_treshold,
             Config.DISABLE_PUBLISHER: self._args.disable_pub,
+            Config.NL_START_METHOD: self._args.nl_start_method,
         }
 
     def __init__(self, args=None):

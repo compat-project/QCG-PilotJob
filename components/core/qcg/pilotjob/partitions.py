@@ -443,7 +443,7 @@ class GovernorManager:
 
         self._schedule_buffered_jobs_task = None
 
-        self._wait_for_register_timeout = 60
+        self._wait_for_register_timeout = 300
 
         self.start_time = datetime.now()
 

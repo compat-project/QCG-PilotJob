@@ -208,9 +208,7 @@ class SlurmExecution(ExecutionSchema):
                     '-n',
                     f'{len(node.cores)}',
                     '-env',
-                    f'I_MPI_PIN_PROCESSOR_LIST={",".join([str(core) for core in node.cores])}',
-                    f'{job_exec}',
-                    *job_args])
+                    f'I_MPI_PIN_PROCESSOR_LIST={",".join([str(core) for core in node.cores])}'])
 
                 first = False
 
@@ -232,7 +230,7 @@ class SlurmExecution(ExecutionSchema):
         mpirun = ex_job.job_execution.model_opts.get('mpirun', 'mpirun')
 
         ex_job.job_execution.exec = mpirun
-        ex_job.job_execution.args = [*mpi_args]
+        ex_job.job_execution.args = [*mpi_args, job_exec]
         if job_args:
             ex_job.job_execution.args.extend(job_args)
 

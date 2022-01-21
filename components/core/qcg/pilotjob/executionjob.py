@@ -409,7 +409,7 @@ class LauncherExecutionJob(ExecutionJob):
 
         agents = [{'agent_id': node.name,
                    'node': node,
-                   'slurm': {'node': node.name},
+                   Config.NL_START_METHOD.get(config): {'node': node.name},
                    'options': {'binding': binding,
                                'aux_dir': aux_dir,
                                'log_level': Config.LOG_LEVEL.get(config),
