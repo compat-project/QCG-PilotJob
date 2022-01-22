@@ -102,3 +102,17 @@ cd slurm-docker-cluster
 docker-compose down
 ```
 
+### Testing with different Slurm versions
+
+A virtual cluster using a different version of Slurm can be built by passing a git identifier to the build command like this:
+
+```console
+docker build --build-arg SLURM_TAG=<id> -t slurm-docker-cluster:<version> .
+```
+
+Some valid values are `slurm-17.02`, `slurm-17.11`, `slurm-18.08`,
+`slurm-19.05`, `slurm-20.02`, `slurm-20.11` and `slurm-21.08`, which will get
+you the latest point release of the corresponding major release. Prior to
+version 20.02, individual point releases were tagged with tags of the form
+`slurm-19-05-5-1`, but that practice seems to have been abandoned.
+
