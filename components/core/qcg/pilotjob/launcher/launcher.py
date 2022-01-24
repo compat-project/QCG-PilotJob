@@ -12,6 +12,7 @@ from zmq.asyncio import Context
 
 from qcg.pilotjob.config import Config
 from qcg.pilotjob.logger import top_logger
+from qcg.pilotjob.slurmres import SlurmArg
 
 
 _logger = logging.getLogger(__name__)
@@ -442,9 +443,9 @@ class Launcher:
         if 'node' not in slurm_data:
             raise ValueError('missing slurm node name')
 
-        slurm_args = ['-J', 'agent-{}'.format(slurm_data['node']), '-w', slurm_data['node'], '--cpu-bind=none', '-vvv',
-                      '--mem-per-cpu=0', '--oversubscribe', '--overcommit', '-N', '1', '-n', '1', '-D', self.work_dir,
-                      '-u']
+        slurm_args = ['-J', 'agent-{}'.format(slurm_data['node']), '-w', slurm_data['node'],
+                      f'{SlurmArg.CPU_BIND()}=none', '-vvv', '--mem-per-cpu=0', '--oversubscribe', '--overcommit',
+                      '-N', '1', '-n', '1', '-D', self.work_dir, '-u']
 
         if top_logger.level == logging.DEBUG:
             slurm_args.extend(['--slurmd-debug=verbose', '-vvvvv'])
