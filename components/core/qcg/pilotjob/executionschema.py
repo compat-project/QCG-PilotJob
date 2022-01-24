@@ -4,6 +4,7 @@ import logging
 from qcg.pilotjob.logger import top_logger
 from qcg.pilotjob.errors import InternalError
 from qcg.pilotjob.resources import ResourcesType
+from qcg.pilotjob.slurmres import SlurmArg
 
 
 _logger = logging.getLogger(__name__)
@@ -120,9 +121,9 @@ class SlurmExecution(ExecutionSchema):
         if self.resources.binding:
             for cpu in core_ids:
                 cpu_mask = cpu_mask | 1 << int(cpu)
-            cpu_bind = "--cpu-bind=verbose,mask_cpu:{}".format(hex(cpu_mask))
+            cpu_bind = f'{SlurmArg.CPU_BIND()}=verbose,mask_cpu:{hex(cpu_mask)}'
         else:
-            cpu_bind = "--cpu-bind=verbose,cores"
+            cpu_bind = f'{SlurmArg.CPU_BIND()}=verbose,cores'
 
         ex_job.job_execution.args = [
             "-n", "1",
@@ -218,7 +219,7 @@ class SlurmExecution(ExecutionSchema):
 
         if top_logger.level == logging.DEBUG:
             ex_job.env.update({'I_MPI_HYDRA_BOOTSTRAP_EXEC_EXTRA_ARGS':
-                                   '-vvvvvv --overcommit --oversubscribe --cpu-bind=none --mem-per-cpu=0'})
+                                   f'-vvvvvv --overcommit --oversubscribe {SlurmArg.CPU_BIND()}=none --mem-per-cpu=0'})
             ex_job.env.update({'I_MPI_HYDRA_DEBUG': '1'})
             ex_job.env.update({'I_MPI_DEBUG': '5'})
         else:
@@ -254,9 +255,9 @@ class SlurmExecution(ExecutionSchema):
                     for cpu in slot.split(','):
                         cpu_mask = cpu_mask | 1 << int(cpu)
                     cpu_masks.append(hex(cpu_mask))
-            cpu_bind = "--cpu-bind=verbose,mask_cpu:{}".format(','.join(cpu_masks))
+            cpu_bind = f'{SlurmArg.CPU_BIND()}=verbose,mask_cpu:{",".join(cpu_masks)}'
         else:
-            cpu_bind = "--cpu-bind=verbose,cores"
+            cpu_bind = f'{SlurmArg.CPU_BIND()}=verbose,cores'
 
         ex_job.job_execution.exec = 'srun'
         ex_job.job_execution.args = [
