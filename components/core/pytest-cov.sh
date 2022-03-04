@@ -9,4 +9,9 @@ mkdir /srv/src/coverage.out
 rm -fR /srv/src/htmlcov.report
 
 pytest -v --cov-config=/srv/src/coveragerc.ini --cov=qcg.pilotjob $*
+EXIT_CODE=$?
+echo "pytest returned ${EXIT_CODE}"
 coverage html --rcfile=/srv/src/coveragerc.ini
+echo "coverage returned ${?}"
+
+exit ${EXIT_CODE}
