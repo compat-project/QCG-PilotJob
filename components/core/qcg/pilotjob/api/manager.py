@@ -731,40 +731,46 @@ class Manager:
 
         This method waits until all jobs submitted to service finish its execution (successfully or not).
         """
-        not_finished = True
         started_ts = TimeStamp(self, timeout_secs)
 
-        while not_finished:
-            started_ts.check_timeout()
+        status = self._send_and_validate_result({
+            "request": "status",
+            "options": { "allJobsFinished": True }
+        })
+        all_finished = status.get("AllJobsFinished", False)
 
-            status = self._send_and_validate_result({
-                "request": "status",
-                "options": { "allJobsFinished": True }
-            })
-            not_finished = status.get("AllJobsFinished", False) is False
-            _logger.info(f'allJobsFinished status: {status.get("AllJobsFinished", False)}')
-            if not not_finished:
-                break
+        if not self._zmq_status_poller:
+            while not all_finished:
+                time.sleep(started_ts.get_poll_time())
+                started_ts.check_timeout()
+                status = self._send_and_validate_result({
+                    "request": "status",
+                    "options": { "allJobsFinished": True }
+                })
+                all_finished = status.get("AllJobsFinished", False)
 
-            if self._zmq_status_poller:
-                while True:
-                    started_ts.check_timeout()
+        else:
+            events = self._zmq_status_poller.poll(0)
+            if events:
+                all_finished = False
 
+            while not all_finished:
+                for e in events:
+                    try:
+                        status_event = self._zmq_status_socket.recv_string()
+                        _logger.info(f'got status event {status_event}')
+                        topic, _ = StatusPublisher.decode_published_data(status_event)
+                        if topic == EventTopic.NO_JOBS:
+                            # we've got NO_JOBS event
+                            all_finished = True
+                            break
+                    except Exception:
+                        _logger.exception('error during processing status event')
+
+                if not all_finished:
                     _logger.info('waiting for new events ...')
                     events = self._zmq_status_poller.poll(started_ts.get_events_timeout() * 1000)
-                    if events:
-                        for _ in events:
-                            try:
-                                status_event = self._zmq_status_socket.recv_string()
-                                _logger.info(f'got status event {status_event}')
-                                topic, _ = StatusPublisher.decode_published_data(status_event)
-                                if topic == EventTopic.NO_JOBS:
-                                    # we've got NO_JOBS event
-                                    return
-                            except Exception:
-                                _logger.exception('error during processing status event')
-            else:
-                time.sleep(started_ts.get_poll_time())
+                    started_ts.check_timeout()
 
         _logger.info("all jobs finished in manager")
 
