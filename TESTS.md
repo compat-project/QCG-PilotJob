@@ -33,6 +33,8 @@ To execute all tests, including slurm tests, the QCG-PilotJob repository include
 > Windows with docker-machine the local file system might not have the same
 > path in docker-machine's virtual machine.
 
+For an automated way to do the below, see the text at the bottom.
+
 ### Start containers
 
 The brief instruction to build and start the slurm docker containers is as follows:
@@ -46,7 +48,7 @@ cd slurm-docker-cluster
 Build slurm images:
 
 ```console
-docker build -t slurm-docker-cluster:19.05.1 .
+docker build --build-arg SLURM_TAG=slurm-19-05-2-1 -t slurm-docker-cluster:19.05.2 .
 ```
 
 Include local environment settings:
@@ -55,10 +57,10 @@ Include local environment settings:
 source env.sh
 ```
 
-Start slurm containers in background:
+Start slurm containers of the newly built version in background:
 
 ```console
-docker-compose up -d
+QCG_TEST_SLURM_VERSION=19.05.2 docker-compose up -d
 ```
 
 Register slurm cluster in slurm database (should be executed only once after building the containers):
@@ -115,4 +117,22 @@ Some valid values are `slurm-17.02`, `slurm-17.11`, `slurm-18.08`,
 you the latest point release of the corresponding major release. Prior to
 version 20.02, individual point releases were tagged with tags of the form
 `slurm-19-05-5-1`, but that practice seems to have been abandoned.
+
+The `test_all_slurm_versions.sh` script automates all of the above, and lets
+you test multiple versions one after the other. It can be started from the root
+directory as
+
+```console
+bash ./test_all_slurm_versions.sh <pytest options>
+```
+
+By default, this will test a range of versions from 17.02 to 20.02. Slurm
+versions  20.11 and 21.08 are currently disabled due to what seems to be
+[an issue with Slurm](https://bugs.schedmd.com/show_bug.cgi?id=13553).
+
+To test one or more specific issues, run
+
+```console
+SLURM_VERSIONS='17.02 17.11' bash ./test_all_slurm_versions.sh <pytest options>
+```
 
