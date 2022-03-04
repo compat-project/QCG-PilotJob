@@ -649,6 +649,10 @@ class DirectManager:
                             _logger.warning("Job %s preserved in scheduling queue", sched_job.job.name)
                             DirectManager._append_to_schedule_queue(new_schedule_queue, sched_job)
 
+                none_running = self.queued_to_execute == 0 and self._executor.is_all_jobs_finished()
+                if none_running and len(self._schedule_queue) > 0 and len(new_schedule_queue) == 0:
+                    self._publish_no_jobs_event()
+
                 self._schedule_queue = new_schedule_queue
 
     def change_job_state(self, job, iteration, state, error_msg=None):
