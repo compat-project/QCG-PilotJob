@@ -72,9 +72,19 @@ The Job description is a dictionary with the following keys:
   - ``modules`` (*optional*) ``Array of String`` - the list of environment modules that should be
     loaded before start of the job
   - ``venv`` (*optional*) ``String`` - the path to the virtual environment inside in job should be started
-  - ``model`` (*optional*) ``String`` - the model of execution, currently only *threads* explicit model is supported
-    which should be used for OpenMP jobs; if not defined - the default,
-    dedicated to the multi processes execution model is used
+  - ``model`` (*optional*) ``String`` - the model of execution, currently following values are supported:
+
+    - ``threads`` - job's iteration is launched with *srun* command on a single node with as many cpus per task as declared in ``resources`` element
+    - ``intelmpi`` - job's iteration is launched with *mpirun* command (or command defined in element ``model_opts``/``mpirun``) with the IntelMPI set of arguments, additional arguments for *mpirun* command can be declared in element ``model_opts``/``mpirun_args``
+    - ``openmpi`` - job's iteration is launched with *mpirun* command (or command defined in element ``model_opts``/``mpirun``) with the OpenMPI set of arguments, additional arguments for *mpirun* command can be declared in element ``model_opts``/``mpirun_args``
+    - ``srunmpi`` - job's iteration is launched with *srun* command on as many number of nodes and cores as declared in ``resources`` element
+    - ``default`` - job's iteration is launched as a single process with environment variable *QCG_PM_CPU_SET* containing allocated cores on a set of declared nodes, the allocated nodes can be obtained from *QCG_PM_NODELIST* environment variables
+
+  - ``model_opts`` (*optional*) ``Dict`` - the additional arguments used in some of the models, currently the following keys are supported
+
+    - ``mpirun`` (*optional*) ``String`` - the path to the command to be used in ``srunmpi`` and ``openmpi`` models
+    - ``mpirun_args`` (*optional*) ``Array of String`` - the additional arguments that should be passed to the ``mpirun`` command in ``srunmpi`` and ``openmpi`` models
+
 
 - ``resources`` (*optional*) ``Dict`` - resource requirements, a dictionary with the following keys:
 
