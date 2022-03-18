@@ -2,6 +2,8 @@ import logging
 import os
 import subprocess
 import sys
+import re
+from enum import Enum
 
 from math import log2, floor
 
@@ -11,6 +13,18 @@ from qcg.pilotjob.config import Config
 
 
 _logger = logging.getLogger(__name__)
+
+# Slurm version in current environment, if value is:
+#   None - the slurm version has not been initialized yet
+#   0,0,'' - the slurm version cannot be obtained
+#   MAJOR(int),MINOR(int),PATCH(str) - the slurm version
+SLURM_VERSION = None
+
+
+class SlurmArg(Enum):
+
+    CPU_BIND = lambda: '--cpu-bind' if get_slurm_version()[0] > 17 or get_slurm_version()[0] == 0 else '--cpu_bind'
+
 
 
 def parse_local_cpus():
@@ -416,6 +430,52 @@ def in_slurm_allocation():
     :return: true if we are inside slurm allocation, otherwise false
     """
     return 'SLURM_NODELIST' in os.environ and 'SLURM_JOB_CPUS_PER_NODE' in os.environ
+
+
+def get_slurm_version():
+    """Return slurm version in current environment.
+    The Slurm version is obtained only once via `srun --version` command. In case of error during version obtaining,
+    the version is initialized with values: MAJOR(0), MINOR(0), PATCH('')
+
+    Return:
+        tuple(int,int,str) - the major, minor and patch version of slurm in current environment
+    """
+    global SLURM_VERSION
+
+    if SLURM_VERSION is None:
+        try:
+            SLURM_VERSION = find_slurm_version()
+        except Exception as exc:
+            _logger.warning(f'failed to find slurm version: {exc}')
+            SLURM_VERSION = (0,0,'')
+
+    return SLURM_VERSION
+
+
+def find_slurm_version():
+    """Return version of Slurm.
+
+    This method calls ``srun --version`` and parses result in form MAJOR,MINOR,PATCH.
+
+    Returns:
+        tuple (int,int,str): MAJOR,MINOR,PATCH
+
+    Raises:
+        SlurmEnvError - when `srun` command is unavailable or finished with non zero exit or if output does not match
+                        expected pattern
+    """
+    proc = subprocess.Popen(['srun', '--version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = proc.communicate()
+    ex_code = proc.wait()
+    if ex_code != 0:
+        raise SlurmEnvError(f'srun --version failed: {stderr}')
+
+    result = bytes.decode(stdout)
+    version_match = re.match(r'^slurm (\d+)\.(\d+)\.(\S+)$', result, re.MULTILINE)
+    if version_match and version_match.lastindex == 3:
+        return int(version_match.group(1)), int(version_match.group(2)), version_match.group(3)
+
+    raise SlurmEnvError(f'failed to match slurm version: {result}')
 
 
 def test_environment(env=None):
