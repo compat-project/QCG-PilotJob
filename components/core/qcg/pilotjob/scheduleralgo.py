@@ -196,7 +196,6 @@ class SchedulerAlgorithm:
                     "{} exceeds available number of nodes ({})".format(min_nodes, len(self.resources.nodes)))
 
         min_cores = 0
-        total_cores = 0
         if reqs.has_cores:
             if reqs.cores.is_exact():
                 min_cores = reqs.cores.exact
@@ -205,7 +204,7 @@ class SchedulerAlgorithm:
                     raise InvalidResourceSpec("Both core's range boundaries (min, max) must be defined")
                 min_cores = reqs.cores.min
 
-            total_cores = min_nodes * min_cores
+            total_cores = min_cores * (min_nodes or 1)
 
             if self.resources.total_cores < total_cores:
                 raise NotSufficientResources(
