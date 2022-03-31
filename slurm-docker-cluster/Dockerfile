@@ -1,19 +1,18 @@
-FROM centos:7
+FROM rockylinux:8
 
 LABEL org.opencontainers.image.source="https://github.com/giovtorres/slurm-docker-cluster" \
       org.opencontainers.image.title="slurm-docker-cluster" \
-      org.opencontainers.image.description="Slurm Docker cluster on CentOS 7" \
-      org.label-schema.docker.cmd="docker-compose up -d" \
-      maintainer="Giovanni Torres"
+      org.opencontainers.image.description="Slurm Docker cluster on Rocky Linux 8" \
+      org.label-schema.docker.cmd="docker-compose up -d"
 
 ARG SLURM_TAG=slurm-19-05-1-2
 ARG GOSU_VERSION=1.11
 
 RUN set -ex \
-    && yum makecache fast \
+    && yum makecache \
     && yum -y update \
-    && yum -y install https://repo.ius.io/ius-release-el7.rpm \
-    && yum -y install epel-release \
+    && yum -y install dnf-plugins-core \
+    && yum config-manager --set-enabled powertools \
     && yum -y install \
        wget \
        bzip2 \
@@ -25,14 +24,9 @@ RUN set -ex \
        make \
        munge \
        munge-devel \
-       python-devel \
-       python-pip \
-       python34 \
-       python34-devel \
-       python34-pip \
-       python36u \
-       python36u-devel \
-       python36u-pip \
+       python3-devel \
+       python3-pip \
+       python3 \
        mariadb-server \
        mariadb-devel \
        psmisc \
@@ -41,7 +35,9 @@ RUN set -ex \
     && yum clean all \
     && rm -rf /var/cache/yum
 
-RUN pip install Cython nose && pip3.4 install Cython nose
+RUN alternatives --set python /usr/bin/python3
+
+RUN pip3 install Cython nose
 
 RUN set -ex \
     && wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-amd64" \
@@ -58,7 +54,7 @@ RUN set -x \
     && pushd slurm \
     && git checkout $SLURM_TAG \
     && ./configure --enable-debug --prefix=/usr --sysconfdir=/etc/slurm \
-        --with-mysql_config=/usr/bin  --libdir=/usr/lib64 \
+        --with-mysql_config=/usr/bin --with-munge --libdir=/usr/lib64 \
     && make install \
     && install -D -m644 etc/cgroup.conf.example /etc/slurm/cgroup.conf.example \
     && install -D -m644 etc/slurm.conf.example /etc/slurm/slurm.conf.example \
@@ -66,8 +62,8 @@ RUN set -x \
     && install -D -m644 contribs/slurm_completion_help/slurm_completion.sh /etc/profile.d/slurm_completion.sh \
     && popd \
     && rm -rf slurm \
-    && groupadd -r --gid=995 slurm \
-    && useradd -r -g slurm --uid=995 slurm \
+    && groupadd -r --gid=990 slurm \
+    && useradd -r -g slurm --uid=990 slurm \
     && mkdir /etc/sysconfig/slurm \
         /var/spool/slurmd \
         /var/run/slurmd \
@@ -89,18 +85,21 @@ RUN set -x \
 
 COPY slurm.conf /etc/slurm/slurm.conf
 COPY slurmdbd.conf /etc/slurm/slurmdbd.conf
+RUN set -x \
+    && chown slurm:slurm /etc/slurm/slurmdbd.conf \
+    && chmod 600 /etc/slurm/slurmdbd.conf
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # setup virtual env and activate it for interactive shell
-RUN python3.6 -m venv /srv/venv \
+RUN python3 -m venv /srv/venv \
     && . /srv/venv/bin/activate \
-    && pip install -U --no-cache-dir pip setuptools
+    && pip3 install -U --no-cache-dir pip setuptools
 
 COPY reqs /srv/reqs
-RUN . /srv/venv/bin/activate && pip install -U --no-cache-dir -r /srv/reqs/requirements.txt
+RUN . /srv/venv/bin/activate && pip3 install -U --no-cache-dir -r /srv/reqs/requirements.txt
 
 RUN yum -y install openmpi
 
