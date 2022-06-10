@@ -9,10 +9,11 @@ import sys
 import traceback
 import signal
 import json
-import versioneer
 from datetime import datetime
 from multiprocessing import Process
 from os.path import exists, join, isabs
+
+from ._version import get_versions
 
 from qcg.pilotjob.logger import top_logger
 import qcg.pilotjob.profile
@@ -415,7 +416,7 @@ class QCGPMService:
         _logger = logging.getLogger(module_name)
 
         _logger.info('service %s version %s started %s @ %s (with tags %s)', Config.MANAGER_ID.get(self._conf),
-                     versioneer.get_version(), str(datetime.now()), socket.gethostname(),
+                     get_versions().get('version'), str(datetime.now()), socket.gethostname(),
                      ','.join(Config.MANAGER_TAGS.get(self._conf)))
         _logger.info('log level set to: %s', Config.LOG_LEVEL.get(self._conf).upper())
         _logger.info(f'service arguments {str(self._args)}')
@@ -436,9 +437,11 @@ class QCGPMService:
     def _handle_sig_int(self, sig, frame):
         _logger.info("signal interrupt")
         print(f"{datetime.now()} signal interrupt - stopping service")
-        self._manager.stop_processing = True
-        self._manager.call_scheduler()
-        self._receiver.finished = True
+        if self._manager:
+            self._manager.stop_processing = True
+            self._manager.call_scheduler()
+        if self._receiver:
+            self._receiver.finished = True
 
     async def _stop_interfaces(self, receiver):
         """Asynchronous task working in background waiting for receiver finish flag to finish receiver.
