@@ -297,6 +297,13 @@ class SlurmExecution(ExecutionSchema):
             method = getattr(self, preprocess_method)
             method(ex_job)
 
+    def get_env_opts(self):
+        """Return options for environment instances.
+
+        Set environments to not create 'hostfile'
+        """
+        return {'binding': self.resources.binding}
+
 
 class DirectExecution(ExecutionSchema):
     """Directly execute job iteration without any proxy commands."""

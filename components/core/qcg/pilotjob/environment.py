@@ -110,6 +110,17 @@ class SlurmEnvironment(Environment):
     def update_env(self, job, env, opts=None):
         merged_tasks_per_node = SlurmEnvironment._merge_per_node_spec(job.tasks_per_node)
 
+        if opts and opts.get('binding', False):
+            cpu_masks = []
+            for node in job.allocation.nodes:
+                for slot in node.cores:
+                    cpu_mask = 0
+                    for cpu in slot.split(','):
+                        cpu_mask = cpu_mask | 1 << int(cpu)
+                    cpu_masks.append(hex(cpu_mask))
+            cpu_bind = f'verbose,mask_cpu:{",".join(cpu_masks)}'
+            job.env.update({'SLURM_CPU_BIND': cpu_bind})
+
         job.env.update({
             'SLURM_NNODES': str(job.nnodes),
             'SLURM_NODELIST': job.nlist,
@@ -122,6 +133,7 @@ class SlurmEnvironment(Environment):
             'SLURM_STEP_NUM_TASKS': str(job.ncores),
             'SLURM_JOB_CPUS_PER_NODE': merged_tasks_per_node,
             'SLURM_STEP_TASKS_PER_NODE': merged_tasks_per_node,
+            'SLURM_OVERLAP': '1',
             'SLURM_TASKS_PER_NODE': merged_tasks_per_node
         })
 
