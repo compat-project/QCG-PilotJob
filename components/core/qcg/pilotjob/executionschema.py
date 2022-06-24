@@ -136,7 +136,11 @@ class SlurmExecution(ExecutionSchema):
         self._preprocess_common(ex_job)
 
         ex_job.job_execution.exec = 'srun'
-        ex_job.job_execution.args.extend([job_exec, *job_args])
+        if job_exec:
+            ex_job.job_execution.args.append(job_exec)
+            
+        if job_args:
+            ex_job.job_execution.args.extend(job_args)
 
     def _preprocess_default(self, ex_job):
         """Prepare execution description for default execution model.
@@ -180,7 +184,10 @@ class SlurmExecution(ExecutionSchema):
         mpirun = ex_job.job_execution.model_opts.get('mpirun', 'mpirun')
 
         ex_job.job_execution.exec = mpirun
-        ex_job.job_execution.args = [*mpi_args, job_exec]
+        ex_job.job_execution.args = mpi_args
+        if job_exec:
+            ex_job.job_execution.args.append(job_exec)
+
         if job_args:
             ex_job.job_execution.args.extend(job_args)
 
@@ -198,7 +205,6 @@ class SlurmExecution(ExecutionSchema):
 
         # create rank file
         if self.resources.binding:
-
             for node in ex_job.allocation.nodes:
                 if not first:
                     mpi_args.append(':')
@@ -215,7 +221,7 @@ class SlurmExecution(ExecutionSchema):
 
             ex_job.env.update({'I_MPI_PIN': '1'})
         else:
-            mpi_args = ['-n', f'{str(ex_job.ncores)}', f'{job_exec}']
+            mpi_args = ['-n', f'{str(ex_job.ncores)}']
 
         if top_logger.level == logging.DEBUG:
             ex_job.env.update({'I_MPI_HYDRA_BOOTSTRAP_EXEC_EXTRA_ARGS':
@@ -231,7 +237,10 @@ class SlurmExecution(ExecutionSchema):
         mpirun = ex_job.job_execution.model_opts.get('mpirun', 'mpirun')
 
         ex_job.job_execution.exec = mpirun
-        ex_job.job_execution.args = [*mpi_args, job_exec]
+        ex_job.job_execution.args = mpi_args
+        if job_exec:
+            ex_job.job_execution.args.append(job_exec)
+
         if job_args:
             ex_job.job_execution.args.extend(job_args)
 
@@ -272,7 +281,9 @@ class SlurmExecution(ExecutionSchema):
         if ex_job.job_execution.model_opts.get('srun_args'):
             ex_job.job_execution.args.extend(ex_job.job_execution.model_opts['srun_args'])
 
-        ex_job.job_execution.args.append(job_exec)
+        if job_exec:
+            ex_job.job_execution.args.append(job_exec)
+
         if job_args:
             ex_job.job_execution.args.extend(job_args)
 
