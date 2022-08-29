@@ -16,7 +16,7 @@ setup(
 	description='API for QCG PilotJob Manager',
 
 	install_requires=[
-		'zmq',
+		'pyzmq',
 		],
 )
 
