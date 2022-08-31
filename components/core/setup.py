@@ -27,7 +27,7 @@ setup(
 	long_description_content_type="text/markdown",
 
 	install_requires=[
-		"zmq",
+		"pyzmq",
 		"click",
                 "psutil",
 		],
