@@ -173,17 +173,29 @@ class ExecutionJob:
             if self.job_execution.venv:
                 bash_cmd += 'source {}/bin/activate;'.format(self.job_execution.venv)
 
-            if self.job_execution.script:
+            # the case when there are both elements: 'script' & 'exec/args' will occur
+            # when there is 'model' - 'openmpi/srunmpi/intelmpi/threads'
+            # the 'model' element sets/changes 'exec' & 'args'
+            if self.job_execution.script and job_exec:
+                final_args = job_args or []
+                final_args.extend(['bash', '-l', '-c', f"'{self.job_execution.script}'"])
+                bash_cmd += 'exec -l {} {}'.format(job_exec, ' '.join([str(arg) for arg in final_args]))
+            elif self.job_execution.script:
                 bash_cmd += self.job_execution.script
             else:
-                bash_cmd += 'exec {} {}'.format(
-                    job_exec, ' '.join([str(arg).replace(" ", "\\ ") for arg in job_args]))
+                bash_cmd += 'exec -l {} {}'.format(job_exec, ' '.join([str(arg) for arg in job_args]))
 
             self.job_execution.args = ['-l', '-c', bash_cmd]
         else:
             if self.job_execution.script:
-                self.job_execution.exec = 'bash'
-                self.job_execution.args = ['-l', '-c', self.job_execution.script]
+                if self.job_execution.exec:
+                    if self.job_execution.args:
+                        self.job_execution.args.extend(['bash', '-l', '-c', self.job_execution.script])
+                    else:
+                        self.job_execution.args = ['bash', '-l', '-c', self.job_execution.script]
+                else:
+                    self.job_execution.exec = 'bash'
+                    self.job_execution.args = ['-l', '-c', self.job_execution.script]
 
     def pre_start(self):
         """This method should be executed before job will be started.
